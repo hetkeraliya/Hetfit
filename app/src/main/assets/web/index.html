@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#AA98A9" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="Kestrel" />
+<title>Kestrel</title>
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" href="icon.png" type="image/png" />
+<link rel="apple-touch-icon" href="icon-180.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="styles.css" />
+<script src="vendor/jszip.min.js"></script>
+<script src="vendor/sql-wasm.js"></script>
+<script src="vendor/aes-js.min.js"></script>
+<script src="ble.js"></script>
+</head>
+<body>
+
+<div class="grain-overlay" aria-hidden="true"></div>
+<div class="app-shell">
+
+  <section id="upload-view" class="glass-card login-card hidden">
+    <button type="button" id="upload-back-btn" class="back-pill-btn" style="margin-bottom:14px; background:rgba(255,255,255,0.18); border:1px solid rgba(170,152,169,0.4); border-radius:14px; color:inherit; padding:7px 16px; font-weight:700; font-size:12px; cursor:pointer;">‹ Back to Dashboard</button>
+    <h1 class="login-title">Kestrel</h1>
+    <p class="login-sub">Upload your Gadgetbridge export (.zip or .db). Your workouts, heart rate, and activity history will be parsed locally and saved offline.</p>
+
+    <label class="dropzone" id="dropzone" for="gb-file-input">
+      <input type="file" id="gb-file-input" accept=".zip,.db,.sqlite,.sqlite3,application/zip,application/octet-stream,*/*" />
+      <span class="dropzone-icon">↑</span>
+      <strong id="file-label">Choose zip or database</strong>
+      <span>Gadgetbridge → Data management → Export zip</span>
+    </label>
+
+    <button type="button" id="gb-load-btn">Load export</button>
+    <p id="gb-status" class="error-text"></p>
+
+    <div class="ble-box">
+      <p class="manual-hint">Full workouts, sleep stages, and exercise records are imported safely from your Gadgetbridge export zip. Bluetooth connection provides real-time live telemetry.</p>
+    </div>
+
+    <p class="login-note">
+      Your workout data merges into your history. No accounts, no cloud, 100% offline.
+    </p>
+    <p class="copyright">© hetkeraliya</p>
+  </section>
+
+  <section id="dashboard-view" class="aura-dash on-home">
+
+    <header class="top-bar">
+      <span class="top-title" id="screen-title">Home</span>
+      <div class="top-actions">
+        <span class="flame-badge" id="flame-badge" title="Goal streak">
+          <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M12 2s3 4 3 7a3 3 0 1 1-6 0c0-1 1-3 3-7zm-5 12c0-2.5 2-4.5 4.2-5.4C10.4 10.4 9 12.2 9 14.2c0 2 1.6 3.6 3.6 3.6.6 0 1.1-.1 1.6-.4A4.5 4.5 0 0 1 7 14z"/></svg>
+          <span id="flame-count">0</span>
+        </span>
+        <button id="ble-dash-btn" class="round-icon-btn" title="Mi Band 5 Live Connect" aria-label="Bluetooth">
+          <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M12.5 2.1 7 7.6l3.2 3.2L7 14.1 12.5 19.6V13l3.4 3.4 1.2-1.2L13.7 12l3.4-3.2-1.2-1.2L12.5 11V2.1zm1.5 6.3 1.1 1.1-1.1 1.1V8.4zm0 7.2v-2.2l1.1 1.1-1.1 1.1z"/></svg>
+        </button>
+        <button id="replace-btn" class="round-icon-btn" title="Import Gadgetbridge Zip / Workouts" aria-label="Import Gadgetbridge Zip">
+          <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+        </button>
+        <button id="clear-btn" class="round-icon-btn danger hidden" title="Clear saved data" aria-label="Clear saved data"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm1 6h2v9h-2V9Zm4 0h2v9h-2V9ZM6 9h12l-1 12H7L6 9Z" fill="currentColor"/></svg></button>
+      </div>
+    </header>
+
+    <p id="stale-banner" class="stale-banner hidden">Band data looks stale — export from Gadgetbridge again.</p>
+
+    <nav class="tab-strip" id="tab-strip">
+      <button class="tab-strip-btn active" data-page="chart">Home</button>
+      <button class="tab-strip-btn" data-page="vitals">Health</button>
+      <button class="tab-strip-btn" data-page="body">Body</button>
+      <button class="tab-strip-btn" data-page="journal">Journal</button>
+      <button class="tab-strip-btn" data-page="plan">Plan</button>
+    </nav>
+
+    <div class="tab-pages">
+
+      <section class="tab-page active" data-page="chart">
+        <div class="hero-metrics">
+          <div class="home-date-row">
+            <button type="button" id="home-prev-day" class="date-nav-btn" aria-label="Previous day">‹</button>
+            <label class="home-date-label">
+              <span class="today-kicker" id="home-date-label">Today</span>
+              <input type="date" id="home-date" />
+            </label>
+            <button type="button" id="home-next-day" class="date-nav-btn" aria-label="Next day">›</button>
+          </div>
+          <div class="hero-steps-row">
+            <span class="today-steps" id="today-steps">–</span>
+            <span class="today-sub" id="today-sub">steps</span>
+          </div>
+          <div class="home-track-wrap">
+            <span class="on-track-pill" id="on-track-label">On Track</span>
+            <svg id="home-steps-svg" viewBox="0 0 320 88" class="home-steps-svg" aria-hidden="true">
+              <path id="home-steps-path" class="home-line" fill="none" />
+              <circle id="home-steps-dot" r="4.5" class="home-dot" cx="300" cy="20" />
+            </svg>
+            <div class="home-axis">
+              <span>12 AM</span><span>3 PM</span><span>12 AM</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="home-cards">
+          <div class="metric-card hr-card">
+            <div class="metric-card-head">
+              <span>Heart Rate</span>
+              <span class="chart-arrow dark-arrow">↗</span>
+            </div>
+            <div class="metric-card-value-row">
+              <span class="metric-big" id="home-hr">–</span>
+              <span class="metric-unit">bpm</span>
+            </div>
+            <div class="hr-chart-wrap">
+              <span class="status-pill" id="home-hr-status">Healthy</span>
+              <svg id="hr-spark" viewBox="0 0 320 58" class="hr-spark" aria-hidden="true">
+                <g id="hr-spark-bars"></g>
+              </svg>
+            </div>
+          </div>
+
+          <div class="split-cards">
+            <div class="metric-card mini">
+              <div class="metric-card-head">
+                <span>Stress</span>
+                <span class="chart-arrow dark-arrow">↗</span>
+              </div>
+              <div class="metric-card-value-row">
+                <span class="metric-big" id="home-stress">–</span>
+                <span class="metric-unit">avg</span>
+              </div>
+              <span class="muted-status" id="home-stress-status">no sample</span>
+            </div>
+            <div class="metric-card mini">
+              <div class="metric-card-head">
+                <span>Calories</span>
+                <span class="chart-arrow dark-arrow">↗</span>
+              </div>
+              <div class="metric-card-value-row">
+                <span class="metric-big" id="home-cal">–</span>
+                <span class="metric-unit">kcal</span>
+              </div>
+              <span class="muted-status" id="home-cal-status">today</span>
+            </div>
+          </div>
+          <div class="split-cards">
+            <div class="metric-card mini">
+              <div class="metric-card-head">
+                <span>Strain</span>
+              </div>
+              <div class="metric-card-value-row">
+                <span class="metric-big" id="home-strain">–</span>
+              </div>
+              <span class="muted-status" id="home-strain-status">0–21</span>
+            </div>
+            <div class="metric-card mini">
+              <div class="metric-card-head">
+                <span>Sleep</span>
+              </div>
+              <div class="metric-card-value-row">
+                <span class="metric-big" id="home-sleep">–</span>
+                <span class="metric-unit">hrs</span>
+              </div>
+              <span class="muted-status" id="home-sleep-status">last night</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="home-extra">
+          <div class="today-card glass-card hidden-legacy" id="today-card">
+            <div class="today-top">
+              <div>
+                <div class="today-kicker">Goal</div>
+                <div class="today-meta" id="today-meta">–</div>
+              </div>
+              <div class="ring-wrap" aria-hidden="true">
+                <svg viewBox="0 0 72 72" class="goal-ring">
+                  <circle cx="36" cy="36" r="30" class="ring-bg" />
+                  <circle cx="36" cy="36" r="30" class="ring-fg" id="goal-ring" />
+                </svg>
+                <span id="goal-pct">0%</span>
+              </div>
+            </div>
+            <div class="streak-row">
+              <span class="streak-chip" id="streak-chip">No streak yet</span>
+              <label class="goal-edit">Goal
+                <input type="number" id="goal-input" min="1000" max="50000" step="500" value="8000" />
+              </label>
+            </div>
+          </div>
+
+          <p id="import-meta" class="import-meta"></p>
+
+          <div class="range-row" id="range-row">
+            <button class="range-btn" data-range="today">Today</button>
+            <button class="range-btn active" data-range="week">Week</button>
+            <button class="range-btn" data-range="month">Month</button>
+          </div>
+
+          <div class="filter-row">
+            <label class="device-label">Band
+              <select id="device-select"></select>
+            </label>
+          </div>
+
+          <div class="tab-row" id="tab-row">
+            <button class="tab active" data-metric="steps">Steps</button>
+            <button class="tab" data-metric="heartRate">Heart</button>
+            <button class="tab" data-metric="sleep">Sleep</button>
+            <button class="tab" data-metric="distance">Km</button>
+            <button class="tab" data-metric="calories">Cal</button>
+          </div>
+
+          <div class="glass-card chart-card">
+            <div class="chart-head">
+              <span id="chart-title">Steps Per Day</span>
+              <span class="chart-arrow">↗</span>
+            </div>
+            <svg id="chart-svg" viewBox="0 0 320 150" class="chart-svg">
+              <line id="chart-baseline" x1="0" y1="110" x2="320" y2="110" class="baseline" />
+              <path id="chart-path-prev" class="chart-line-prev" fill="none" />
+              <path id="chart-path" class="chart-line" fill="none" />
+              <path id="chart-drop" class="chart-drop" fill="none" />
+              <circle id="chart-dot-halo" r="14" class="dot-halo" />
+              <circle id="chart-dot" r="4" class="dot" />
+            </svg>
+            <div class="day-row" id="day-row"></div>
+            <div class="date-nav">
+              <button id="prev-week" class="icon-btn small">‹</button>
+              <span id="date-range-label">—</span>
+              <button id="next-week" class="icon-btn small">›</button>
+            </div>
+          </div>
+
+          <div class="glass-card chart-card hourly-card">
+            <div class="chart-head">
+              <span id="hourly-title">Hourly · selected day</span>
+            </div>
+            <svg id="hourly-svg" viewBox="0 0 320 110" class="chart-svg hourly-svg">
+              <g id="hourly-bars"></g>
+            </svg>
+          </div>
+
+          <div class="pill-grid">
+            <div class="pill grad-pink">
+              <span class="pill-label">Steps</span>
+              <div class="pill-value-row">
+                <span class="pill-value" id="val-steps">–</span>
+                <span class="pill-unit">steps</span>
+              </div>
+              <span class="pill-chip" id="chip-steps">–</span>
+            </div>
+            <div class="pill grad-blue">
+              <span class="pill-label">Heart Rate</span>
+              <div class="pill-value-row">
+                <span class="pill-value" id="val-hr">–</span>
+                <span class="pill-unit">bpm</span>
+              </div>
+              <span class="pill-chip" id="chip-hr">–</span>
+            </div>
+            <div class="pill grad-orange">
+              <span class="pill-label">Sleep</span>
+              <div class="pill-value-row">
+                <span class="pill-value" id="val-sleep">–</span>
+                <span class="pill-unit">hrs</span>
+              </div>
+              <span class="pill-chip" id="chip-sleep">–</span>
+            </div>
+            <div class="pill grad-teal">
+              <span class="pill-label">Stress</span>
+              <div class="pill-value-row">
+                <span class="pill-value" id="val-stress">–</span>
+              </div>
+              <span class="pill-chip" id="chip-stress">avg</span>
+            </div>
+            <div class="pill grad-purple">
+              <span class="pill-label">Battery</span>
+              <div class="pill-value-row">
+                <span class="pill-value" id="val-battery">–</span>
+                <span class="pill-unit">%</span>
+              </div>
+              <span class="pill-chip" id="chip-battery">last</span>
+            </div>
+            <div class="pill pill-add">
+              <span class="pill-label dark">Distance / Cal</span>
+              <div class="pill-value-row">
+                <span class="pill-value dark" id="val-dist">–</span>
+                <span class="pill-unit dark-unit">km</span>
+              </div>
+              <span class="pill-chip dark-chip" id="chip-cal">– kcal</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-page" data-page="vitals">
+        <div class="sheet-stack health-sheet">
+          <div class="health-block">
+            <div class="block-head">
+              <span>Heart Activity</span>
+              <span class="chart-arrow dark-arrow">↗</span>
+            </div>
+            <div class="ha-top">
+              <span class="ha-pct" id="heart-activity-pct">–%</span>
+              <span class="ha-state" id="heart-activity-state">idle</span>
+            </div>
+            <div class="bubble-row">
+              <span class="bubble-label">Resting</span>
+              <svg class="bubble-svg" id="bubble-rest" viewBox="0 0 220 28"></svg>
+            </div>
+            <div class="bubble-row">
+              <span class="bubble-label">Workout</span>
+              <svg class="bubble-svg" id="bubble-work" viewBox="0 0 220 28"></svg>
+            </div>
+            <div class="bubble-row">
+              <span class="bubble-label">Average</span>
+              <svg class="bubble-svg" id="bubble-avg" viewBox="0 0 220 28"></svg>
+            </div>
+          </div>
+
+          <div class="health-block">
+            <div class="block-head">
+              <span>Body Activity</span>
+              <span class="chart-arrow dark-arrow">↗</span>
+            </div>
+            <div class="body-activity">
+              <div class="donut-wrap">
+                <svg viewBox="0 0 120 120" class="donut-svg" aria-hidden="true">
+                  <circle cx="60" cy="60" r="44" class="donut-track" />
+                  <circle cx="60" cy="60" r="44" class="donut-flex" id="donut-flex" />
+                  <circle cx="60" cy="60" r="44" class="donut-str" id="donut-str" />
+                  <circle cx="60" cy="60" r="44" class="donut-cardio" id="donut-cardio" />
+                </svg>
+                <div class="donut-center">
+                  <strong id="body-activity-pct">–%</strong>
+                  <span>Total</span>
+                </div>
+              </div>
+              <ul class="legend">
+                <li><i class="swatch cardio"></i> Cardio</li>
+                <li><i class="swatch strength"></i> Strength</li>
+                <li><i class="swatch flex"></i> Flexibility</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="check-table">
+            <div class="check-head">
+              <span>Issue</span><span>Score</span><span>Check</span>
+            </div>
+            <div class="check-row">
+              <span id="check-stress-name">Stress</span>
+              <span id="check-stress-score">–</span>
+              <span id="check-stress-state">Pending</span>
+            </div>
+            <div class="check-row">
+              <span id="check-sleep-name">Sleep</span>
+              <span id="check-sleep-score">–</span>
+              <span id="check-sleep-state">None</span>
+            </div>
+          </div>
+
+          <div class="glass-card insight-card score-card">
+            <div class="insight-head"><span class="sparkle">◎</span><span>Today's score</span></div>
+            <div class="score-row">
+              <span id="score-value" class="score-value">–</span>
+              <span id="score-label" class="score-label">Load an export or connect your band</span>
+            </div>
+            <div class="score-bars" id="score-bars"></div>
+          </div>
+
+          <div class="glass-card insight-card score-card">
+            <div class="insight-head"><span class="sparkle">⚡</span><span>Strain</span></div>
+            <div class="score-row">
+              <span id="strain-value" class="score-value strain-value">–</span>
+              <span id="strain-label" class="score-label">Load an export or connect your band</span>
+            </div>
+          </div>
+
+          <div class="glass-card insight-card">
+            <div class="insight-head"><span class="sparkle">✦</span><span>Insight</span></div>
+            <p id="insight-text">Loading your data…</p>
+          </div>
+
+          <div class="glass-card list-card">
+            <div class="insight-head"><span class="sparkle">🏅</span><span>Achievements</span></div>
+            <div id="badge-grid" class="badge-grid"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-page" data-page="body">
+        <div class="sheet-stack">
+          <div class="glass-card list-card muscle-card">
+            <div class="insight-head"><span class="sparkle">◈</span><span>Muscle focus · this week</span></div>
+
+            <svg id="muscle-svg" viewBox="0 0 200 340" class="muscle-svg">
+              <ellipse cx="100" cy="28" rx="18" ry="20" class="muscle-fixed" />
+              <path data-muscle="shoulders" d="M55 55 L145 55 L152 78 L48 78 Z" />
+              <path data-muscle="chest" d="M68 78 L132 78 L128 120 L72 120 Z" />
+              <path data-muscle="arms" d="M48 78 L68 78 L60 160 L40 155 Z" />
+              <path data-muscle="arms" d="M152 78 L132 78 L140 160 L160 155 Z" />
+              <path data-muscle="core" d="M72 120 L128 120 L122 170 L78 170 Z" />
+              <path data-muscle="quads" d="M78 170 L100 170 L98 250 L74 250 Z" />
+              <path data-muscle="quads" d="M122 170 L100 170 L102 250 L126 250 Z" />
+              <path data-muscle="calves" d="M74 250 L98 250 L96 310 L78 310 Z" />
+              <path data-muscle="calves" d="M126 250 L102 250 L104 310 L122 310 Z" />
+            </svg>
+
+            <div class="muscle-secondary-row">
+              <span class="muscle-secondary-label">Also worked (not shown above):</span>
+              <div id="muscle-secondary" class="muscle-secondary"></div>
+            </div>
+
+            <p id="muscle-coach-note" class="muscle-coach-note"></p>
+
+            <div class="log-workout-box">
+              <div class="log-workout-title">Log a workout</div>
+              <p class="log-workout-hint">Saved for the date selected on Home.</p>
+              <div class="log-workout-row">
+                <select id="log-workout-type">
+                  <option value="running">Running</option>
+                  <option value="walking">Walking</option>
+                  <option value="cycling">Cycling</option>
+                  <option value="yoga">Yoga / stretch</option>
+                  <option value="strength">Strength</option>
+                  <option value="freestyle">Freestyle</option>
+                </select>
+                <button id="log-workout-btn" type="button">Add</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="glass-card list-card">
+            <div class="insight-head"><span class="sparkle">★</span><span>Personal records</span></div>
+            <ul class="record-list" id="record-list"></ul>
+          </div>
+
+          <div class="glass-card list-card">
+            <div class="insight-head"><span class="sparkle">⏱</span><span>Workout log</span></div>
+            <div class="workout-list" id="workout-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-page" data-page="journal">
+        <div class="sheet-stack">
+          <div class="glass-card list-card">
+            <div class="insight-head"><span class="sparkle">✎</span><span>Note for <span id="note-date">this day</span></span></div>
+            <textarea id="note-input" rows="2" placeholder="Sports day, rest day, anything you want to remember…"></textarea>
+            <div id="journal-tags" class="journal-tags"></div>
+          </div>
+
+          <div class="glass-card list-card">
+            <div class="insight-head"><span class="sparkle">◐</span><span>Patterns</span></div>
+            <div id="correlation-list" class="correlation-list"></div>
+          </div>
+
+          <div class="export-row">
+            <button type="button" id="export-csv" class="export-btn">Download CSV</button>
+            <button type="button" id="export-json" class="export-btn">Download JSON</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-page" data-page="plan">
+        <div class="sheet-stack">
+
+          <div class="sub-tab-row" id="plan-sub-tabs">
+            <button type="button" class="sub-tab-btn active" data-plan="workout">Workout</button>
+            <button type="button" class="sub-tab-btn" data-plan="study">Study</button>
+            <button type="button" class="sub-tab-btn" data-plan="nutrition">Nutrition</button>
+          </div>
+
+          <div class="plan-panel active" data-plan-panel="workout">
+            <div class="glass-card list-card">
+              <div class="insight-head">
+                <span class="sparkle" id="plan-workout-tag-dot">●</span>
+                <span id="plan-workout-title">Today's Workout</span>
+              </div>
+              <ul id="plan-workout-list" class="check-list"></ul>
+              <p id="plan-workout-note" class="muted"></p>
+            </div>
+            <div class="glass-card list-card">
+              <div class="insight-head"><span class="sparkle">◎</span><span>Warm-up (every session, 5 min)</span></div>
+              <ul id="plan-warmup-list" class="check-list"></ul>
+            </div>
+            <div class="glass-card list-card">
+              <div class="insight-head"><span class="sparkle">↗</span><span>Progression rule</span></div>
+              <p class="muted">Once every set at the top of the rep range feels solid with clean form, move to a harder variation instead of just adding reps — push-ups to archer push-ups to one-arm progressions, squats toward pistol squats.</p>
+            </div>
+          </div>
+
+          <div class="plan-panel" data-plan-panel="study">
+            <div class="glass-card list-card">
+              <div class="insight-head"><span class="sparkle">◷</span><span id="plan-study-title">Today's Schedule</span></div>
+              <ul id="plan-study-list" class="check-list"></ul>
+            </div>
+            <div class="glass-card list-card">
+              <div class="insight-head"><span class="sparkle">◈</span><span>Today's focus subjects</span></div>
+              <p id="plan-study-subjects" class="muted"></p>
+            </div>
+            <div class="glass-card list-card">
+              <div class="insight-head"><span class="sparkle">☑</span><span>Rules to follow</span></div>
+              <ul id="plan-study-rules" class="plain-list"></ul>
+            </div>
+          </div>
+
+          <div class="plan-panel" data-plan-panel="nutrition">
+            <div id="plan-nutrition-meals"></div>
+            <div class="glass-card list-card">
+              <div class="insight-head"><span class="sparkle">💪</span><span>Daily protein tally</span></div>
+              <p id="plan-protein-tally" class="muted"></p>
+            </div>
+            <div class="glass-card list-card">
+              <div class="insight-head"><span class="sparkle">◆</span><span>Vitamins vegetarians tend to miss</span></div>
+              <ul id="plan-vitamins" class="plain-list"></ul>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+    </div>
+
+    <div id="exercise-modal" class="modal hidden">
+      <div class="modal-inner glass-card">
+        <div class="insight-head"><span class="sparkle">◈</span><span>Freestyle — pick exercises</span></div>
+        <p class="modal-hint">Tick what you did, then add sets and reps if you want.</p>
+        <div id="exercise-list" class="exercise-list"></div>
+        <div class="modal-actions">
+          <button id="exercise-cancel" type="button" class="secondary-btn">Cancel</button>
+          <button id="exercise-save" type="button">Save workout</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="exercise-demo-modal" class="modal hidden">
+      <div class="modal-inner glass-card demo-modal-inner">
+        <div class="insight-head"><span class="sparkle">◈</span><span id="demo-name">Exercise</span></div>
+        <p class="modal-hint" id="demo-sub"></p>
+        <div id="demo-video-holder" class="demo-video-holder"></div>
+        <div id="demo-icon-holder" class="demo-icon-holder"></div>
+        <p class="modal-hint demo-note">Demonstration video from a third-party channel — always defer to your own form/judgment and stop if anything hurts.</p>
+        <div class="modal-actions">
+          <button id="demo-close" type="button" class="secondary-btn">Close</button>
+          <a id="demo-youtube-link" href="#" target="_blank" rel="noopener" class="demo-watch-btn">More videos on YouTube ↗</a>
+        </div>
+      </div>
+    </div>
+
+    <p class="dash-copy">© hetkeraliya</p>
+
+  </section>
+
+</div>
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+  <symbol id="mark" viewBox="0 0 64 64">
+    <rect width="64" height="64" rx="16" fill="url(#g)"/>
+    <defs>
+      <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="#FFEED7"/>
+        <stop offset="100%" stop-color="#AA98A9"/>
+      </linearGradient>
+    </defs>
+    <path d="M14 38c6-14 10-18 18-18s12 4 18 18" fill="none" stroke="#0b3a4a" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="32" cy="24" r="4" fill="#0b3a4a"/>
+  </symbol>
+</svg>
+
+<script src="app.js"></script>
+<script src="ble-ui.js"></script>
+<script>
+  // Kestrel Native Realtime BLE Sync Engine
+  window.kestrelImportBandData = function(payload) {
+    try {
+      const data = typeof payload === 'string' ? JSON.parse(payload) : payload;
+      if (typeof window.kestrelApplyBandPayload === 'function') {
+        window.kestrelApplyBandPayload(data, "Mi Smart Band 5 Sync");
+      }
+      if (typeof window.bandRefresh === 'function') {
+        window.bandRefresh();
+      }
+      console.log("[Kestrel] Band data imported successfully:", data);
+      return true;
+    } catch(e) {
+      console.warn('[Kestrel Import Error]', e);
+      return false;
+    }
+  };
+
+  window.kestrelSyncMetric = function(type, val) {
+    try {
+      if (type === 'heart_rate') {
+        const hr = parseInt(val, 10);
+        const hrEl = document.getElementById('home-hr');
+        if (hrEl) hrEl.textContent = hr;
+        const hrPill = document.getElementById('home-hr-status');
+        if (hrPill) {
+          hrPill.textContent = hr < 60 ? 'Resting' : hr < 100 ? 'Normal' : hr < 140 ? 'Active' : 'High';
+        }
+        // Update vitals page HR elements if available
+        const vitalsHr = document.getElementById('vitals-hr-now');
+        if (vitalsHr) vitalsHr.textContent = hr;
+      } else if (type === 'steps') {
+        const steps = parseInt(val, 10);
+        const stepsEl = document.getElementById('today-steps');
+        if (stepsEl) stepsEl.textContent = steps.toLocaleString();
+        const distEl = document.getElementById('today-distance');
+        if (distEl) distEl.textContent = ((steps * 0.7) / 1000).toFixed(2) + ' km';
+        const calEl = document.getElementById('today-cal');
+        if (calEl) calEl.textContent = Math.round(steps * 0.04) + ' kcal';
+      } else if (type === 'battery') {
+        const bat = parseInt(val, 10);
+        const batEl = document.getElementById('device-battery');
+        if (batEl) batEl.textContent = bat + '%';
+      } else if (type === 'workout') {
+        const workout = typeof val === 'string' ? JSON.parse(val) : val;
+        if (typeof window.kestrelAddSingleWorkout === 'function') {
+          window.kestrelAddSingleWorkout(workout);
+        }
+      }
+    } catch(e) {
+      console.warn('[Kestrel Sync Error]', e);
+    }
+  };
+
+  // Wire up Bluetooth buttons to trigger Android native Mi Fit connection menu
+  document.addEventListener('DOMContentLoaded', function() {
+    const bleBtn = document.getElementById('ble-dash-btn');
+    if (bleBtn) {
+      bleBtn.classList.remove('hidden');
+      bleBtn.style.display = 'inline-flex';
+      bleBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (window.KestrelAndroidBridge && window.KestrelAndroidBridge.openBluetoothMenu) {
+          window.KestrelAndroidBridge.openBluetoothMenu();
+        }
+      });
+    }
+
+    // Hide any residual dropzone or file buttons
+    const uploadEl = document.getElementById('upload-view');
+    if (uploadEl) uploadEl.style.display = 'none';
+    const dashEl = document.getElementById('dashboard-view');
+    if (dashEl) dashEl.classList.remove('hidden');
+  });
+</script>
+</body>
+</html>

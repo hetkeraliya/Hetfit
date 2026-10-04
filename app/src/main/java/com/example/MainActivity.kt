@@ -1,0 +1,671 @@
+package com.example
+
+import android.Manifest
+import android.annotation.SuppressLint
+import android.bluetooth.BluetoothAdapter
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.net.Uri
+import android.os.Build
+import android.os.Bundle
+import android.provider.Settings
+import android.util.Log
+import android.webkit.ConsoleMessage
+import android.webkit.JavascriptInterface
+import android.webkit.PermissionRequest
+import android.webkit.ValueCallback
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
+import android.webkit.WebSettings
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import android.widget.Toast
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BatteryChargingFull
+import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.BluetoothConnected
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Watch
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
+import org.json.JSONObject
+import com.example.ble.ConnectionStatus
+import com.example.ble.MiBandDataSyncEngine
+import com.example.ble.MiBandManager
+import com.example.ui.BandOnboardingScreen
+import com.example.ui.MiFitDeviceMenuDialog
+import com.example.ui.theme.MyApplicationTheme
+import com.example.widget.KestrelWidgetManager
+
+// Local bundled web asset guarantees 0ms offline load with NO web page timeout
+private const val KESTREL_LOCAL_URL = "file:///android_asset/web/index.html"
+private const val TAG = "KestrelApp"
+
+// Kestrel Theme Palette (Dusty Mauve, Obsidian Plum, Warm Cream)
+private val PlumBg = Color(0xFF2A232B)
+private val PlumCard = Color(0xFF3D3340)
+private val MauveAccent = Color(0xFFAA98A9)
+private val LilacAccent = Color(0xFFC4B3C2)
+private val CreamText = Color(0xFFFFEED7)
+
+class MainActivity : ComponentActivity() {
+
+  private lateinit var miBandManager: MiBandManager
+  private var fileChooserCallback: ValueCallback<Array<Uri>>? = null
+
+  private val filePickerLauncher = registerForActivityResult(
+    ActivityResultContracts.StartActivityForResult()
+  ) { result ->
+    val uris: Array<Uri>? = if (result.resultCode == RESULT_OK) {
+      val clip = result.data?.clipData
+      val uri = result.data?.data
+      when {
+        clip != null -> Array(clip.itemCount) { i -> clip.getItemAt(i).uri }
+        uri != null -> arrayOf(uri)
+        else -> null
+      }
+    } else {
+      null
+    }
+    fileChooserCallback?.onReceiveValue(uris)
+    fileChooserCallback = null
+  }
+
+  override fun onCreate(savedInstanceState: Bundle?) {
+    super.onCreate(savedInstanceState)
+    enableEdgeToEdge()
+
+    miBandManager = MiBandManager(applicationContext)
+
+    setContent {
+      MyApplicationTheme {
+        KestrelMainScreen(
+          miBandManager = miBandManager,
+          onShowFileChooser = { callback, params ->
+            fileChooserCallback?.onReceiveValue(null)
+            fileChooserCallback = callback
+            val intent = params?.createIntent() ?: Intent(Intent.ACTION_GET_CONTENT).apply {
+              addCategory(Intent.CATEGORY_OPENABLE)
+              type = "*/*"
+            }
+            try {
+              filePickerLauncher.launch(intent)
+              true
+            } catch (e: Exception) {
+              fileChooserCallback?.onReceiveValue(null)
+              fileChooserCallback = null
+              false
+            }
+          }
+        )
+      }
+    }
+  }
+
+  override fun onDestroy() {
+    super.onDestroy()
+    miBandManager.disconnect()
+  }
+}
+
+@SuppressLint("SetJavaScriptEnabled")
+@Composable
+fun KestrelMainScreen(
+  miBandManager: MiBandManager,
+  onShowFileChooser: (ValueCallback<Array<Uri>>?, WebChromeClient.FileChooserParams?) -> Boolean = { _, _ -> false }
+) {
+  val context = LocalContext.current
+  val uiState by miBandManager.uiState.collectAsState()
+  val discoveredDevices by miBandManager.discoveredDevices.collectAsState()
+
+  val prefs = remember { context.getSharedPreferences("kestrel_ble_prefs", Context.MODE_PRIVATE) }
+  var isOnboardingCompleted by remember { mutableStateOf(prefs.getBoolean("onboarding_completed", false)) }
+
+  var webViewInstance by remember { mutableStateOf<WebView?>(null) }
+  var isLoading by remember { mutableStateOf(false) }
+  var loadingProgress by remember { mutableFloatStateOf(0f) }
+  var hasNetworkError by remember { mutableStateOf(false) }
+  var errorMessage by remember { mutableStateOf("") }
+  var showDeviceMenu by remember { mutableStateOf(false) }
+
+  fun syncFullBandData(webView: WebView?, state: com.example.ble.MiBandState) {
+    try {
+      if (state.liveSteps > 0 || state.liveHeartRate > 0) {
+        KestrelWidgetManager.saveHealthData(
+          context = context,
+          steps = if (state.liveSteps > 0) state.liveSteps else null,
+          calories = if (state.liveCalories > 0) state.liveCalories else null,
+          heartRate = if (state.liveHeartRate > 0) state.liveHeartRate else null
+        )
+      }
+      val payloadJson = MiBandDataSyncEngine.generateSyncPayload(state)
+      val escapedJson = JSONObject.quote(payloadJson)
+      val js = """
+        try {
+          if (typeof window.kestrelImportBandData === 'function') {
+            window.kestrelImportBandData($escapedJson);
+          }
+        } catch(e) {
+          console.warn('[Kestrel Native Sync Error]', e);
+        }
+      """.trimIndent()
+      webView?.post {
+        webView.evaluateJavascript(js, null)
+      }
+    } catch (e: Exception) {
+      Log.e(TAG, "Error generating or syncing band data: ${e.message}")
+    }
+  }
+
+  // Automatically pull all data and push to web app as soon as band connects
+  LaunchedEffect(uiState.status) {
+    if (uiState.status == ConnectionStatus.CONNECTED) {
+      syncFullBandData(webViewInstance, uiState)
+    }
+  }
+
+  // Realtime Data Sync: Send live metrics from BLE directly into WebView DOM and chart engine
+  LaunchedEffect(miBandManager) {
+    miBandManager.onLiveMetricReceived = { type, value ->
+      if (type == "steps" && value is Number) {
+        KestrelWidgetManager.saveHealthData(context, steps = value.toInt())
+      } else if (type == "heart_rate" && value is Number) {
+        KestrelWidgetManager.saveHealthData(context, heartRate = value.toInt())
+      } else if (type == "calories" && value is Number) {
+        KestrelWidgetManager.saveHealthData(context, calories = value.toInt())
+      }
+      webViewInstance?.post {
+        val valJson = when (value) {
+          is Number -> value.toString()
+          is String -> "\"$value\""
+          else -> value.toString()
+        }
+        val js = """
+          try {
+            if (typeof window.kestrelSyncMetric === 'function') {
+              window.kestrelSyncMetric('$type', $valJson);
+            }
+            if (typeof window.applyLive === 'function') {
+              if ('$type' === 'heart_rate') window.applyLive({ hr: $valJson });
+              else if ('$type' === 'steps') window.applyLive({ steps: $valJson });
+              else if ('$type' === 'battery') window.applyLive({ battery: $valJson });
+            }
+            if (typeof window.bandRefresh === 'function') {
+              window.bandRefresh();
+            }
+            window.dispatchEvent(new CustomEvent('kestrel:live-metric', { detail: { type: '$type', value: $valJson } }));
+          } catch(e) {
+            console.warn('[Sync Dispatch Error]', e);
+          }
+        """.trimIndent()
+        webViewInstance?.evaluateJavascript(js, null)
+      }
+    }
+  }
+
+  // Request Bluetooth & Location permissions for BLE scanning
+  val requiredPermissions = remember {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+      arrayOf(
+        Manifest.permission.BLUETOOTH_SCAN,
+        Manifest.permission.BLUETOOTH_CONNECT,
+        Manifest.permission.ACCESS_FINE_LOCATION,
+        Manifest.permission.ACCESS_COARSE_LOCATION
+      )
+    } else {
+      arrayOf(
+        Manifest.permission.ACCESS_FINE_LOCATION,
+        Manifest.permission.ACCESS_COARSE_LOCATION
+      )
+    }
+  }
+
+  var hasPermissions by remember {
+    mutableStateOf(
+      requiredPermissions.all {
+        ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
+      }
+    )
+  }
+
+  val permissionLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.RequestMultiplePermissions()
+  ) { perms ->
+    val allGranted = perms.values.all { it }
+    hasPermissions = allGranted
+    if (allGranted) {
+      miBandManager.startScan()
+    } else {
+      Log.w(TAG, "Some Bluetooth/Location permissions were not granted.")
+    }
+  }
+
+  val enableBtLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.StartActivityForResult()
+  ) {
+    if (miBandManager.isBluetoothEnabled() && hasPermissions) {
+      miBandManager.startScan()
+    }
+  }
+
+  LaunchedEffect(Unit) {
+    if (!hasPermissions) {
+      permissionLauncher.launch(requiredPermissions)
+    }
+  }
+
+  // First Onboarding Screen: User connects band first, pulls all telemetry, then enters dashboard
+  if (!isOnboardingCompleted) {
+    BandOnboardingScreen(
+      uiState = uiState,
+      discoveredDevices = discoveredDevices,
+      hasPermissions = hasPermissions,
+      onRequestPermissions = { permissionLauncher.launch(requiredPermissions) },
+      isBluetoothEnabled = miBandManager.isBluetoothEnabled(),
+      onEnableBluetoothClick = {
+        try {
+          enableBtLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+        } catch (_: Exception) {
+          try {
+            context.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+          } catch (_: Exception) {}
+        }
+      },
+      isLocationEnabled = miBandManager.isLocationEnabled(),
+      onOpenLocationSettingsClick = {
+        try {
+          context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+        } catch (_: Exception) {}
+      },
+      onScanClick = {
+        if (!hasPermissions) {
+          permissionLauncher.launch(requiredPermissions)
+        } else {
+          miBandManager.startScan()
+        }
+      },
+      onStopScanClick = { miBandManager.stopScan() },
+      onConnectClick = { band, authKey ->
+        miBandManager.connectToDevice(band.device, authKey)
+      },
+      onConnectByAddressClick = { address, authKey ->
+        miBandManager.connectByAddress(address, authKey)
+      },
+      onSaveAuthKey = { miBandManager.saveAuthKey(it) },
+      onEnterDashboardClick = {
+        prefs.edit().putBoolean("onboarding_completed", true).apply()
+        isOnboardingCompleted = true
+        syncFullBandData(webViewInstance, uiState)
+      },
+      onSkipClick = {
+        prefs.edit().putBoolean("onboarding_completed", true).apply()
+        isOnboardingCompleted = true
+      }
+    )
+    return
+  }
+
+  // Hardware Back button handling inside WebView
+  BackHandler(enabled = webViewInstance?.canGoBack() == true) {
+    webViewInstance?.goBack()
+  }
+
+  Scaffold(
+    modifier = Modifier
+      .fillMaxSize()
+      .testTag("kestrel_main_scaffold"),
+    containerColor = Color(0xFFFFEED7)
+  ) { innerPadding ->
+    Box(
+      modifier = Modifier
+        .fillMaxSize()
+        .padding(innerPadding)
+    ) {
+      // 1. Android WebView loading local bundled Kestrel Web App (0ms latency, 100% offline, zero timeout)
+      AndroidView(
+        modifier = Modifier
+          .fillMaxSize()
+          .testTag("kestrel_web_view"),
+        factory = { ctx ->
+          WebView(ctx).apply {
+            webViewInstance = this
+            setBackgroundColor(android.graphics.Color.parseColor("#FFEED7"))
+
+            settings.apply {
+              javaScriptEnabled = true
+              domStorageEnabled = true
+              databaseEnabled = true
+              allowFileAccess = true
+              allowContentAccess = true
+              loadWithOverviewMode = true
+              useWideViewPort = true
+              mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+              cacheMode = WebSettings.LOAD_DEFAULT
+              userAgentString = "$userAgentString KestrelAndroidApp/1.0"
+            }
+
+            addJavascriptInterface(
+              KestrelAndroidBridge(ctx) { action ->
+                if (action == "open_bluetooth_menu") {
+                  showDeviceMenu = true
+                }
+              },
+              "KestrelAndroidBridge"
+            )
+
+            webChromeClient = object : WebChromeClient() {
+              override fun onProgressChanged(view: WebView?, newProgress: Int) {
+                loadingProgress = newProgress / 100f
+                if (newProgress >= 100) {
+                  isLoading = false
+                }
+              }
+
+              override fun onShowFileChooser(
+                view: WebView?,
+                filePathCallback: ValueCallback<Array<Uri>>?,
+                fileChooserParams: FileChooserParams?
+              ): Boolean {
+                return onShowFileChooser(filePathCallback, fileChooserParams)
+              }
+
+              override fun onPermissionRequest(request: PermissionRequest?) {
+                try {
+                  request?.grant(request.resources)
+                } catch (e: Exception) {
+                  Log.e(TAG, "Permission grant error: ${e.message}")
+                }
+              }
+
+              override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
+                Log.d(TAG, "[WebViewConsole] ${consoleMessage?.message()}")
+                return true
+              }
+            }
+
+            webViewClient = object : WebViewClient() {
+              override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                super.onPageStarted(view, url, favicon)
+                isLoading = true
+                hasNetworkError = false
+              }
+
+              override fun onPageFinished(view: WebView?, url: String?) {
+                super.onPageFinished(view, url)
+                isLoading = false
+
+                // INJECT CSS: Keep dashboard and replace-btn visible, remove obsolete Web BLE buttons
+                view?.evaluateJavascript(
+                  """
+                  (function() {
+                    const style = document.createElement('style');
+                    style.id = 'kestrel-cleanup-style';
+                    style.innerHTML = `
+                      #connectBle, #btnBleConnect, [data-action="ble-connect"], 
+                      .btn-connect-ble, .ble-status, #bleStatus {
+                        display: none !important;
+                        visibility: hidden !important;
+                        height: 0 !important;
+                        overflow: hidden !important;
+                      }
+                      #replace-btn {
+                        display: inline-flex !important;
+                        visibility: visible !important;
+                      }
+                      #ble-dash-btn {
+                        display: inline-flex !important;
+                        visibility: visible !important;
+                      }
+                    `;
+                    if (!document.getElementById('kestrel-cleanup-style')) {
+                      document.head.appendChild(style);
+                    }
+                    const dashView = document.getElementById('dashboard-view');
+                    const uploadView = document.getElementById('upload-view');
+                    if (dashView && (!uploadView || uploadView.classList.contains('hidden'))) {
+                      dashView.classList.remove('hidden');
+                    }
+                    console.log('[Kestrel Native] Web Dashboard activated successfully.');
+                  })();
+                  """.trimIndent(),
+                  null
+                )
+
+                // Sync all current band data immediately to populate charts, workouts, and vitals
+                syncFullBandData(view, uiState)
+              }
+
+              override fun onReceivedError(
+                view: WebView?,
+                request: WebResourceRequest?,
+                error: WebResourceError?
+              ) {
+                super.onReceivedError(view, request, error)
+                if (request?.isForMainFrame == true) {
+                  isLoading = false
+                  hasNetworkError = true
+                  errorMessage = error?.description?.toString() ?: "Loading offline"
+                }
+              }
+            }
+
+            loadUrl(KESTREL_LOCAL_URL)
+          }
+        },
+        update = {
+          webViewInstance = it
+        }
+      )
+
+      // Top Progress Indicator
+      if (isLoading && loadingProgress < 0.99f) {
+        LinearProgressIndicator(
+          progress = { loadingProgress },
+          modifier = Modifier
+            .fillMaxWidth()
+            .height(2.5.dp)
+            .align(Alignment.TopCenter),
+          color = MauveAccent,
+          trackColor = PlumCard
+        )
+      }
+
+      // Offline / Error Fallback Screen
+      if (hasNetworkError) {
+        Surface(
+          modifier = Modifier.fillMaxSize(),
+          color = PlumBg
+        ) {
+          Column(
+            modifier = Modifier
+              .fillMaxSize()
+              .padding(32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+          ) {
+            Icon(
+              imageVector = Icons.Default.Warning,
+              contentDescription = "Offline",
+              tint = Color(0xFFF59E0B),
+              modifier = Modifier.size(56.dp)
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+              text = "Kestrel Health Engine",
+              fontSize = 20.sp,
+              fontWeight = FontWeight.Bold,
+              color = CreamText
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+              text = "Tap below to reload local assets or pair your Mi Band 5.",
+              fontSize = 13.sp,
+              color = MauveAccent,
+              textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(24.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+              Button(
+                onClick = {
+                  hasNetworkError = false
+                  isLoading = true
+                  webViewInstance?.loadUrl(KESTREL_LOCAL_URL)
+                },
+                colors = ButtonDefaults.buttonColors(
+                  containerColor = MauveAccent,
+                  contentColor = PlumBg
+                ),
+                shape = RoundedCornerShape(12.dp)
+              ) {
+                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Reload Local App", fontWeight = FontWeight.Bold)
+              }
+
+              Button(
+                onClick = { showDeviceMenu = true },
+                colors = ButtonDefaults.buttonColors(
+                  containerColor = Color(0xFF10B981),
+                  contentColor = Color.White
+                ),
+                shape = RoundedCornerShape(12.dp)
+              ) {
+                Icon(Icons.Default.Bluetooth, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Mi Band Menu", fontWeight = FontWeight.Bold)
+              }
+            }
+          }
+        }
+      }
+
+      // Mi Fit & Zepp Life Style Bluetooth Connection Dialog
+      if (showDeviceMenu) {
+        MiFitDeviceMenuDialog(
+          uiState = uiState,
+          discoveredDevices = discoveredDevices,
+          onScanClick = { miBandManager.startScan() },
+          onStopScanClick = { miBandManager.stopScan() },
+          onConnectClick = { band, authKey ->
+            miBandManager.connectToDevice(band.device, authKey)
+          },
+          onDisconnectClick = { miBandManager.disconnect() },
+          onSaveAuthKey = { key -> miBandManager.saveAuthKey(key) },
+          onSyncAllDataClick = { syncFullBandData(webViewInstance, uiState) },
+          onImportGadgetbridgeClick = {
+            showDeviceMenu = false
+            webViewInstance?.post {
+              webViewInstance?.evaluateJavascript("if (typeof showUpload === 'function') showUpload();", null)
+            }
+          },
+          onReopenOnboarding = { isOnboardingCompleted = false },
+          onDismiss = {
+            miBandManager.stopScan()
+            showDeviceMenu = false
+          }
+        )
+      }
+    }
+  }
+}
+
+@Composable
+fun Greeting(name: String, modifier: Modifier = Modifier) {
+  Text(text = "Hello $name!", modifier = modifier)
+}
+
+class KestrelAndroidBridge(
+  private val context: Context,
+  private val onAction: (String) -> Unit
+) {
+  @JavascriptInterface
+  fun openBluetoothMenu() {
+    onAction("open_bluetooth_menu")
+  }
+
+  @JavascriptInterface
+  fun showToast(message: String) {
+    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+  }
+
+  @JavascriptInterface
+  fun isAndroidApp(): Boolean = true
+
+  @JavascriptInterface
+  fun getAppVersion(): String = "1.0.0"
+
+  @JavascriptInterface
+  fun syncHealthToWidget(
+    steps: Int,
+    calories: Int,
+    hr: Int,
+    sleepMinutes: Int,
+    workoutName: String,
+    workoutMins: Int,
+    streak: Int
+  ) {
+    KestrelWidgetManager.saveHealthData(
+      context = context,
+      steps = steps,
+      calories = calories,
+      heartRate = hr,
+      sleepMinutes = sleepMinutes,
+      workoutName = workoutName,
+      workoutMins = workoutMins,
+      streak = streak
+    )
+  }
+}
