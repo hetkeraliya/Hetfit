@@ -68,15 +68,15 @@ object KestrelWidgetManager {
 
     fun getHealthData(context: Context): HealthWidgetData {
         val prefs = getPrefs(context)
-        val steps = prefs.getInt(KEY_STEPS, 8420)
-        val goal = prefs.getInt(KEY_GOAL, 10000)
-        val calories = prefs.getInt(KEY_CALORIES, 385)
-        val hr = prefs.getInt(KEY_HR, 72)
-        val sleep = prefs.getInt(KEY_SLEEP, 460)
-        val workoutName = prefs.getString(KEY_WORKOUT_NAME, "Walking") ?: "Walking"
-        val workoutMins = prefs.getInt(KEY_WORKOUT_MINS, 34)
-        val streak = prefs.getInt(KEY_STREAK, 5)
-        val lastSync = prefs.getLong(KEY_LAST_SYNC, System.currentTimeMillis())
+        val steps = prefs.getInt(KEY_STEPS, 0)
+        val goal = prefs.getInt(KEY_GOAL, 8000)
+        val calories = prefs.getInt(KEY_CALORIES, 0)
+        val hr = prefs.getInt(KEY_HR, 0)
+        val sleep = prefs.getInt(KEY_SLEEP, 0)
+        val workoutName = prefs.getString(KEY_WORKOUT_NAME, "") ?: ""
+        val workoutMins = prefs.getInt(KEY_WORKOUT_MINS, 0)
+        val streak = prefs.getInt(KEY_STREAK, 0)
+        val lastSync = prefs.getLong(KEY_LAST_SYNC, 0L)
 
         return HealthWidgetData(
             steps = steps,
