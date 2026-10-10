@@ -28,7 +28,7 @@ class KestrelQuickStatsWidgetProvider : AppWidgetProvider() {
             views.setTextViewText(R.id.tv_quick_sub, "steps • $progressPct% goal")
             views.setProgressBar(R.id.pb_quick_steps, 100, progressPct.coerceIn(0, 100), false)
 
-            views.setTextViewText(R.id.tv_quick_hr, healthData.heartRate.toString())
+            views.setTextViewText(R.id.tv_quick_hr, if (healthData.heartRate > 0) healthData.heartRate.toString() else "--")
             views.setTextViewText(R.id.tv_quick_cal, numFmt.format(healthData.calories))
             views.setTextViewText(R.id.tv_quick_streak, "🔥 ${healthData.streak}d")
 
