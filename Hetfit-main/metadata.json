@@ -1,0 +1,6 @@
+{
+  "name": "Kestrel",
+  "description": "Kestrel health tracking with direct Mi Band 5 Bluetooth hardware sync and Capacitor Android integration",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
