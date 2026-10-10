@@ -29,18 +29,22 @@ class KestrelHealthWidgetProvider : AppWidgetProvider() {
             views.setTextViewText(R.id.tv_widget_goal_sub, "$progressPct% of $goalFmt goal")
             views.setProgressBar(R.id.pb_widget_steps, 100, progressPct.coerceIn(0, 100), false)
 
-            views.setTextViewText(R.id.tv_widget_hr, healthData.heartRate.toString())
+            views.setTextViewText(R.id.tv_widget_hr, if (healthData.heartRate > 0) healthData.heartRate.toString() else "--")
             views.setTextViewText(R.id.tv_widget_cal, numFmt.format(healthData.calories))
 
             val workoutText = if (healthData.workoutMins > 0) {
                 "${healthData.workoutName} ${healthData.workoutMins}m"
             } else {
-                healthData.workoutName
+                if (healthData.workoutName.isNotEmpty()) healthData.workoutName else "No workout"
             }
             views.setTextViewText(R.id.tv_widget_workout, workoutText)
             views.setTextViewText(R.id.tv_widget_streak, "🔥 ${healthData.streak}d")
 
-            val syncLabel = if (System.currentTimeMillis() - healthData.lastSyncTime < 180000) "Live" else "Synced"
+            val syncLabel = when {
+                healthData.lastSyncTime == 0L -> "No data"
+                System.currentTimeMillis() - healthData.lastSyncTime < 180000 -> "Live"
+                else -> "Synced"
+            }
             views.setTextViewText(R.id.tv_widget_sync, syncLabel)
 
             // Tap anywhere on widget to open Kestrel App
