@@ -385,6 +385,16 @@
     try {
       const days = JSON.parse(localStorage.getItem(STORAGE_DAYS)||'null');
       if (!days || typeof days!=='object' || !Object.keys(days).length) return false;
+      let purged = false;
+      Object.keys(days).forEach((k) => {
+        const d = days[k];
+        if (d && d.deviceIds && d.deviceIds['mi-smart-band-5'] === true) { delete days[k]; purged = true; }
+      });
+      if (purged) {
+        localStorage.setItem(STORAGE_DAYS, JSON.stringify(days));
+        console.log('[Kestrel] Removed placeholder days created by the old demo sync.');
+      }
+      if (!Object.keys(days).length) return false;
       state.localDayIndex = days;
       state.meta = JSON.parse(localStorage.getItem(STORAGE_META)||'null');
       state.workouts = JSON.parse(localStorage.getItem(STORAGE_WORKOUTS)||'[]');
@@ -444,6 +454,80 @@
     } catch (e) {
       console.warn('[kestrelImportBandData error]', e);
     }
+  };
+  // ---- Real Bluetooth history from the native app (minute rows straight from the band) ----
+  // Rows: [timestamp, rawIntensity, steps, heartRate, rawKind]. Aggregated by the exact same code
+  // that handles Gadgetbridge exports, so charts / sleep / HR series are computed identically.
+  let bandRowBuffer = [];
+  window.kestrelBandSamplesBegin = function() { bandRowBuffer = []; };
+  window.kestrelBandSamplesChunk = function(rows) {
+    try {
+      const list = typeof rows === 'string' ? JSON.parse(rows) : rows;
+      if (Array.isArray(list)) for (let i = 0; i < list.length; i++) bandRowBuffer.push(list[i]);
+    } catch (e) { console.warn('[kestrelBandSamplesChunk]', e); }
+  };
+  window.kestrelBandSamplesEnd = function(meta) {
+    try {
+      const info = (typeof meta === 'string' ? JSON.parse(meta) : meta) || {};
+      const rows = bandRowBuffer; bandRowBuffer = [];
+      if (!rows.length) {
+        if (info.devices && info.devices.length) { state.devices = info.devices; persistAll(); refresh(); }
+        return;
+      }
+      const incoming = aggregateFromSamples(rows, { hasIntensity: true, hasKind: true, heightCm: state.heightCm || 172, distanceIsCm: false });
+      const merged = {};
+      Object.keys(incoming).forEach((key) => {
+        const inc = incoming[key];
+        const prev = state.localDayIndex[key];
+        const day = Object.assign(emptyDay(key), prev || {});
+        // Steps: never replace a fuller day (e.g. from a Gadgetbridge zip) with a partial one.
+        if (!prev || (inc.steps || 0) >= (prev.steps || 0)) {
+          day.steps = inc.steps; day.hourlySteps = inc.hourlySteps;
+          day.calories = inc.calories; day.distanceMeters = inc.distanceMeters; day.estimated = inc.estimated;
+        }
+        if (inc.heartRateAvg != null) {
+          day.heartRateAvg = inc.heartRateAvg; day.heartRateMin = inc.heartRateMin; day.heartRateMax = inc.heartRateMax;
+          day.hourlyHr = inc.hourlyHr; day.hrSeries = inc.hrSeries; day.hrZoneMinutes = inc.hrZoneMinutes;
+        }
+        if (inc.sleepMinutes > 0 && (!prev || inc.sleepMinutes >= (prev.sleepMinutes || 0))) {
+          day.sleepMinutes = inc.sleepMinutes; day.sleepStart = inc.sleepStart; day.sleepEnd = inc.sleepEnd;
+        }
+        if (info.battery != null && key === fmt(new Date())) day.batteryLast = info.battery;
+        day.deviceIds = Object.assign({}, day.deviceIds || {}, { 'mi-smart-band-5': 1 });
+        merged[key] = day;
+      });
+      applyImported({ days: merged, devices: info.devices }, 'Mi Smart Band 5');
+    } catch (e) {
+      console.warn('[kestrelBandSamplesEnd error]', e);
+    }
+  };
+  // Live values while connected. Steps/battery go into today's record; heart rate only updates the readout
+  // (history comes from the band's own samples, so live pings never skew averages).
+  window.kestrelLiveMetric = function(type, val) {
+    try {
+      const v = Number(val);
+      if (!Number.isFinite(v)) return;
+      const key = fmt(new Date());
+      if (type === 'heart_rate') {
+        if (v > 30 && v < 220) {
+          const el = $('home-hr'); if (el) el.textContent = String(Math.round(v));
+          const pill = $('home-hr-status'); if (pill) pill.textContent = v < 60 ? 'Resting' : v < 100 ? 'Normal' : v < 140 ? 'Active' : 'High';
+        }
+        return;
+      }
+      const day = state.localDayIndex[key] || (state.localDayIndex[key] = emptyDay(key));
+      let changed = false;
+      if (type === 'steps' && v >= 0 && v <= 150000 && v > (day.steps || 0)) {
+        day.steps = Math.round(v);
+        day.distanceMeters = Math.round(v * strideMeters(state.heightCm));
+        day.calories = Math.round(v * 0.04);
+        day.estimated = true;
+        changed = true;
+      } else if (type === 'battery' && v >= 0 && v <= 100 && day.batteryLast !== v) {
+        day.batteryLast = v; changed = true;
+      }
+      if (changed) { persistAll(); refresh(); }
+    } catch (e) { console.warn('[kestrelLiveMetric]', e); }
   };
   window.kestrelAddSingleWorkout = function(w) {
     if (!w) return;
@@ -2137,21 +2221,7 @@
     showDashboard(); refresh();
   } else {
     const today = fmt(new Date());
-    state.localDayIndex = {
-      [today]: {
-        date: today,
-        steps: 0,
-        calories: 0,
-        distanceMeters: 0,
-        sleepMinutes: 440,
-        heartRateAvg: 72,
-        heartRateMin: 60,
-        heartRateMax: 110,
-        batteryLast: 90,
-        hourlySteps: Array(24).fill(0),
-        deviceIds: { 'mi-smart-band-5': true }
-      }
-    };
+    state.localDayIndex = { [today]: emptyDay(today) };
     state.meta = { lastDate: today, deviceCount: 1 };
     localStorage.setItem(STORAGE_DAYS, JSON.stringify(state.localDayIndex));
     localStorage.setItem(STORAGE_META, JSON.stringify(state.meta));
