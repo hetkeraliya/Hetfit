@@ -15,6 +15,7 @@ import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.content.SharedPreferences
 import android.location.LocationManager
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -75,7 +76,11 @@ data class MiBandState(
   val liveCalories: Int = 0,
   val lastUpdateMillis: Long = 0L,
   val errorMessage: String? = null,
-  val authKey: String = ""
+  val authKey: String = "",
+  val syncing: Boolean = false,
+  val syncPercent: Int = 0,
+  val syncMessage: String? = null,
+  val lastSyncMillis: Long = 0L
 )
 
 class MiBandManager(private val context: Context) {
@@ -97,9 +102,12 @@ class MiBandManager(private val context: Context) {
   private val _uiState = MutableStateFlow(
     MiBandState(
       authKey = getStoredAuthKey(),
-      liveSteps = prefs.getInt("cached_steps", 0),
+      liveSteps = if (prefs.getString("cached_steps_day", "") == todayKey()) prefs.getInt("cached_steps", 0) else 0,
       liveHeartRate = prefs.getInt("cached_hr", 0),
-      batteryPercent = prefs.getInt("cached_battery", -1)
+      batteryPercent = prefs.getInt("cached_battery", -1),
+      deviceName = prefs.getString("last_name", "") ?: "",
+      deviceAddress = prefs.getString("last_address", "") ?: "",
+      lastSyncMillis = prefs.getLong("fetch_last_sync_ms", 0L)
     )
   )
   val uiState: StateFlow<MiBandState> = _uiState.asStateFlow()
@@ -108,6 +116,101 @@ class MiBandManager(private val context: Context) {
   val discoveredDevices: StateFlow<List<DiscoveredBand>> = _discoveredDevices.asStateFlow()
 
   var onLiveMetricReceived: ((type: String, value: Any) -> Unit)? = null
+
+  /** Fired on the main thread after a history fetch finished and new rows are in the store. */
+  var onHistorySynced: ((newSamples: Int) -> Unit)? = null
+
+  private val store = BandSampleStore.get(context)
+  private var userDisconnected = prefs.getBoolean("user_disconnected", false)
+  private var reconnectAttempts = 0
+
+  private fun todayKey(): String {
+    val c = java.util.Calendar.getInstance()
+    return "%04d-%02d-%02d".format(c.get(java.util.Calendar.YEAR), c.get(java.util.Calendar.MONTH) + 1, c.get(java.util.Calendar.DAY_OF_MONTH))
+  }
+
+  fun wasUserDisconnected(): Boolean = userDisconnected
+  fun hasSavedDevice(): Boolean = !(prefs.getString("last_address", "") ?: "").isNullOrEmpty()
+
+  /** Reconnects to the last used band (notification "Connect" button / app start). */
+  fun connectSaved() {
+    val addr = prefs.getString("last_address", "") ?: ""
+    if (addr.isEmpty()) {
+      _uiState.value = _uiState.value.copy(errorMessage = "No band saved yet. Open Bluetooth and pick your band first.")
+      return
+    }
+    val st = _uiState.value.status
+    if (st == ConnectionStatus.CONNECTED || st == ConnectionStatus.CONNECTING || st == ConnectionStatus.AUTHENTICATING) return
+    connectByAddress(addr, getStoredAuthKey())
+  }
+
+  // ---- History sync (Gadgetbridge-style activity fetch) ----
+  private val gattIo = object : BandGattIo {
+    override fun characteristic(uuid: UUID): BluetoothGattCharacteristic? =
+      bluetoothGatt?.getService(ACTIVITY_SERVICE_UUID)?.getCharacteristic(uuid)
+
+    @SuppressLint("MissingPermission")
+    override fun setNotify(ch: BluetoothGattCharacteristic, enable: Boolean) {
+      val gatt = bluetoothGatt ?: return
+      enqueueGatt {
+        gatt.setCharacteristicNotification(ch, enable)
+        val d = ch.getDescriptor(CLIENT_CONFIG_DESCRIPTOR_UUID)
+        if (d == null) {
+          completeGattOperation()
+        } else {
+          d.value = if (enable) BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE else BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE
+          if (!gatt.writeDescriptor(d)) completeGattOperation()
+        }
+      }
+    }
+
+    @SuppressLint("MissingPermission")
+    override fun write(ch: BluetoothGattCharacteristic, value: ByteArray) {
+      val gatt = bluetoothGatt ?: return
+      enqueueGatt {
+        ch.value = value
+        if (!gatt.writeCharacteristic(ch)) completeGattOperation()
+      }
+    }
+  }
+
+  private val fetchListener = object : HuamiActivityFetcher.Listener {
+    override fun onProgress(percent: Int, message: String) {
+      handler.post {
+        _uiState.value = _uiState.value.copy(syncing = true, syncPercent = percent, syncMessage = message)
+      }
+    }
+
+    override fun onFinished(success: Boolean, newSamples: Int, message: String) {
+      handler.post {
+        val last = prefs.getLong("fetch_last_sync_ms", 0L)
+        _uiState.value = _uiState.value.copy(
+          syncing = false,
+          syncPercent = 100,
+          syncMessage = message,
+          lastSyncMillis = if (success) System.currentTimeMillis() else _uiState.value.lastSyncMillis,
+          errorMessage = if (success || message == "Sync cancelled") null else message
+        )
+        if (success) prefs.edit().putLong("last_history_sync_wall", System.currentTimeMillis()).apply()
+        Log.i(TAG, "History sync finished success=$success new=$newSamples ($message) lastSample=$last")
+        if (newSamples > 0 || success) onHistorySynced?.invoke(newSamples)
+      }
+    }
+  }
+
+  private val fetcher = HuamiActivityFetcher(gattIo, store, prefs, handler, fetchListener)
+
+  fun syncNow() {
+    if (_uiState.value.status != ConnectionStatus.CONNECTED || bluetoothGatt == null) {
+      _uiState.value = _uiState.value.copy(errorMessage = "Connect your band first.")
+      return
+    }
+    if (fetcher.running) return
+    _uiState.value = _uiState.value.copy(syncing = true, syncPercent = 0, syncMessage = "Syncing history…", errorMessage = null)
+    if (!fetcher.start()) {
+      _uiState.value = _uiState.value.copy(syncing = false)
+    }
+  }
 
   fun getStoredAuthKey(): String {
     return prefs.getString("mi_auth_key", "") ?: ""
@@ -319,6 +422,12 @@ class MiBandManager(private val context: Context) {
     }
 
     val name = device.name ?: if (device.address.isNotEmpty()) "Mi Smart Band 5" else "Mi Band"
+    userDisconnected = false
+    prefs.edit()
+      .putString("last_address", device.address)
+      .putString("last_name", name)
+      .putBoolean("user_disconnected", false)
+      .apply()
     _uiState.value = _uiState.value.copy(
       status = ConnectionStatus.CONNECTING,
       deviceName = name,
@@ -345,8 +454,18 @@ class MiBandManager(private val context: Context) {
     bluetoothGatt = device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
   }
 
-  @SuppressLint("MissingPermission")
+  /** User pressed Disconnect (app or notification). Does not auto-reconnect. */
   fun disconnect() {
+    userDisconnected = true
+    reconnectAttempts = 0
+    prefs.edit().putBoolean("user_disconnected", true).apply()
+    handler.removeCallbacksAndMessages(null)
+    teardown()
+  }
+
+  @SuppressLint("MissingPermission")
+  private fun teardown() {
+    fetcher.cancel()
     clearGattQueue()
     try {
       bluetoothGatt?.disconnect()
@@ -356,8 +475,21 @@ class MiBandManager(private val context: Context) {
     } finally {
       bluetoothGatt = null
       _uiState.value = _uiState.value.copy(
-        status = ConnectionStatus.DISCONNECTED
+        status = ConnectionStatus.DISCONNECTED,
+        syncing = false
       )
+    }
+  }
+
+  /** Link dropped by the band / out of range: try a few quiet reconnects. */
+  private fun onLinkLost() {
+    val wasConnected = _uiState.value.status == ConnectionStatus.CONNECTED
+    teardown()
+    if (!userDisconnected && hasSavedDevice() && reconnectAttempts < 4) {
+      reconnectAttempts++
+      handler.postDelayed({
+        if (!userDisconnected && _uiState.value.status == ConnectionStatus.DISCONNECTED) connectSaved()
+      }, if (wasConnected) 3000L else 10000L)
     }
   }
 
@@ -402,7 +534,7 @@ class MiBandManager(private val context: Context) {
           gatt?.discoverServices()
         }, 500)
       } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-        disconnect()
+        onLinkLost()
       }
     }
 
@@ -480,41 +612,71 @@ class MiBandManager(private val context: Context) {
       completeGattOperation()
     }
 
-    @SuppressLint("MissingPermission")
-    override fun onCharacteristicRead(
-      gatt: BluetoothGatt?,
-      characteristic: BluetoothGattCharacteristic?,
-      status: Int
-    ) {
-      Log.d(TAG, "onCharacteristicRead uuid: ${characteristic?.uuid} status: $status")
-      val value = characteristic?.value
-      if (value != null) {
-        when (characteristic.uuid) {
-          STEPS_CHAR_UUID -> handleStepsData(value)
-          BATTERY_CHAR_UUID, STANDARD_BATTERY_CHAR_UUID -> handleBatteryData(value)
-          HR_MEASUREMENT_CHAR_UUID -> handleHeartRateData(value)
-        }
-      }
-      completeGattOperation()
-    }
-
+    @Deprecated("Deprecated in API 33")
     @SuppressLint("MissingPermission")
     override fun onCharacteristicChanged(
       gatt: BluetoothGatt?,
       characteristic: BluetoothGattCharacteristic?
     ) {
+      if (Build.VERSION.SDK_INT >= 33) return // handled by the 3-arg overload below
       val value = characteristic?.value ?: return
-      val uuid = characteristic.uuid
+      dispatchNotification(gatt, characteristic.uuid, characteristic, value)
+    }
 
-      if (uuid == AUTH_CHAR_UUID && gatt != null) {
-        handleAuthNotification(gatt, characteristic, value)
-      } else if (uuid == HR_MEASUREMENT_CHAR_UUID) {
-        handleHeartRateData(value)
-      } else if (uuid == STEPS_CHAR_UUID) {
-        handleStepsData(value)
-      } else if (uuid == BATTERY_CHAR_UUID || uuid == STANDARD_BATTERY_CHAR_UUID) {
-        handleBatteryData(value)
-      }
+    @SuppressLint("MissingPermission")
+    override fun onCharacteristicChanged(
+      gatt: BluetoothGatt,
+      characteristic: BluetoothGattCharacteristic,
+      value: ByteArray
+    ) {
+      dispatchNotification(gatt, characteristic.uuid, characteristic, value)
+    }
+
+    @Deprecated("Deprecated in API 33")
+    override fun onCharacteristicRead(
+      gatt: BluetoothGatt?,
+      characteristic: BluetoothGattCharacteristic?,
+      status: Int
+    ) {
+      if (Build.VERSION.SDK_INT >= 33) return
+      val value = characteristic?.value
+      if (value != null && characteristic != null) dispatchRead(characteristic.uuid, value)
+      completeGattOperation()
+    }
+
+    override fun onCharacteristicRead(
+      gatt: BluetoothGatt,
+      characteristic: BluetoothGattCharacteristic,
+      value: ByteArray,
+      status: Int
+    ) {
+      dispatchRead(characteristic.uuid, value)
+      completeGattOperation()
+    }
+  }
+
+  private fun dispatchRead(uuid: UUID, value: ByteArray) {
+    when (uuid) {
+      STEPS_CHAR_UUID -> handleStepsData(value)
+      BATTERY_CHAR_UUID, STANDARD_BATTERY_CHAR_UUID -> handleBatteryData(value)
+      HR_MEASUREMENT_CHAR_UUID -> handleHeartRateData(value)
+    }
+  }
+
+  @SuppressLint("MissingPermission")
+  private fun dispatchNotification(
+    gatt: BluetoothGatt?,
+    uuid: UUID,
+    characteristic: BluetoothGattCharacteristic,
+    value: ByteArray
+  ) {
+    when (uuid) {
+      AUTH_CHAR_UUID -> if (gatt != null) handleAuthNotification(gatt, characteristic, value)
+      HR_MEASUREMENT_CHAR_UUID -> handleHeartRateData(value)
+      STEPS_CHAR_UUID -> handleStepsData(value)
+      BATTERY_CHAR_UUID, STANDARD_BATTERY_CHAR_UUID -> handleBatteryData(value)
+      FETCH_CONTROL_UUID -> handler.post { fetcher.onControlNotification(value) }
+      FETCH_DATA_UUID -> handler.post { fetcher.onDataNotification(value) }
     }
   }
 
@@ -590,6 +752,11 @@ class MiBandManager(private val context: Context) {
 
   @SuppressLint("MissingPermission")
   private fun subscribeToSensors(gatt: BluetoothGatt) {
+    reconnectAttempts = 0
+    // Pull the band's stored history as soon as the link is usable (like Gadgetbridge does on connect).
+    handler.postDelayed({
+      if (_uiState.value.status == ConnectionStatus.CONNECTED && !fetcher.running) syncNow()
+    }, 3000)
     // 1. Subscribe to Steps / Activity
     val activityService = gatt.getService(ACTIVITY_SERVICE_UUID)
     val stepsChar = activityService?.getCharacteristic(STEPS_CHAR_UUID)
@@ -681,7 +848,7 @@ class MiBandManager(private val context: Context) {
         ((value[12].toInt() and 0xFF) shl 24)
     }
 
-    prefs.edit().putInt("cached_steps", steps).apply()
+    prefs.edit().putInt("cached_steps", steps).putString("cached_steps_day", todayKey()).apply()
     _uiState.value = _uiState.value.copy(
       liveSteps = steps,
       liveDistanceMeters = distance,
@@ -711,5 +878,15 @@ class MiBandManager(private val context: Context) {
       i += 2
     }
     return data
+  }
+
+  companion object {
+    @Volatile private var instance: MiBandManager? = null
+
+    /** One shared manager for the activity AND the foreground service, so the connection survives the UI. */
+    fun get(context: Context): MiBandManager =
+      instance ?: synchronized(this) {
+        instance ?: MiBandManager(context.applicationContext).also { instance = it }
+      }
   }
 }
