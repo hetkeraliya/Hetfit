@@ -82,6 +82,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import org.json.JSONObject
+import com.example.ble.BandSampleStore
+import com.example.ble.BandSyncService
 import com.example.ble.ConnectionStatus
 import com.example.ble.MiBandDataSyncEngine
 import com.example.ble.MiBandManager
@@ -128,7 +130,7 @@ class MainActivity : ComponentActivity() {
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
 
-    miBandManager = MiBandManager(applicationContext)
+    miBandManager = MiBandManager.get(applicationContext)
 
     setContent {
       MyApplicationTheme {
@@ -155,10 +157,7 @@ class MainActivity : ComponentActivity() {
     }
   }
 
-  override fun onDestroy() {
-    super.onDestroy()
-    miBandManager.disconnect()
-  }
+  // The band connection now lives in BandSyncService, so closing the UI must NOT disconnect it.
 }
 
 @SuppressLint("SetJavaScriptEnabled")
@@ -181,43 +180,50 @@ fun KestrelMainScreen(
   var errorMessage by remember { mutableStateOf("") }
   var showDeviceMenu by remember { mutableStateOf(false) }
 
+  val store = remember { BandSampleStore.get(context) }
+
+  /** Pushes the REAL stored band history to the web UI and refreshes the widgets. */
   fun syncFullBandData(webView: WebView?, state: com.example.ble.MiBandState) {
     try {
-      if (state.liveSteps > 0 || state.liveHeartRate > 0) {
-        KestrelWidgetManager.saveHealthData(
-          context = context,
-          steps = if (state.liveSteps > 0) state.liveSteps else null,
-          calories = if (state.liveCalories > 0) state.liveCalories else null,
-          heartRate = if (state.liveHeartRate > 0) state.liveHeartRate else null
-        )
-      }
-      val payloadJson = MiBandDataSyncEngine.generateSyncPayload(state)
-      val escapedJson = JSONObject.quote(payloadJson)
-      val js = """
-        try {
-          if (typeof window.kestrelImportBandData === 'function') {
-            window.kestrelImportBandData($escapedJson);
-          }
-        } catch(e) {
-          console.warn('[Kestrel Native Sync Error]', e);
-        }
-      """.trimIndent()
-      webView?.post {
-        webView.evaluateJavascript(js, null)
-      }
+      val t = store.todayTotals()
+      val steps = maxOf(t.steps, state.liveSteps)
+      val hr = if (state.liveHeartRate > 0) state.liveHeartRate else t.lastHr
+      KestrelWidgetManager.saveHealthData(
+        context = context,
+        steps = steps.takeIf { it > 0 },
+        heartRate = hr.takeIf { it > 0 },
+        sleepMinutes = t.sleepMinutes.takeIf { it > 0 }
+      )
+      MiBandDataSyncEngine.pushToWebView(webView, store, state, fullHistory = true)
     } catch (e: Exception) {
-      Log.e(TAG, "Error generating or syncing band data: ${e.message}")
+      Log.e(TAG, "Error pushing band data: ${e.message}")
     }
   }
 
-  // Automatically pull all data and push to web app as soon as band connects
+  // Keep the connection alive in the background service (notification with Sync / Disconnect / Connect).
   LaunchedEffect(uiState.status) {
     if (uiState.status == ConnectionStatus.CONNECTED) {
-      syncFullBandData(webViewInstance, uiState)
+      BandSyncService.start(context)
+    }
+  }
+
+  // After every finished band sync, push the new history into the dashboard and widgets.
+  LaunchedEffect(miBandManager) {
+    miBandManager.onHistorySynced = { _ ->
+      val st = miBandManager.uiState.value
+      val t = store.todayTotals()
+      KestrelWidgetManager.saveHealthData(
+        context = context,
+        steps = maxOf(t.steps, st.liveSteps).takeIf { it > 0 },
+        heartRate = (if (st.liveHeartRate > 0) st.liveHeartRate else t.lastHr).takeIf { it > 0 },
+        sleepMinutes = t.sleepMinutes.takeIf { it > 0 }
+      )
+      MiBandDataSyncEngine.pushToWebView(webViewInstance, store, st, fullHistory = false)
     }
   }
 
   // Realtime Data Sync: Send live metrics from BLE directly into WebView DOM and chart engine
+  val lastLivePush = remember { mutableMapOf<String, Long>() }
   LaunchedEffect(miBandManager) {
     miBandManager.onLiveMetricReceived = { type, value ->
       if (type == "steps" && value is Number) {
@@ -227,31 +233,13 @@ fun KestrelMainScreen(
       } else if (type == "calories" && value is Number) {
         KestrelWidgetManager.saveHealthData(context, calories = value.toInt())
       }
-      webViewInstance?.post {
-        val valJson = when (value) {
-          is Number -> value.toString()
-          is String -> "\"$value\""
-          else -> value.toString()
+      if (value is Number) {
+        val now = System.currentTimeMillis()
+        val minGap = if (type == "heart_rate") 5000L else 10000L
+        if (now - (lastLivePush[type] ?: 0L) >= minGap) {
+          lastLivePush[type] = now
+          MiBandDataSyncEngine.pushLiveMetric(webViewInstance, type, value)
         }
-        val js = """
-          try {
-            if (typeof window.kestrelSyncMetric === 'function') {
-              window.kestrelSyncMetric('$type', $valJson);
-            }
-            if (typeof window.applyLive === 'function') {
-              if ('$type' === 'heart_rate') window.applyLive({ hr: $valJson });
-              else if ('$type' === 'steps') window.applyLive({ steps: $valJson });
-              else if ('$type' === 'battery') window.applyLive({ battery: $valJson });
-            }
-            if (typeof window.bandRefresh === 'function') {
-              window.bandRefresh();
-            }
-            window.dispatchEvent(new CustomEvent('kestrel:live-metric', { detail: { type: '$type', value: $valJson } }));
-          } catch(e) {
-            console.warn('[Sync Dispatch Error]', e);
-          }
-        """.trimIndent()
-        webViewInstance?.evaluateJavascript(js, null)
       }
     }
   }
@@ -281,12 +269,25 @@ fun KestrelMainScreen(
     )
   }
 
+  val notificationLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.RequestPermission()
+  ) { }
+
+  fun askNotificationPermission() {
+    if (Build.VERSION.SDK_INT >= 33 &&
+      ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+    ) {
+      notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
+  }
+
   val permissionLauncher = rememberLauncherForActivityResult(
     contract = ActivityResultContracts.RequestMultiplePermissions()
   ) { perms ->
     val allGranted = perms.values.all { it }
     hasPermissions = allGranted
     if (allGranted) {
+      askNotificationPermission()
       miBandManager.startScan()
     } else {
       Log.w(TAG, "Some Bluetooth/Location permissions were not granted.")
@@ -304,6 +305,13 @@ fun KestrelMainScreen(
   LaunchedEffect(Unit) {
     if (!hasPermissions) {
       permissionLauncher.launch(requiredPermissions)
+    } else {
+      askNotificationPermission()
+      // Show the band notification right away and reconnect to the last band unless the user disconnected it.
+      if (miBandManager.hasSavedDevice()) {
+        BandSyncService.start(context)
+        if (!miBandManager.wasUserDisconnected()) miBandManager.connectSaved()
+      }
     }
   }
 
@@ -484,8 +492,8 @@ fun KestrelMainScreen(
                   null
                 )
 
-                // Sync all current band data immediately to populate charts, workouts, and vitals
-                syncFullBandData(view, uiState)
+                // The dashboard just (re)loaded: hand it the real history the band has given us so far.
+                syncFullBandData(view, miBandManager.uiState.value)
               }
 
               override fun onReceivedError(
@@ -604,7 +612,10 @@ fun KestrelMainScreen(
           },
           onDisconnectClick = { miBandManager.disconnect() },
           onSaveAuthKey = { key -> miBandManager.saveAuthKey(key) },
-          onSyncAllDataClick = { syncFullBandData(webViewInstance, uiState) },
+          onSyncAllDataClick = {
+            miBandManager.syncNow()
+            syncFullBandData(webViewInstance, uiState)
+          },
           onImportGadgetbridgeClick = {
             showDeviceMenu = false
             webViewInstance?.post {
