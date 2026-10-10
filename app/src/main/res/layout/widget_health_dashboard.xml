@@ -30,7 +30,7 @@
             android:textSize="12sp"
             android:textStyle="bold" />
 
-        <View
+        <FrameLayout
             android:layout_width="0dp"
             android:layout_height="1dp"
             android:layout_weight="1" />
@@ -95,7 +95,7 @@
             android:textColor="@color/kestrel_mauve"
             android:textSize="12sp" />
 
-        <View
+        <FrameLayout
             android:layout_width="0dp"
             android:layout_height="1dp"
             android:layout_weight="1" />
