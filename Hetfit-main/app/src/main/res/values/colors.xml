@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="purple_200">#FFBB86FC</color>
+    <color name="purple_500">#FF6200EE</color>
+    <color name="purple_700">#FF3700B3</color>
+    <color name="teal_200">#FF03DAC5</color>
+    <color name="teal_700">#FF018786</color>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+
+    <!-- Kestrel Theme Palette -->
+    <color name="kestrel_plum_bg">#2A232B</color>
+    <color name="kestrel_plum_card">#3D3340</color>
+    <color name="kestrel_plum_dark">#1F1A20</color>
+    <color name="kestrel_plum_border">#4A3D4E</color>
+    <color name="kestrel_mauve">#AA98A9</color>
+    <color name="kestrel_lilac">#C4B3C2</color>
+    <color name="kestrel_cream">#FFEED7</color>
+    <color name="kestrel_cream_muted">#D6C4B8</color>
+    <color name="kestrel_green">#10B981</color>
+    <color name="kestrel_red">#EF4444</color>
+    <color name="kestrel_orange">#F97316</color>
+    <color name="kestrel_flame_bg">#55F97316</color>
+</resources>
