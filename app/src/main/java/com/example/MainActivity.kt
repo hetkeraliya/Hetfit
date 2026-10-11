@@ -68,6 +68,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -179,13 +180,51 @@ fun KestrelMainScreen(
   var hasNetworkError by remember { mutableStateOf(false) }
   var errorMessage by remember { mutableStateOf("") }
   var showDeviceMenu by remember { mutableStateOf(false) }
+  var showAiSettings by remember { mutableStateOf(false) }
+  var aiKeyInput by remember { mutableStateOf(com.example.ai.OpenCodeZenClient.get(context).apiKey) }
+  val scope = rememberCoroutineScope()
 
   val store = remember { BandSampleStore.get(context) }
+
+  fun askAiFromWeb(question: String, contextJson: String) {
+    val client = com.example.ai.OpenCodeZenClient.get(context)
+    if (!client.isConfigured()) {
+      webViewInstance?.post {
+        webViewInstance?.evaluateJavascript(
+          "window.kestrelAiReply && window.kestrelAiReply('Please set your OpenCode Zen API key first (AI tab → API Key Settings).', true);",
+          null
+        )
+      }
+      showAiSettings = true
+      return
+    }
+    val system = "You are Kestrel, a concise health coach. Use the user's real data when provided. Be practical and never invent diagnoses. Data: $contextJson"
+    Thread {
+      val result = kotlinx.coroutines.runBlocking { client.chat(system, question) }
+      val reply = result.getOrElse { "Error: ${it.message}" }
+      val isErr = result.isFailure
+      val safe = reply.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n").replace("\r", "")
+      webViewInstance?.post {
+        webViewInstance?.evaluateJavascript(
+          "window.kestrelAiReply && window.kestrelAiReply('$safe', $isErr);",
+          null
+        )
+      }
+    }.start()
+  }
 
   /** Pushes the REAL stored band history to the web UI and refreshes the widgets. */
   fun syncFullBandData(webView: WebView?, state: com.example.ble.MiBandState) {
     try {
-      KestrelWidgetManager.refresh(context)
+      val t = store.todayTotals()
+      val steps = maxOf(t.steps, state.liveSteps)
+      val hr = if (state.liveHeartRate > 0) state.liveHeartRate else t.lastHr
+      KestrelWidgetManager.saveHealthData(
+        context = context,
+        steps = steps.takeIf { it > 0 },
+        heartRate = hr.takeIf { it > 0 },
+        sleepMinutes = t.sleepMinutes.takeIf { it > 0 }
+      )
       MiBandDataSyncEngine.pushToWebView(webView, store, state, fullHistory = true)
     } catch (e: Exception) {
       Log.e(TAG, "Error pushing band data: ${e.message}")
@@ -203,7 +242,13 @@ fun KestrelMainScreen(
   LaunchedEffect(miBandManager) {
     miBandManager.onHistorySynced = { _ ->
       val st = miBandManager.uiState.value
-      KestrelWidgetManager.refresh(context)
+      val t = store.todayTotals()
+      KestrelWidgetManager.saveHealthData(
+        context = context,
+        steps = maxOf(t.steps, st.liveSteps).takeIf { it > 0 },
+        heartRate = (if (st.liveHeartRate > 0) st.liveHeartRate else t.lastHr).takeIf { it > 0 },
+        sleepMinutes = t.sleepMinutes.takeIf { it > 0 }
+      )
       MiBandDataSyncEngine.pushToWebView(webViewInstance, store, st, fullHistory = false)
     }
   }
@@ -391,14 +436,26 @@ fun KestrelMainScreen(
               userAgentString = "$userAgentString KestrelAndroidApp/1.0"
             }
 
-            addJavascriptInterface(
-              KestrelAndroidBridge(ctx) { action ->
-                if (action == "open_bluetooth_menu") {
-                  showDeviceMenu = true
+            val bridge = KestrelAndroidBridge(ctx) { action ->
+                when {
+                  action == "open_bluetooth_menu" -> showDeviceMenu = true
+                  action == "open_ai_settings" -> showAiSettings = true
+                  action.startsWith("ask_ai|") -> {
+                    val parts = action.split("|", limit = 3)
+                    val q = parts.getOrNull(1) ?: ""
+                    val ctxJson = parts.getOrNull(2) ?: "{}"
+                    askAiFromWeb(q, ctxJson)
+                  }
+                  action == "run_stopped" -> {
+                    webViewInstance?.let { wv ->
+                      val store = com.example.ble.BandSampleStore.get(ctx)
+                      com.example.ble.MiBandDataSyncEngine.pushSleepAndWorkouts(wv, store)
+                    }
+                  }
                 }
-              },
-              "KestrelAndroidBridge"
-            )
+              }
+            addJavascriptInterface(bridge, "KestrelAndroidBridge")
+            addJavascriptInterface(bridge, "KestrelAndroid")
 
             webChromeClient = object : WebChromeClient() {
               override fun onProgressChanged(view: WebView?, newProgress: Int) {
@@ -615,6 +672,39 @@ fun KestrelMainScreen(
           }
         )
       }
+
+      if (showAiSettings) {
+        androidx.compose.material3.AlertDialog(
+          onDismissRequest = { showAiSettings = false },
+          title = { androidx.compose.material3.Text("OpenCode Zen API Key") },
+          text = {
+            androidx.compose.foundation.layout.Column {
+              androidx.compose.material3.Text(
+                "Get a free key at opencode.ai (Zen). Model: space-bunny-free. Key is stored only on this device."
+              )
+              androidx.compose.material3.OutlinedTextField(
+                value = aiKeyInput,
+                onValueChange = { aiKeyInput = it },
+                label = { androidx.compose.material3.Text("API Key") },
+                singleLine = true,
+                modifier = androidx.compose.ui.Modifier.fillMaxWidth()
+              )
+            }
+          },
+          confirmButton = {
+            androidx.compose.material3.TextButton(onClick = {
+              com.example.ai.OpenCodeZenClient.get(context).apiKey = aiKeyInput
+              showAiSettings = false
+              android.widget.Toast.makeText(context, "API key saved", android.widget.Toast.LENGTH_SHORT).show()
+            }) { androidx.compose.material3.Text("Save") }
+          },
+          dismissButton = {
+            androidx.compose.material3.TextButton(onClick = { showAiSettings = false }) {
+              androidx.compose.material3.Text("Cancel")
+            }
+          }
+        )
+      }
     }
   }
 }
@@ -628,6 +718,9 @@ class KestrelAndroidBridge(
   private val context: Context,
   private val onAction: (String) -> Unit
 ) {
+  private var activeRunId: Long = -1
+  private var runStartTs: Long = 0
+
   @JavascriptInterface
   fun openBluetoothMenu() {
     onAction("open_bluetooth_menu")
@@ -664,5 +757,57 @@ class KestrelAndroidBridge(
       workoutMins = workoutMins,
       streak = streak
     )
+  }
+
+  // ---- AI (OpenCode Zen) ----
+  @JavascriptInterface
+  fun openAiSettings() {
+    onAction("open_ai_settings")
+  }
+
+  @JavascriptInterface
+  fun askAi(question: String, contextJson: String) {
+    onAction("ask_ai|$question|$contextJson")
+  }
+
+  @JavascriptInterface
+  fun hasAiKey(): Boolean {
+    return com.example.ai.OpenCodeZenClient.get(context).isConfigured()
+  }
+
+  // ---- Running (Strava-like) ----
+  @JavascriptInterface
+  fun startRun() {
+    val store = com.example.ble.BandSampleStore.get(context)
+    runStartTs = System.currentTimeMillis() / 1000
+    activeRunId = store.insertWorkout(
+      type = "Run",
+      startTs = runStartTs,
+      source = "manual"
+    )
+    Toast.makeText(context, "Run started", Toast.LENGTH_SHORT).show()
+    onAction("run_started")
+  }
+
+  @JavascriptInterface
+  fun stopRun() {
+    if (activeRunId < 0) {
+      Toast.makeText(context, "No active run", Toast.LENGTH_SHORT).show()
+      return
+    }
+    val endTs = System.currentTimeMillis() / 1000
+    val store = com.example.ble.BandSampleStore.get(context)
+    // Estimate distance from steps in the window (rough 0.75m/step)
+    var steps = 0
+    store.forEachChunk(runStartTs, 5000) { rows ->
+      steps += rows.sumOf { it.steps }
+    }
+    val distanceM = steps * 0.75
+    val durationMin = ((endTs - runStartTs) / 60).toInt().coerceAtLeast(1)
+    val calories = (distanceM / 1000.0 * 60).toInt() // rough
+    store.updateWorkoutEnd(activeRunId, endTs, distanceM, steps, null, null, calories)
+    activeRunId = -1
+    Toast.makeText(context, "Run saved · ${"%.2f".format(distanceM/1000)} km", Toast.LENGTH_SHORT).show()
+    onAction("run_stopped")
   }
 }
