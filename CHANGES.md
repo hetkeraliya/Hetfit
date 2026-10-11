@@ -10,3 +10,12 @@ EDIT AndroidManifest.xml           FGS permissions, service, singleTask
 EDIT widget/*, res/layout/widget_*.xml   plain <View> (crashes RemoteViews = "can't load widget") -> FrameLayout; no fake defaults
 EDIT assets/web/app.js             kestrelBandSamples*/kestrelLiveMetric, purge old fake days, no demo seed
 Workouts are NOT synced over Bluetooth. Gadgetbridge zip import is unchanged.
+
+# Round 2
+NEW  ble/HuamiSportsSummaryParser.kt   workout summary parser (port of Gadgetbridge HuamiActivitySummaryParser)
+EDIT ble/HuamiActivityFetcher.kt       now fetches activity + automatic stress (0x13) + workout summaries (0x05)
+EDIT ble/BandSampleStore.kt            stress + workouts tables, per-day stress / sleep-stage (deep/light/REM) stats
+NEW  widget/KestrelGlassWidgets.kt     6 new frosted-glass widgets: steps ring, heart rate, sleep, stress, last workout, band status (Sync/Connect)
+EDIT drawables bg_widget_*, progress_*  frosted-glass cool theme for all widgets
+EDIT assets/web/app.js                 kestrelBandExtras / kestrelBandWorkouts
+CI   .github/workflows/build-apk.yml   creates debug.keystore + placeholder google-services.json
