@@ -185,15 +185,7 @@ fun KestrelMainScreen(
   /** Pushes the REAL stored band history to the web UI and refreshes the widgets. */
   fun syncFullBandData(webView: WebView?, state: com.example.ble.MiBandState) {
     try {
-      val t = store.todayTotals()
-      val steps = maxOf(t.steps, state.liveSteps)
-      val hr = if (state.liveHeartRate > 0) state.liveHeartRate else t.lastHr
-      KestrelWidgetManager.saveHealthData(
-        context = context,
-        steps = steps.takeIf { it > 0 },
-        heartRate = hr.takeIf { it > 0 },
-        sleepMinutes = t.sleepMinutes.takeIf { it > 0 }
-      )
+      KestrelWidgetManager.refresh(context)
       MiBandDataSyncEngine.pushToWebView(webView, store, state, fullHistory = true)
     } catch (e: Exception) {
       Log.e(TAG, "Error pushing band data: ${e.message}")
@@ -211,13 +203,7 @@ fun KestrelMainScreen(
   LaunchedEffect(miBandManager) {
     miBandManager.onHistorySynced = { _ ->
       val st = miBandManager.uiState.value
-      val t = store.todayTotals()
-      KestrelWidgetManager.saveHealthData(
-        context = context,
-        steps = maxOf(t.steps, st.liveSteps).takeIf { it > 0 },
-        heartRate = (if (st.liveHeartRate > 0) st.liveHeartRate else t.lastHr).takeIf { it > 0 },
-        sleepMinutes = t.sleepMinutes.takeIf { it > 0 }
-      )
+      KestrelWidgetManager.refresh(context)
       MiBandDataSyncEngine.pushToWebView(webViewInstance, store, st, fullHistory = false)
     }
   }
