@@ -26,7 +26,7 @@
             android:fontFamily="sans-serif-medium"
             android:letterSpacing="0.08"
             android:text="KESTREL"
-            android:textColor="@color/glass_text"
+            android:textColor="@color/kestrel_cream"
             android:textSize="12sp"
             android:textStyle="bold" />
 
@@ -46,7 +46,7 @@
             android:paddingEnd="6dp"
             android:paddingBottom="2dp"
             android:text="🔥 5d"
-            android:textColor="@color/glass_cyan"
+            android:textColor="@color/kestrel_orange"
             android:textSize="11sp"
             android:textStyle="bold" />
 
@@ -62,7 +62,7 @@
             android:paddingEnd="6dp"
             android:paddingBottom="2dp"
             android:text="Synced"
-            android:textColor="@color/glass_mint"
+            android:textColor="@color/kestrel_green"
             android:textSize="10sp" />
     </LinearLayout>
 
@@ -81,7 +81,7 @@
             android:fontFamily="sans-serif-black"
             android:includeFontPadding="false"
             android:text="8,420"
-            android:textColor="@color/glass_text"
+            android:textColor="@color/kestrel_cream"
             android:textSize="26sp"
             android:textStyle="bold" />
 
@@ -92,7 +92,7 @@
             android:layout_marginBottom="3dp"
             android:fontFamily="sans-serif-medium"
             android:text="steps"
-            android:textColor="@color/glass_sky"
+            android:textColor="@color/kestrel_mauve"
             android:textSize="12sp" />
 
         <FrameLayout
@@ -107,7 +107,7 @@
             android:layout_marginBottom="3dp"
             android:fontFamily="sans-serif"
             android:text="84% of 10,000"
-            android:textColor="@color/glass_muted"
+            android:textColor="@color/kestrel_cream_muted"
             android:textSize="11sp" />
     </LinearLayout>
 
@@ -157,7 +157,7 @@
                     android:layout_marginStart="4dp"
                     android:fontFamily="sans-serif-medium"
                     android:text="72"
-                    android:textColor="@color/glass_text"
+                    android:textColor="@color/kestrel_cream"
                     android:textSize="13sp"
                     android:textStyle="bold" />
 
@@ -166,7 +166,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginStart="2dp"
                     android:text="bpm"
-                    android:textColor="@color/glass_sky"
+                    android:textColor="@color/kestrel_mauve"
                     android:textSize="9sp" />
             </LinearLayout>
 
@@ -175,7 +175,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
                 android:text="Heart Rate"
-                android:textColor="@color/glass_muted"
+                android:textColor="@color/kestrel_cream_muted"
                 android:textSize="9sp" />
         </LinearLayout>
 
@@ -207,7 +207,7 @@
                     android:layout_marginStart="4dp"
                     android:fontFamily="sans-serif-medium"
                     android:text="385"
-                    android:textColor="@color/glass_text"
+                    android:textColor="@color/kestrel_cream"
                     android:textSize="13sp"
                     android:textStyle="bold" />
 
@@ -216,7 +216,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginStart="2dp"
                     android:text="kcal"
-                    android:textColor="@color/glass_sky"
+                    android:textColor="@color/kestrel_mauve"
                     android:textSize="9sp" />
             </LinearLayout>
 
@@ -225,7 +225,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
                 android:text="Burned"
-                android:textColor="@color/glass_muted"
+                android:textColor="@color/kestrel_cream_muted"
                 android:textSize="9sp" />
         </LinearLayout>
 
@@ -259,7 +259,7 @@
                     android:fontFamily="sans-serif-medium"
                     android:maxLines="1"
                     android:text="Walk 34m"
-                    android:textColor="@color/glass_text"
+                    android:textColor="@color/kestrel_cream"
                     android:textSize="12sp"
                     android:textStyle="bold" />
             </LinearLayout>
@@ -272,7 +272,7 @@
                 android:ellipsize="end"
                 android:maxLines="1"
                 android:text="Workout"
-                android:textColor="@color/glass_muted"
+                android:textColor="@color/kestrel_cream_muted"
                 android:textSize="9sp" />
         </LinearLayout>
     </LinearLayout>
