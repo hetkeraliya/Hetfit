@@ -22,6 +22,7 @@ import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import com.example.run.RunTrackingService
 import java.util.UUID
 import java.util.concurrent.ConcurrentLinkedQueue
 import javax.crypto.Cipher
@@ -48,6 +49,10 @@ val STANDARD_BATTERY_SERVICE_UUID: UUID = UUID.fromString("0000180f-0000-1000-80
 val STANDARD_BATTERY_CHAR_UUID: UUID = UUID.fromString("00002a19-0000-1000-8000-00805f9b34fb")
 
 val CLIENT_CONFIG_DESCRIPTOR_UUID: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
+
+// Huami device-event + workout characteristics (same ones Gadgetbridge listens to)
+val DEVICE_EVENT_CHAR_UUID: UUID = UUID.fromString("00000010-0000-3512-2118-0009af100700")
+val WORKOUT_CHAR_UUID: UUID = UUID.fromString("0000000f-0000-3512-2118-0009af100700")
 
 enum class ConnectionStatus {
   DISCONNECTED,
@@ -686,6 +691,10 @@ class MiBandManager(private val context: Context) {
       BATTERY_CHAR_UUID, STANDARD_BATTERY_CHAR_UUID -> handleBatteryData(value)
       FETCH_CONTROL_UUID -> handler.post { fetcher.onControlNotification(value) }
       FETCH_DATA_UUID -> handler.post { fetcher.onDataNotification(value) }
+      configCharUuid -> handler.post { handleConfigNotification(value) }
+      DEVICE_EVENT_CHAR_UUID -> handler.post { handleDeviceEvent(value) }
+      WORKOUT_CHAR_UUID -> handler.post { handleWorkoutNotification(value) }
+      HR_CONTROL_POINT_CHAR_UUID -> Log.d(TAG, "HR control reply: " + value.joinToString(" ") { "%02x".format(it) })
     }
   }
 
@@ -762,8 +771,17 @@ class MiBandManager(private val context: Context) {
   @SuppressLint("MissingPermission")
   private fun subscribeToSensors(gatt: BluetoothGatt) {
     reconnectAttempts = 0
+    // Gadgetbridge enables notifications on the configuration, device-event, workout and HR-control characteristics
+    // BEFORE it sends alarms / heart-rate settings. Without them many firmwares silently ignore the writes.
+    lastAck = null
+    gatt.getService(ACTIVITY_SERVICE_UUID)?.let { svc ->
+      listOf(configCharUuid, DEVICE_EVENT_CHAR_UUID, WORKOUT_CHAR_UUID).forEach { u -> svc.getCharacteristic(u)?.let { gattIo.setNotify(it, true) } }
+    }
+    gatt.getService(HR_SERVICE_UUID)?.getCharacteristic(HR_CONTROL_POINT_CHAR_UUID)?.let { gattIo.setNotify(it, true) }
+    // Apply stored alarms / heart-rate settings once those subscriptions are in place, and retry once for slow bands.
+    handler.postDelayed({ applyBandSettings() }, 2500)
+    handler.postDelayed({ applyBandSettings() }, 9000)
     // Pull the band's stored history as soon as the link is usable (like Gadgetbridge does on connect).
-    handler.postDelayed({ applyBandSettings() }, 1500)
     handler.postDelayed({
       if (_uiState.value.status == ConnectionStatus.CONNECTED && !fetcher.running) syncNow()
     }, 3000)
@@ -919,6 +937,95 @@ class MiBandManager(private val context: Context) {
     try { org.json.JSONObject(json) } catch (e: Exception) { return "Invalid settings" }
     controlPrefs.edit().putString("settings", json).apply()
     return if (linkReady()) { applyBandSettings(); "Sent to band" } else "Saved. It will be sent when the band connects."
+  }
+
+  // ---------------- Status, acknowledgements, band workout events ----------------
+  @Volatile private var lastAck: String? = null
+  private var pendingBandWorkoutType = -1
+  private var mirroredRun = false
+
+  /** Everything the Settings page shows in its "Band connection" card. */
+  fun statusJson(): String {
+    val st = _uiState.value
+    val o = org.json.JSONObject()
+    o.put("status", st.status.name); o.put("battery", st.batteryPercent); o.put("hr", st.liveHeartRate)
+    o.put("lastSync", st.lastSyncMillis); o.put("syncing", st.syncing); o.put("percent", st.syncPercent)
+    o.put("message", st.syncMessage ?: ""); o.put("error", st.errorMessage ?: ""); o.put("ack", lastAck ?: "")
+    return o.toString()
+  }
+
+  /** The band answers every config write with [0x10, command, 0x01 = ok]. Gadgetbridge leaves this as a TODO; we surface it. */
+  private fun handleConfigNotification(v: ByteArray) {
+    Log.d(TAG, "config reply: " + v.joinToString(" ") { "%02x".format(it) })
+    if (v.size >= 3 && v[0] == 0x10.toByte()) {
+      val ok = v[2] == 0x01.toByte()
+      val what = when (v[1].toInt() and 0xFF) { 0x02 -> "Alarm"; 0x06 -> "Setting"; 0x08 -> "Reminder"; else -> "Command" }
+      lastAck = if (ok) "$what accepted" else "$what rejected by band"
+    }
+  }
+
+  /** 30-second manual heart-rate reading (same command Gadgetbridge uses for "measure now"). */
+  fun measureHeartRateNow(): String {
+    if (!linkReady()) return "Connect the band first"
+    writeHrControl(byteArrayOf(0x15, 0x02, 0x01))
+    handler.postDelayed({ if (linkReady()) writeHrControl(byteArrayOf(0x15, 0x02, 0x00)) }, 30_000)
+    return "Measuring… keep the band snug for about 20 seconds"
+  }
+
+  private fun settingFlag(key: String, def: Boolean): Boolean =
+    try { org.json.JSONObject(getBandSettingsJson()).optBoolean(key, def) } catch (e: Exception) { def }
+
+  /** Device events: 0x14 = a workout screen was opened on the band. value[2] = needs GPS, value[3] = workout type. */
+  private fun handleDeviceEvent(v: ByteArray) {
+    if (v.isEmpty()) return
+    if (v[0] == 0x14.toByte() && v.size >= 4) {
+      pendingBandWorkoutType = v[3].toInt() and 0xFF
+      Log.i(TAG, "Workout opened on band, type=$pendingBandWorkoutType")
+    }
+  }
+
+  /** Band workout type (Huami) -> Kestrel run type (1 run, 3 walk, 4 ride); -1 = no GPS tracking. */
+  private fun appRunTypeFor(bandType: Int): Int = when (bandType) { 0x01 -> 1; 0x04 -> 3; 0x03 -> 4; else -> -1 }
+
+  /** Workout characteristic: [0x11, status] with 2 start, 3 pause, 4 resume, 5 end. Mirrors the workout on the phone (GPS route). */
+  private fun handleWorkoutNotification(v: ByteArray) {
+    if (v.size < 2 || v[0] != 0x11.toByte()) return
+    if (!settingFlag("mirrorWorkout", true)) return
+    val active = RunTrackingService.stateJson.contains("\"active\":true")
+    try {
+      when (v[1].toInt() and 0xFF) {
+        0x02 -> {
+          val t = appRunTypeFor(pendingBandWorkoutType)
+          if (t > 0 && !active) { mirroredRun = true; RunTrackingService.send(context, RunTrackingService.ACTION_START, t, true) }
+        }
+        0x03 -> if (active && mirroredRun) RunTrackingService.send(context, RunTrackingService.ACTION_PAUSE)
+        0x04 -> if (active && mirroredRun) RunTrackingService.send(context, RunTrackingService.ACTION_RESUME)
+        0x05 -> if (active && mirroredRun) { RunTrackingService.send(context, RunTrackingService.ACTION_FINISH); mirroredRun = false }
+      }
+    } catch (e: Exception) {
+      Log.w(TAG, "Could not mirror band workout on phone: ${e.message}")
+    }
+  }
+
+  // ---------------- Phone-started activity -> band ----------------
+  // The Huami protocol Gadgetbridge implements has no "start workout" command from phone to band (it only learns
+  // that a workout started ON the band). So when you start a run in the app, the band is put into live heart-rate
+  // mode and buzzes with a message at start, every km and at the end.
+  fun bandRunStarted(label: String) {
+    mirroredRun = false
+    if (!linkReady()) return
+    writeHrControl(byteArrayOf(0x15, 0x01, 0x01))                    // continuous heart rate
+    if (settingFlag("runBuzz", true)) sendBandNotification("Kestrel", "$label started")
+  }
+  fun bandRunKm(km: Int, split: String, hr: Int) {
+    if (!linkReady() || !settingFlag("runBuzz", true)) return
+    sendBandNotification("Kestrel", "$km km · $split/km" + if (hr in 30..220) " · $hr bpm" else "")
+  }
+  fun bandRunFinished(summary: String) {
+    if (!linkReady()) return
+    if (settingFlag("runBuzz", true)) sendBandNotification("Kestrel", summary)
+    // back to the normal interval measurement after the activity
+    applyBandSettings()
   }
 
   /** Alarm slot 0..4: [0x02, slot|0x80 if enabled, hour, minute, repeat-days mask]. */
