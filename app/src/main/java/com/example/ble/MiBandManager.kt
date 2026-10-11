@@ -460,7 +460,7 @@ class MiBandManager(private val context: Context) {
     stopScan()
     clearGattQueue()
 
-    val cleanKey = authKeyHex.trim().replace("0x", "").replace(" ", "").replace(":", "")
+    val cleanKey = authKeyHex.trim().replace("0x", "", ignoreCase = true).replace(" ", "").replace(":", "").replace("-", "").lowercase()
     if (cleanKey.isNotEmpty()) {
       saveAuthKey(cleanKey)
     }
@@ -509,6 +509,7 @@ class MiBandManager(private val context: Context) {
 
   @SuppressLint("MissingPermission")
   private fun teardown() {
+    authFlowId++
     fetcher.cancel()
     clearGattQueue()
     try {
@@ -546,6 +547,14 @@ class MiBandManager(private val context: Context) {
     if (isGattBusy) return
     val next = gattQueue.poll() ?: return
     isGattBusy = true
+    // A GATT call that returns false never fires its callback; without this the whole queue (auth included) froze.
+    val token = ++gattOpToken
+    handler.postDelayed({
+      if (isGattBusy && token == gattOpToken) {
+        Log.w(TAG, "GATT operation timed out — releasing the queue")
+        completeGattOperation()
+      }
+    }, 4000)
     handler.post {
       try {
         next.invoke()
@@ -602,6 +611,9 @@ class MiBandManager(private val context: Context) {
         Log.d(TAG, "Starting Huami AES-128 auth handshake…")
         authByte = 0x00
         authTriedAltByte = false
+        authUseKeyFirst = false
+        authFlowId++
+        armAuthWatchdog(gatt)
         // Persist cleaned key
         if (key != _uiState.value.authKey) saveAuthKey(key)
         gatt.setCharacteristicNotification(authChar, true)
@@ -611,7 +623,7 @@ class MiBandManager(private val context: Context) {
           enqueueGatt { gatt.writeDescriptor(descriptor) }
           // sendAuthKey runs from onDescriptorWrite → sendRequestRandomKey
         } else {
-          sendAuthKey(gatt, authChar)
+          sendRequestRandomKey(gatt, authChar)
         }
       } else {
         // No valid key: live sensors may work after OS pairing, but history sync will not.
@@ -740,6 +752,10 @@ class MiBandManager(private val context: Context) {
    */
   private var authByte: Byte = 0x00
   private var authTriedAltByte = false
+  /** Gadgetbridge only sends the key while pairing; on a normal reconnect it goes straight to "request random number". */
+  private var authUseKeyFirst = false
+  private var authFlowId = 0
+  private var gattOpToken = 0
 
   @SuppressLint("MissingPermission")
   private fun sendAuthKey(gatt: BluetoothGatt, authChar: BluetoothGattCharacteristic) {
@@ -768,8 +784,10 @@ class MiBandManager(private val context: Context) {
 
   @SuppressLint("MissingPermission")
   private fun sendRequestRandomKey(gatt: BluetoothGatt, authChar: BluetoothGattCharacteristic) {
-    // Called after CCCD enable — start the full handshake with the key.
-    sendAuthKey(gatt, authChar)
+    // Called after the auth CCCD is enabled. Gadgetbridge's normal reconnect path asks for the random number straight
+    // away (0x02 0x00). Re-sending the key first made already-paired bands go silent, which looked like
+    // "stuck at authentication". The key-first path stays as an automatic fallback.
+    if (authUseKeyFirst) sendAuthKey(gatt, authChar) else requestRandomNumber(gatt, authChar)
   }
 
   @SuppressLint("MissingPermission")
@@ -813,6 +831,13 @@ class MiBandManager(private val context: Context) {
       0x02 -> {
         // Challenge: [0x10, 0x02, 0x01, ...16 bytes]
         if (status != 0x01 || value.size < 19) {
+          if (!authUseKeyFirst) {
+            authUseKeyFirst = true
+            Log.w(TAG, "Random challenge refused — falling back to key-first pairing handshake")
+            sendAuthKey(gatt, authChar)
+            armAuthWatchdog(gatt)
+            return
+          }
           failAuth(gatt, "Band rejected random challenge — check the auth key.")
           return
         }
@@ -845,11 +870,19 @@ class MiBandManager(private val context: Context) {
       0x03 -> {
         if (status == 0x01) {
           Log.i(TAG, "Huami authentication successful")
+          authFlowId++            // cancels the auth watchdog
           authTriedAltByte = false
           _uiState.value = _uiState.value.copy(status = ConnectionStatus.CONNECTED, errorMessage = null)
           subscribeToSensors(gatt)
         } else {
           // Wrong key → status often 0x10 or 0x00
+          if (!authUseKeyFirst) {
+            authUseKeyFirst = true
+            Log.w(TAG, "Encrypted response refused — falling back to key-first pairing handshake")
+            sendAuthKey(gatt, authChar)
+            armAuthWatchdog(gatt)
+            return
+          }
           if (!authTriedAltByte) {
             authTriedAltByte = true
             authByte = if (authByte.toInt() == 0) 0x08 else 0x00
@@ -861,6 +894,25 @@ class MiBandManager(private val context: Context) {
         }
       }
     }
+  }
+
+  /** If the band never answers an auth step, retry once the other way, then give a clear error instead of hanging. */
+  @SuppressLint("MissingPermission")
+  private fun armAuthWatchdog(gatt: BluetoothGatt) {
+    val id = authFlowId
+    handler.postDelayed({
+      if (id != authFlowId || _uiState.value.status != ConnectionStatus.AUTHENTICATING) return@postDelayed
+      val ch = gatt.getService(AUTH_SERVICE_UUID)?.getCharacteristic(AUTH_CHAR_UUID)
+      if (ch != null && !authUseKeyFirst) {
+        Log.w(TAG, "No auth reply after 8 s — retrying with the key-first handshake")
+        authUseKeyFirst = true
+        isGattBusy = false
+        sendAuthKey(gatt, ch)
+        armAuthWatchdog(gatt)
+      } else {
+        failAuth(gatt, "The band did not answer the authentication request. Close Zepp / Gadgetbridge (the band talks to one app at a time), switch phone Bluetooth off and on, wake the band, then connect again.")
+      }
+    }, 8000)
   }
 
   @SuppressLint("MissingPermission")
