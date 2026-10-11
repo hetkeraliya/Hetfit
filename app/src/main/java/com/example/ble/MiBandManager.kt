@@ -639,6 +639,10 @@ class MiBandManager(private val context: Context) {
 
       Log.d(TAG, "Services discovered. Checking authentication & sensor services...")
       trace("services")
+      // Zepp OS bands (Mi Band 7/8, Amazfit GTR 4 ...) expose the chunked 2021 characteristics and use a different, encrypted login.
+      zeppOsBand = gatt.services.any { sv -> sv.getCharacteristic(UUID.fromString("00000016-0000-3512-2118-0009af100700")) != null }
+      trace(if (zeppOsBand) "ZEPP-OS-BAND" else "legacy-band")
+      authUseKeyFirst = false
       val authService = gatt.getService(AUTH_SERVICE_UUID)
       val authChar = authService?.getCharacteristic(AUTH_CHAR_UUID)
 
@@ -702,6 +706,7 @@ class MiBandManager(private val context: Context) {
       status: Int
     ) {
       Log.d(TAG, "onCharacteristicWrite uuid: ${characteristic?.uuid} status: $status")
+      if (characteristic?.uuid == AUTH_CHAR_UUID) trace("write=$status")
       completeGattOperation()
     }
 
@@ -792,6 +797,13 @@ class MiBandManager(private val context: Context) {
   private var authTriedAltByte = false
   /** Gadgetbridge only sends the key while pairing; on a normal reconnect it goes straight to "request random number". */
   private var authUseKeyFirst = false
+  @Volatile private var zeppOsBand = false
+  /** Use whichever write type the band's auth characteristic actually supports (forcing "with response" on a no-response-only char fails). */
+  private fun authWriteType(ch: BluetoothGattCharacteristic): Int {
+    val p = ch.properties
+    return if ((p and BluetoothGattCharacteristic.PROPERTY_WRITE) != 0) BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+    else BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+  }
   @Volatile private var authTrace = ""
   @Volatile private var limitedMode = false
   private fun trace(msg: String) {
@@ -822,7 +834,7 @@ class MiBandManager(private val context: Context) {
     trace("sent-key")
     enqueueGatt {
       authChar.value = packet
-      authChar.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+      authChar.writeType = authWriteType(authChar)
       gatt.writeCharacteristic(authChar)
     }
   }
@@ -841,7 +853,7 @@ class MiBandManager(private val context: Context) {
     trace("sent-random")
     enqueueGatt {
       authChar.value = byteArrayOf(0x02, authByte)
-      authChar.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+      authChar.writeType = authWriteType(authChar)
       gatt.writeCharacteristic(authChar)
     }
   }
@@ -907,7 +919,7 @@ class MiBandManager(private val context: Context) {
           Log.d(TAG, "Auth step 3: send encrypted challenge")
           enqueueGatt {
             authChar.value = response
-            authChar.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+            authChar.writeType = authWriteType(authChar)
             gatt.writeCharacteristic(authChar)
           }
         } catch (e: Exception) {
@@ -962,7 +974,10 @@ class MiBandManager(private val context: Context) {
         limitedMode = true
         _uiState.value = _uiState.value.copy(
           status = ConnectionStatus.CONNECTED,
-          errorMessage = "Band did not answer authentication, so history sync is off (live mode only). Force-stop Zepp / Gadgetbridge, forget the band in Android Bluetooth settings, then Connect / pair again."
+          errorMessage = if (zeppOsBand)
+            "This band uses the newer Zepp OS login (Mi Band 7/8 and similar). This app only speaks the older Mi Band 4/5 login, so it cannot authenticate or sync history with it."
+          else
+            "Band did not answer authentication, so history sync is off (live mode only). Force-stop Zepp / Gadgetbridge, forget the band in Android Bluetooth settings, then Connect / pair again."
         )
         subscribeToSensors(gatt)
       }
