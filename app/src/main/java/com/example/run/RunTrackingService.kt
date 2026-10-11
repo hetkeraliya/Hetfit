@@ -63,8 +63,11 @@ class RunTrackingService : Service(), LocationListener {
     @Synchronized private fun liveAdd(lat: Double, lon: Double, alt: Double) { live.add(doubleArrayOf(lat, lon, alt)) }
     @Synchronized private fun liveClear() { live.clear() }
 
-    fun send(context: Context, action: String, type: Int = 1, voice: Boolean = false) {
-      val i = Intent(context, RunTrackingService::class.java).setAction(action).putExtra(EXTRA_TYPE, type).putExtra(EXTRA_VOICE, voice)
+    const val EXTRA_FROM_BAND = "from_band"
+
+    fun send(context: Context, action: String, type: Int = 1, voice: Boolean = false, fromBand: Boolean = false) {
+      val i = Intent(context, RunTrackingService::class.java).setAction(action)
+        .putExtra(EXTRA_TYPE, type).putExtra(EXTRA_VOICE, voice).putExtra(EXTRA_FROM_BAND, fromBand)
       if (action == ACTION_START) ContextCompat.startForegroundService(context, i) else context.startService(i)
     }
   }
@@ -101,6 +104,10 @@ class RunTrackingService : Service(), LocationListener {
   private var consecutiveGoodFixes = 0
   private var lastGpsSentToBandMs = 0L
   private var gpsSearchingSent = false
+  /** True when this session was started because the user accepted a band-workout offer. */
+  private var fromBand = false
+  private var bandStepsAtStart = -1
+  private var bandDistAtStart = -1
 
   private val tick = object : Runnable {
     override fun run() {
@@ -118,7 +125,11 @@ class RunTrackingService : Service(), LocationListener {
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     when (intent?.action) {
-      ACTION_START -> if (!running) startRun(intent.getIntExtra(EXTRA_TYPE, 1), intent.getBooleanExtra(EXTRA_VOICE, false)) else Unit
+      ACTION_START -> if (!running) startRun(
+        intent.getIntExtra(EXTRA_TYPE, 1),
+        intent.getBooleanExtra(EXTRA_VOICE, false),
+        intent.getBooleanExtra(EXTRA_FROM_BAND, false)
+      ) else Unit
       ACTION_PAUSE -> setPaused(true)
       ACTION_RESUME -> setPaused(false)
       ACTION_FINISH -> finishRun(true)
@@ -138,9 +149,10 @@ class RunTrackingService : Service(), LocationListener {
     }
   }
 
-  private fun startRun(t: Int, speak: Boolean) {
+  private fun startRun(t: Int, speak: Boolean, fromBandSession: Boolean = false) {
     type = t
     voice = speak
+    fromBand = fromBandSession
     createChannel()
     try {
       val n = buildNotification()
@@ -156,7 +168,10 @@ class RunTrackingService : Service(), LocationListener {
     hrSum = 0; hrCount = 0; hrMax = 0; nextKm = 1; lastKmMoving = 0; tickCount = 0
     consecutiveGoodFixes = 0; lastGpsSentToBandMs = 0; gpsSearchingSent = false
     recent.clear(); points.clear(); liveClear()
-    stepsAtStart = MiBandManager.get(this).uiState.value.liveSteps.takeIf { it > 0 } ?: -1
+    val st0 = MiBandManager.get(this).uiState.value
+    stepsAtStart = st0.liveSteps.takeIf { it > 0 } ?: -1
+    bandStepsAtStart = st0.liveSteps.takeIf { it > 0 } ?: -1
+    bandDistAtStart = st0.liveDistanceMeters.takeIf { it > 0 } ?: -1
 
     gpsOn = type in setOf(1, 3, 4, 15, 7) && startLocation()
     if (voice) initTts()
@@ -165,11 +180,17 @@ class RunTrackingService : Service(), LocationListener {
       wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "kestrel:run").also { it.acquire(8 * 3600 * 1000L) }
     } catch (_: Exception) { }
     handler.post(tick)
-    speak("Recording started")
-    try {
-      val label = when (type) { 3 -> "Walk"; 4 -> "Ride"; 15 -> "Hike"; else -> "Run" }
-      MiBandManager.get(this).bandRunStarted(label, bandType = bandTypeFor(type))
-    } catch (_: Exception) { }
+    speak(if (fromBand) "Tracking band workout" else "Recording started")
+    // Only push "start" to the band when the phone initiated the run (not when mirroring the band).
+    if (!fromBand) {
+      try {
+        val label = when (type) { 3 -> "Walk"; 4 -> "Ride"; 15 -> "Hike"; else -> "Run" }
+        MiBandManager.get(this).bandRunStarted(label, bandType = bandTypeFor(type))
+      } catch (_: Exception) { }
+    } else {
+      // Keep continuous HR streaming while we mirror the band session.
+      try { MiBandManager.get(this).bandRunKeepAlive() } catch (_: Exception) { }
+    }
   }
 
   /** Map app run type → Huami band workout type (1 outdoor run, 4 walk, 3 outdoor ride). */
@@ -296,35 +317,61 @@ class RunTrackingService : Service(), LocationListener {
     if (!running) return
     val now = System.currentTimeMillis()
     val st = MiBandManager.get(this).uiState.value
+
+    // Band session distance/steps (delta since start) — preferred for pace when mirroring the band.
+    val bandDistM = if (fromBand && bandDistAtStart >= 0 && st.liveDistanceMeters >= bandDistAtStart)
+      (st.liveDistanceMeters - bandDistAtStart).toDouble() else -1.0
+    val bandSteps = if (bandStepsAtStart >= 0 && st.liveSteps >= bandStepsAtStart)
+      st.liveSteps - bandStepsAtStart else 0
+
+    // Prefer band distance when this is a mirrored band workout and the band reports movement.
+    val effectiveDist = when {
+      fromBand && bandDistM > distanceM && bandDistM > 5 -> bandDistM
+      else -> distanceM
+    }
+
     if (!paused) {
-      val moving = if (gpsOn) (now - lastMoveMs) < 6000 else true
+      val moving = when {
+        fromBand && bandDistM > 0 -> true  // band is counting distance → treat as moving
+        gpsOn -> (now - lastMoveMs) < 6000
+        else -> true
+      }
       if (moving) movingSec++
       val hr = st.liveHeartRate
       if (hr in 30..220) { hrSum += hr; hrCount++; if (hr > hrMax) hrMax = hr }
-      recent.addLast(now to distanceM)
+      recent.addLast(now to effectiveDist)
       while (recent.isNotEmpty() && now - recent.first().first > 20_000) recent.removeFirst()
-      if (distanceM >= nextKm * 1000.0) {
+      if (effectiveDist >= nextKm * 1000.0) {
         val km = nextKm; nextKm++
         val split = movingSec - lastKmMoving; lastKmMoving = movingSec
         speak("$km kilometer${if (km > 1) "s" else ""}. Time ${spokenTime(movingSec)}. Last kilometer ${spokenTime(split)}." +
           if (hr in 30..220) " Heart rate $hr." else "")
-        try { MiBandManager.get(this).bandRunKm(km, String.format(Locale.US, "%d:%02d", split / 60, split % 60), hr) } catch (_: Exception) { }
+        // Don't buzz the band again if the band itself is already in a workout.
+        if (!fromBand) {
+          try { MiBandManager.get(this).bandRunKm(km, String.format(Locale.US, "%d:%02d", split / 60, split % 60), hr) } catch (_: Exception) { }
+        }
       }
     }
     val elapsed = elapsedSec(now)
-    val avgPace = if (distanceM > 20) (movingSec / (distanceM / 1000.0)).toInt() else 0
+    // Pace from band distance when available, else GPS.
+    val avgPace = if (effectiveDist > 20) (movingSec / (effectiveDist / 1000.0)).toInt() else 0
     var curPace = 0
     if (recent.size > 3) {
       val dd = recent.last().second - recent.first().second
       val tt = (recent.last().first - recent.first().first) / 1000.0
       if (dd > 8.0) curPace = (tt / (dd / 1000.0)).toInt()
     }
-    val steps = if (stepsAtStart >= 0 && st.liveSteps >= stepsAtStart) st.liveSteps - stepsAtStart else 0
+    val steps = if (stepsAtStart >= 0 && st.liveSteps >= stepsAtStart) st.liveSteps - stepsAtStart else bandSteps
     val last = points.lastOrNull()
     val o = JSONObject().apply {
       put("active", true); put("paused", paused); put("type", type); put("gps", gpsOn)
+      put("fromBand", fromBand)
       put("startMs", startMs); put("elapsedSec", elapsed); put("movingSec", movingSec)
-      put("distanceM", Math.round(distanceM)); put("avgPace", avgPace); put("curPace", curPace)
+      put("distanceM", Math.round(effectiveDist))
+      put("gpsDistanceM", Math.round(distanceM))
+      put("bandDistanceM", if (bandDistM >= 0) Math.round(bandDistM) else 0)
+      put("avgPace", avgPace); put("curPace", curPace)
+      put("paceSource", if (fromBand && bandDistM > distanceM) "band" else "gps")
       put("hr", if (st.liveHeartRate in 30..220) st.liveHeartRate else 0)
       put("avgHr", if (hrCount > 0) (hrSum / hrCount).toInt() else 0); put("maxHr", hrMax)
       put("steps", steps); put("accuracy", Math.round(accuracy))
@@ -337,7 +384,6 @@ class RunTrackingService : Service(), LocationListener {
     if (tickCount % 2 == 0) {
       try { getSystemService(NotificationManager::class.java).notify(NOTIF_ID, buildNotification(elapsed)) } catch (_: Exception) { }
     }
-    // Keep continuous HR alive on the band (~every 75 s) so live pace + HR stay fresh.
     if (!paused && tickCount % 75 == 0) {
       try { MiBandManager.get(this).bandRunKeepAlive() } catch (_: Exception) { }
     }
@@ -375,24 +421,40 @@ class RunTrackingService : Service(), LocationListener {
     if (!running) { stopSelf(); return }
     val now = System.currentTimeMillis()
     val elapsed = elapsedSec(now)
+    val st = MiBandManager.get(this).uiState.value
+    val bandDistM = if (fromBand && bandDistAtStart >= 0 && st.liveDistanceMeters >= bandDistAtStart)
+      (st.liveDistanceMeters - bandDistAtStart).toDouble() else -1.0
+    val finalDist = when {
+      fromBand && bandDistM > distanceM && bandDistM > 5 -> bandDistM
+      else -> distanceM
+    }
+    val wasFromBand = fromBand
     running = false
+    fromBand = false
     handler.removeCallbacks(tick)
     stopLocation()
     var savedStart = -1L
     if (save && elapsed >= 10) {
       val startSec = startMs / 1000
-      val steps = if (stepsAtStart >= 0) (MiBandManager.get(this).uiState.value.liveSteps - stepsAtStart).coerceAtLeast(0) else 0
+      val steps = if (stepsAtStart >= 0) (st.liveSteps - stepsAtStart).coerceAtLeast(0) else 0
       store.insertWorkout(
         BandWorkoutRow(
           startSec = startSec, endSec = startSec + elapsed, type = type, steps = steps, activeSec = movingSec,
-          calories = 0, distanceM = Math.round(distanceM).toInt(),
+          calories = 0, distanceM = Math.round(finalDist).toInt(),
           avgHr = if (hrCount > 0) (hrSum / hrCount).toInt() else 0, maxHr = hrMax
         )
       )
       store.insertTrack(startSec, points)
       savedStart = startSec
-      speak("Saved. ${String.format(Locale.getDefault(), "%.2f", distanceM / 1000.0)} kilometers in ${spokenTime(movingSec)}.")
-      try { MiBandManager.get(this).bandRunFinished(String.format(Locale.US, "Saved %.2f km · %d:%02d", distanceM / 1000.0, movingSec / 60, movingSec % 60)) } catch (_: Exception) { }
+      speak("Saved. ${String.format(Locale.getDefault(), "%.2f", finalDist / 1000.0)} kilometers in ${spokenTime(movingSec)}.")
+      // Only notify the band if the phone started the session (band already ended its own).
+      if (!wasFromBand) {
+        try {
+          MiBandManager.get(this).bandRunFinished(
+            String.format(Locale.US, "Saved %.2f km · %d:%02d", finalDist / 1000.0, movingSec / 60, movingSec % 60)
+          )
+        } catch (_: Exception) { }
+      }
     }
     stateJson = "{\"active\":false}"
     listener?.invoke(stateJson)
