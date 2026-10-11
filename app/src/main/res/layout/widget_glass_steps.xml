@@ -3,18 +3,8 @@
     android:id="@+id/glass_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/bg_grad_steps"
-    android:orientation="vertical"
-    android:padding="16dp">
-    <TextView
-        android:id="@+id/tv_label"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="STEPS"
-        android:textColor="#FFFFFFCC"
-        android:textSize="11sp"
-        android:textStyle="bold"
-        android:letterSpacing="0.14" />
+    android:background="@drawable/bg_widget_card"
+    android:orientation="vertical">
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
@@ -33,23 +23,26 @@
             android:layout_height="match_parent"
             android:gravity="center"
             android:orientation="vertical">
-            <TextView
-                android:id="@+id/tv_value"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="0"
-                android:textColor="#FFFFFF"
-                android:textSize="26sp"
-                android:textStyle="bold"
-                android:maxLines="1" />
-            <TextView
-                android:id="@+id/tv_sub"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="steps"
-                android:textColor="#FFFFFFB3"
-                android:textSize="11sp"
-                android:maxLines="1" />
+    <TextView
+        android:id="@+id/tv_value"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="0"
+        android:textColor="@color/glass_text"
+        android:textSize="22sp"
+        android:textStyle="bold"
+        android:maxLines="1"
+         />
+    <TextView
+        android:id="@+id/tv_sub"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="steps"
+        android:textColor="@color/glass_muted"
+        android:textSize="10sp"
+        
+        android:maxLines="1"
+         />
         </LinearLayout>
     </FrameLayout>
 </LinearLayout>
