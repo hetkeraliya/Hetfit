@@ -202,7 +202,7 @@
     set.innerHTML = '<h4>Band settings</h4>' +
       '<div style="display:flex;justify-content:space-between;align-items:center;font-weight:600;padding:6px 0"><span>Heart-rate check every</span>' + sel('bs-hr', [[0, 'Off'], [1, '1 min'], [5, '5 min'], [10, '10 min'], [30, '30 min']], st.hrInterval == null ? 5 : st.hrInterval) + '</div>' +
       chk('bs-sleephr', 'Heart rate during sleep', st.sleepHr !== false) + chk('bs-lift', 'Raise wrist to wake screen', st.lift !== false) + chk('bs-goal', 'Notify when step goal is reached', st.goalNotify !== false) +
-      chk('bs-runbuzz', 'Buzz band when I start / finish a run and every km', st.runBuzz !== false) + chk('bs-mirror', 'Start GPS tracking on phone when I start a workout on the band', st.mirrorWorkout !== false) +
+      chk('bs-runbuzz', 'Buzz band when I start / finish a run and every km', st.runBuzz !== false) + chk('bs-mirror', 'Ask to track on phone (GPS map + band HR) when I start a workout on the band', st.mirrorWorkout !== false) +
       chk('bs-inact', 'Sedentary reminder', st.inactivity.enabled) +
       '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px;font-weight:600"><span>after</span>' + sel('bs-ithr', [[30, '30 min'], [45, '45 min'], [60, '60 min'], [90, '90 min']], st.inactivity.threshold) +
       '<span>between</span>' + sel('bs-ish', Array.from({ length: 24 }, (_, i) => [i, pad2(i) + ':00']), st.inactivity.startHour) + '<span>and</span>' + sel('bs-ieh', Array.from({ length: 24 }, (_, i) => [i, pad2(i) + ':00']), st.inactivity.endHour) + '</div>';
