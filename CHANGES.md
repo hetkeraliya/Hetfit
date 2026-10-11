@@ -38,3 +38,8 @@ BAND   ble/BandNotificationListener.kt  phone notifications -> band (chunked Hua
 - Auth watchdog: no reply in 8 s -> retry key-first once, then fail with a clear message instead of hanging.
 - GATT queue watchdog: an operation whose callback never arrives is released after 4 s.
 - Auth key cleanup is case-insensitive and strips 0x, spaces, colons, dashes.
+
+## Auth fix 2
+- Android bonding now completes BEFORE the GATT link opens (Gadgetbridge order); previously both ran at once.
+- Handshake trace (services > cccd > sent-random > reply ...) shown in Settings > Band connection while not connected.
+- If the band never answers auth, the link is kept in limited live mode instead of disconnecting.
