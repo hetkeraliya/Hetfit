@@ -640,8 +640,8 @@ class MiBandManager(private val context: Context) {
       Log.d(TAG, "Services discovered. Checking authentication & sensor services...")
       trace("services")
       // Zepp OS bands (Mi Band 7/8, Amazfit GTR 4 ...) expose the chunked 2021 characteristics and use a different, encrypted login.
-      zeppOsBand = gatt.services.any { sv -> sv.getCharacteristic(UUID.fromString("00000016-0000-3512-2118-0009af100700")) != null }
-      trace(if (zeppOsBand) "ZEPP-OS-BAND" else "legacy-band")
+      zeppOsBand = false   // Mi Band 5 also exposes the chunked 0x16 characteristic, so its presence says nothing about the login type
+      trace("chunked=" + (gatt.services.any { sv -> sv.getCharacteristic(UUID.fromString("00000016-0000-3512-2118-0009af100700")) != null }))
       authUseKeyFirst = false
       val authService = gatt.getService(AUTH_SERVICE_UUID)
       val authChar = authService?.getCharacteristic(AUTH_CHAR_UUID)
@@ -650,7 +650,7 @@ class MiBandManager(private val context: Context) {
         .replace(" ", "").replace(":", "").replace("-", "").lowercase()
       if (authChar != null && key.length == 32 && key.all { it in "0123456789abcdef" }) {
         Log.d(TAG, "Starting Huami AES-128 auth handshake…")
-        authByte = 0x00
+        authByte = 0x08
         authTriedAltByte = false
         authUseKeyFirst = false
         authFlowId++
@@ -661,7 +661,8 @@ class MiBandManager(private val context: Context) {
         val descriptor = authChar.getDescriptor(CLIENT_CONFIG_DESCRIPTOR_UUID)
         if (descriptor != null) {
           descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-          enqueueGatt { gatt.writeDescriptor(descriptor) }
+          trace("props=%x".format(authChar.properties))
+          enqueueGatt { val okd = gatt.writeDescriptor(descriptor); if (!okd) { trace("cccd-call-failed"); completeGattOperation(); sendRequestRandomKey(gatt, authChar) } }
           // sendAuthKey runs from onDescriptorWrite → sendRequestRandomKey
         } else {
           sendRequestRandomKey(gatt, authChar)
@@ -793,7 +794,7 @@ class MiBandManager(private val context: Context) {
    *
    * AUTH_BYTE is 0x00 on most firmwares; some Mi Band 5 builds use 0x08.
    */
-  private var authByte: Byte = 0x00
+  private var authByte: Byte = 0x08   // Gadgetbridge HuamiService.AUTH_BYTE = 0x08 (the band answers 03/08 = refused when 0x00 is used)
   private var authTriedAltByte = false
   /** Gadgetbridge only sends the key while pairing; on a normal reconnect it goes straight to "request random number". */
   private var authUseKeyFirst = false
@@ -835,7 +836,8 @@ class MiBandManager(private val context: Context) {
     enqueueGatt {
       authChar.value = packet
       authChar.writeType = authWriteType(authChar)
-      gatt.writeCharacteristic(authChar)
+      val okw = gatt.writeCharacteristic(authChar)
+      if (!okw) { trace("write-call-failed"); completeGattOperation() }
     }
   }
 
@@ -854,7 +856,8 @@ class MiBandManager(private val context: Context) {
     enqueueGatt {
       authChar.value = byteArrayOf(0x02, authByte)
       authChar.writeType = authWriteType(authChar)
-      gatt.writeCharacteristic(authChar)
+      val okw = gatt.writeCharacteristic(authChar)
+      if (!okw) { trace("write-call-failed"); completeGattOperation() }
     }
   }
 
@@ -920,7 +923,8 @@ class MiBandManager(private val context: Context) {
           enqueueGatt {
             authChar.value = response
             authChar.writeType = authWriteType(authChar)
-            gatt.writeCharacteristic(authChar)
+            val okw = gatt.writeCharacteristic(authChar)
+            if (!okw) { trace("write-call-failed"); completeGattOperation() }
           }
         } catch (e: Exception) {
           failAuth(gatt, "AES error: ${e.message}")
