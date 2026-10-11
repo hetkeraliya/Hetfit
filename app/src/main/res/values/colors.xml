@@ -22,24 +22,13 @@
     <color name="kestrel_orange">#F97316</color>
     <color name="kestrel_flame_bg">#55F97316</color>
 
-    <!-- Glass / AI-OS style -->
-    <color name="glass_text">#FFFFFFF2</color>
-    <color name="glass_muted">#E8D5E8</color>
-    <color name="glass_cyan">#7EC8C8</color>
-    <color name="glass_sky">#B8D4F0</color>
-    <color name="glass_violet">#C4A8F0</color>
-
-    <!-- Gradient stops inspired by AI OS -->
-    <color name="grad_pink_start">#FF6B9D</color>
-    <color name="grad_pink_end">#C44DFF</color>
-    <color name="grad_orange_start">#FF8A4C</color>
-    <color name="grad_orange_end">#FF5E62</color>
-    <color name="grad_purple_start">#A78BFA</color>
-    <color name="grad_purple_end">#7C3AED</color>
-    <color name="grad_blue_start">#60A5FA</color>
-    <color name="grad_blue_end">#818CF8</color>
-    <color name="grad_mint_start">#5EEAD4</color>
-    <color name="grad_mint_end">#A78BFA</color>
-    <color name="grad_rose_start">#FB7185</color>
-    <color name="grad_rose_end">#F472B6</color>
+    <!-- Frosted glass widget palette (cool) -->
+    <color name="glass_text">#F4FAFF</color>
+    <color name="glass_muted">#B4CCE0</color>
+    <color name="glass_sky">#7DD3FC</color>
+    <color name="glass_cyan">#67E8F9</color>
+    <color name="glass_mint">#6EE7B7</color>
+    <color name="glass_violet">#C4B5FD</color>
+    <color name="glass_rose">#FDA4AF</color>
+    <color name="glass_track">#33FFFFFF</color>
 </resources>
