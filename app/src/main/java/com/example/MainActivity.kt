@@ -752,6 +752,18 @@ class KestrelAndroidBridge(
     return result
   }
 
+  @JavascriptInterface fun getBandStatus(): String = MiBandManager.get(context).statusJson()
+
+  @JavascriptInterface
+  fun measureHeartRateNow(): String {
+    val mgr = MiBandManager.get(context)
+    var result = "Band not ready"
+    val latch = java.util.concurrent.CountDownLatch(1)
+    android.os.Handler(android.os.Looper.getMainLooper()).post { result = mgr.measureHeartRateNow(); latch.countDown() }
+    latch.await(2, java.util.concurrent.TimeUnit.SECONDS)
+    return result
+  }
+
   @JavascriptInterface
   fun getNotifyConfig(): String {
     val p = context.getSharedPreferences("band_notify", Context.MODE_PRIVATE)
