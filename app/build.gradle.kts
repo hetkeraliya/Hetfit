@@ -46,7 +46,8 @@ android {
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
       signingConfig = signingConfigs.getByName("release")
     }
-    debug { signingConfig = signingConfigs.getByName("debugConfig") }
+    // Use Android's auto-generated default debug key so CI needs no keystore file.
+    debug { }
   }
   compileOptions {
     sourceCompatibility = JavaVersion.VERSION_11
