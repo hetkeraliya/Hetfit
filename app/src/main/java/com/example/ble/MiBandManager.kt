@@ -200,6 +200,15 @@ class MiBandManager(private val context: Context) {
 
   private val fetcher = HuamiActivityFetcher(gattIo, store, prefs, handler, fetchListener)
 
+  /** Forget what was synced (activity / stress / workouts) and download everything the band still holds. */
+  fun resetAndResync() {
+    handler.post {
+      prefs.edit().remove("fetch_last_sync_ms").remove("fetch_last_stress_ms").remove("fetch_last_sports_ms").apply()
+      store.resetForResync()
+      syncNow()
+    }
+  }
+
   fun syncNow() {
     if (_uiState.value.status != ConnectionStatus.CONNECTED || bluetoothGatt == null) {
       _uiState.value = _uiState.value.copy(errorMessage = "Connect your band first.")
@@ -754,6 +763,7 @@ class MiBandManager(private val context: Context) {
   private fun subscribeToSensors(gatt: BluetoothGatt) {
     reconnectAttempts = 0
     // Pull the band's stored history as soon as the link is usable (like Gadgetbridge does on connect).
+    handler.postDelayed({ applyBandSettings() }, 1500)
     handler.postDelayed({
       if (_uiState.value.status == ConnectionStatus.CONNECTED && !fetcher.running) syncNow()
     }, 3000)
@@ -878,6 +888,117 @@ class MiBandManager(private val context: Context) {
       i += 2
     }
     return data
+  }
+
+  // ---------------- Band settings, alarms and phone notifications (Gadgetbridge Huami protocol) ----------------
+  private val configCharUuid: UUID = UUID.fromString("00000003-0000-3512-2118-0009af100700")
+  private val chunkedCharUuid: UUID = UUID.fromString("00000020-0000-3512-2118-0009af100700")
+  private val controlPrefs = context.getSharedPreferences("band_control", Context.MODE_PRIVATE)
+
+  private fun linkReady(): Boolean = _uiState.value.status == ConnectionStatus.CONNECTED && bluetoothGatt != null
+  private fun fee0Char(uuid: UUID): BluetoothGattCharacteristic? = bluetoothGatt?.getService(ACTIVITY_SERVICE_UUID)?.getCharacteristic(uuid)
+
+  private fun writeConfig(bytes: ByteArray): Boolean {
+    if (!linkReady()) return false
+    val ch = fee0Char(configCharUuid) ?: return false
+    gattIo.write(ch, bytes)
+    return true
+  }
+
+  private fun writeHrControl(bytes: ByteArray): Boolean {
+    if (!linkReady()) return false
+    val ch = bluetoothGatt?.getService(HR_SERVICE_UUID)?.getCharacteristic(HR_CONTROL_POINT_CHAR_UUID) ?: return false
+    gattIo.write(ch, bytes)
+    return true
+  }
+
+  fun getBandSettingsJson(): String = controlPrefs.getString("settings", "{}") ?: "{}"
+
+  /** Stores the settings JSON from the web UI and sends them to the band now (or on the next connect). */
+  fun saveBandSettings(json: String): String {
+    try { org.json.JSONObject(json) } catch (e: Exception) { return "Invalid settings" }
+    controlPrefs.edit().putString("settings", json).apply()
+    return if (linkReady()) { applyBandSettings(); "Sent to band" } else "Saved. It will be sent when the band connects."
+  }
+
+  /** Alarm slot 0..4: [0x02, slot|0x80 if enabled, hour, minute, repeat-days mask]. */
+  private fun sendAlarm(slot: Int, enabled: Boolean, hour: Int, minute: Int, days: Int) {
+    val repeat = if (days and 0x7F == 0) 0x80 else days and 0x7F   // 0x80 = one-shot
+    val idx = slot or (if (enabled) 0x80 else 0x00)
+    writeConfig(byteArrayOf(0x02, idx.toByte(), hour.toByte(), minute.toByte(), repeat.toByte()))
+  }
+
+  fun applyBandSettings() {
+    if (!linkReady()) return
+    val s = try { org.json.JSONObject(getBandSettingsJson()) } catch (e: Exception) { return }
+    if (s.has("hrInterval")) writeHrControl(byteArrayOf(0x14, s.optInt("hrInterval", 0).coerceIn(0, 120).toByte()))
+    if (s.has("sleepHr")) writeHrControl(byteArrayOf(0x15, 0x00, if (s.optBoolean("sleepHr")) 0x01 else 0x00))
+    if (s.has("lift")) writeConfig(
+      if (s.optBoolean("lift")) byteArrayOf(0x06, 0x05, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00) else byteArrayOf(0x06, 0x05, 0x00, 0x00)
+    )
+    if (s.has("goalNotify")) writeConfig(byteArrayOf(0x06, 0x06, 0x00, if (s.optBoolean("goalNotify")) 0x01 else 0x00))
+    if (s.has("inactivity")) {
+      val i = s.optJSONObject("inactivity")
+      if (i != null) writeConfig(
+        byteArrayOf(
+          0x08, if (i.optBoolean("enabled")) 0x01 else 0x00, i.optInt("threshold", 60).coerceIn(15, 120).toByte(), 0x00,
+          i.optInt("startHour", 8).coerceIn(0, 23).toByte(), 0x00, i.optInt("endHour", 21).coerceIn(0, 23).toByte(), 0x00,
+          0x00, 0x00, 0x00, 0x00
+        )
+      )
+    }
+    val alarms = s.optJSONArray("alarms")
+    if (alarms != null) {
+      for (k in 0 until alarms.length()) {
+        val a = alarms.optJSONObject(k) ?: continue
+        sendAlarm(a.optInt("slot", k).coerceIn(0, 4), a.optBoolean("enabled"), a.optInt("hour", 7).coerceIn(0, 23), a.optInt("minute", 0).coerceIn(0, 59), a.optInt("days", 0))
+      }
+    }
+  }
+
+  /**
+   * Shows a notification on the band. Mi Band 4/5 use the chunked characteristic with a Huami "custom" alert
+   * (category 0xFA + icon id) or a plain SMS-style alert. Message is "title\0body".
+   */
+  fun sendBandNotification(title: String, body: String, iconId: Int = 11): Boolean {
+    if (!linkReady()) return false
+    val ch = fee0Char(chunkedCharUuid) ?: return false
+    fun clip(t: String, max: Int): ByteArray {
+      var b = t.toByteArray(Charsets.UTF_8)
+      if (b.size > max) { var n = max; while (n > 0 && (b[n].toInt() and 0xC0) == 0x80) n--; b = b.copyOf(n) }
+      return b
+    }
+    val titleB = clip(title.replace('\n', ' '), 32)
+    val bodyB = clip(body, 180)
+    val msg = ByteArray(titleB.size + 1 + bodyB.size)
+    System.arraycopy(titleB, 0, msg, 0, titleB.size)
+    System.arraycopy(bodyB, 0, msg, titleB.size + 1, bodyB.size)
+    val app = "\u0000Kestrel\u0000".toByteArray(Charsets.UTF_8)
+    val head = byteArrayOf(0xFA.toByte(), 0, 0, 0, 0, 1, iconId.toByte())
+    val payload = head + msg + app
+    // Same framing as Gadgetbridge writeToChunkedOld: [0, flags | type(0), counter] + up to 17 data bytes.
+    val maxChunk = 17
+    var remaining = payload.size
+    var count = 0
+    while (remaining > 0) {
+      val n = minOf(remaining, maxChunk)
+      var flags = 0
+      if (remaining <= maxChunk) {
+        flags = flags or 0x80
+        if (count == 0) flags = flags or 0x40
+      } else if (count > 0) {
+        flags = flags or 0x40
+      }
+      val chunk = ByteArray(n + 3)
+      chunk[0] = 0
+      chunk[1] = flags.toByte()
+      chunk[2] = (count and 0xFF).toByte()
+      System.arraycopy(payload, count * maxChunk, chunk, 3, n)
+      gattIo.write(ch, chunk)
+      remaining -= n
+      count++
+    }
+    return count > 0
   }
 
   companion object {
