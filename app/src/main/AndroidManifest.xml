@@ -90,6 +90,78 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_quick_stats_info" />
         </receiver>
+
+        <receiver
+            android:name=".widget.KestrelStepsRingWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_steps_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_glass_steps_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.KestrelHeartWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_heart_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_glass_heart_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.KestrelSleepWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_sleep_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_glass_sleep_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.KestrelStressWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_stress_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_glass_stress_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.KestrelWorkoutWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_workout_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_glass_workout_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.KestrelBandWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_band_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_glass_band_info" />
+        </receiver>
     </application>
 
 </manifest>
