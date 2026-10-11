@@ -332,6 +332,11 @@
     if (!$('sleep-root')) return;
     renderAll('vitals');
     document.addEventListener('kestrel:group', (e) => { sleepKey = null; renderAll(e.detail); });
+    document.addEventListener('kestrel:page', (e) => {
+      const d = e.detail || {};
+      if (d.group === 'vitals' && d.page === 'sleep') renderAll('vitals');
+      else if (d.group) renderAll(d.group);
+    });
     // keep Sleep / Mood cards live when new band data arrives (never while the user is typing in a form)
     document.addEventListener('kestrel:data', () => {
       clearTimeout(dataTimer);
