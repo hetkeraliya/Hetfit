@@ -762,6 +762,18 @@ class KestrelAndroidBridge(
   // ---------------- Band settings / alarms / notifications ----------------
   @JavascriptInterface fun getBandSettings(): String = MiBandManager.get(context).getBandSettingsJson()
 
+  /** Pull the next Clock-app alarm from the phone and write it to band slot 0. */
+  @JavascriptInterface fun syncPhoneAlarmsToBand(): String {
+    var result = "Failed"
+    val latch = java.util.concurrent.CountDownLatch(1)
+    android.os.Handler(android.os.Looper.getMainLooper()).post {
+      result = MiBandManager.get(context).syncPhoneAlarmsToBand()
+      latch.countDown()
+    }
+    try { latch.await(4, java.util.concurrent.TimeUnit.SECONDS) } catch (_: Exception) {}
+    return result
+  }
+
   @JavascriptInterface
   fun saveBandSettings(json: String): String {
     val mgr = MiBandManager.get(context)
