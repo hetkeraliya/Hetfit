@@ -230,6 +230,14 @@ class MiBandManager(private val context: Context) {
       _uiState.value = _uiState.value.copy(errorMessage = "Connect your band first.")
       return
     }
+    if (!hasValidAuthKey()) {
+      _uiState.value = _uiState.value.copy(
+        errorMessage = "Auth key missing or invalid. Paste the 32-character key from Zepp / Gadgetbridge, then reconnect.",
+        syncing = false,
+        syncMessage = null
+      )
+      return
+    }
     if (fetcher.running) return
     _uiState.value = _uiState.value.copy(syncing = true, syncPercent = 0, syncMessage = "Syncing history…", errorMessage = null)
     if (!fetcher.start()) {
@@ -242,9 +250,20 @@ class MiBandManager(private val context: Context) {
   }
 
   fun saveAuthKey(key: String) {
-    val clean = key.trim().replace("0x", "").replace(" ", "").replace(":", "")
+    val clean = key.trim()
+      .replace("0x", "", ignoreCase = true)
+      .replace(" ", "")
+      .replace(":", "")
+      .replace("-", "")
+      .lowercase()
     prefs.edit().putString("mi_auth_key", clean).apply()
     _uiState.value = _uiState.value.copy(authKey = clean)
+  }
+
+  /** True when a valid 32-hex auth key is stored (required for history sync on Mi Band 4/5). */
+  fun hasValidAuthKey(): Boolean {
+    val k = getStoredAuthKey().lowercase()
+    return k.length == 32 && k.all { it in "0123456789abcdef" }
   }
 
   fun isBluetoothEnabled(): Boolean {
@@ -577,33 +596,32 @@ class MiBandManager(private val context: Context) {
       val authService = gatt.getService(AUTH_SERVICE_UUID)
       val authChar = authService?.getCharacteristic(AUTH_CHAR_UUID)
 
-      val key = _uiState.value.authKey
-      if (authChar != null && key.length == 32) {
-        // Run Huami AES-128 Challenge Handshake
-        Log.d(TAG, "Starting Huami AES-128 Auth Handshake with key...")
+      val key = _uiState.value.authKey.trim().replace("0x", "", ignoreCase = true)
+        .replace(" ", "").replace(":", "").replace("-", "").lowercase()
+      if (authChar != null && key.length == 32 && key.all { it in "0123456789abcdef" }) {
+        Log.d(TAG, "Starting Huami AES-128 auth handshake…")
+        authByte = 0x00
+        authTriedAltByte = false
+        // Persist cleaned key
+        if (key != _uiState.value.authKey) saveAuthKey(key)
         gatt.setCharacteristicNotification(authChar, true)
         val descriptor = authChar.getDescriptor(CLIENT_CONFIG_DESCRIPTOR_UUID)
         if (descriptor != null) {
           descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
           enqueueGatt { gatt.writeDescriptor(descriptor) }
+          // sendAuthKey runs from onDescriptorWrite → sendRequestRandomKey
         } else {
-          sendRequestRandomKey(gatt, authChar)
+          sendAuthKey(gatt, authChar)
         }
       } else {
-        // Connect directly via standard pairing / standard BLE sensors
-        Log.d(TAG, "No 32-char key or standard BLE connection. Subscribing to HR, Steps, and Battery...")
-        if (authChar != null) {
-          // Send request pairing command [0x01, 0x00] or [0x02, 0x08] which vibrates band and asks "Pair with phone?"
-          try {
-            authChar.value = byteArrayOf(0x02, 0x08)
-            enqueueGatt { gatt.writeCharacteristic(authChar) }
-          } catch (e: Exception) {
-            Log.w(TAG, "Pairing prompt write failed: ${e.message}")
-          }
-        }
+        // No valid key: live sensors may work after OS pairing, but history sync will not.
+        Log.w(TAG, "No valid 32-hex auth key — connecting without Huami auth (history sync disabled)")
         _uiState.value = _uiState.value.copy(
           status = ConnectionStatus.CONNECTED,
-          errorMessage = null
+          errorMessage = if (key.isNotEmpty())
+            "Auth key looks wrong (${key.length} chars). Need 32 hex digits for full sync."
+          else
+            "Connected without auth key — live HR/steps only. Add Zepp key for sleep & history sync."
         )
         subscribeToSensors(gatt)
       }
@@ -709,11 +727,57 @@ class MiBandManager(private val context: Context) {
     }
   }
 
+  /**
+   * Huami auth protocol (Mi Band 4/5/6, Amazfit Band 5) — same as Gadgetbridge / web ble.js:
+   *  1. Write [0x01, AUTH_BYTE] + 16-byte key
+   *  2. Band replies [0x10, 0x01, 0x01]
+   *  3. Write [0x02, AUTH_BYTE]  (request random)
+   *  4. Band replies [0x10, 0x02, 0x01] + 16 challenge bytes
+   *  5. Write [0x03, AUTH_BYTE] + AES-ECB(key, challenge)
+   *  6. Band replies [0x10, 0x03, 0x01] on success
+   *
+   * AUTH_BYTE is 0x00 on most firmwares; some Mi Band 5 builds use 0x08.
+   */
+  private var authByte: Byte = 0x00
+  private var authTriedAltByte = false
+
+  @SuppressLint("MissingPermission")
+  private fun sendAuthKey(gatt: BluetoothGatt, authChar: BluetoothGattCharacteristic) {
+    val keyHex = _uiState.value.authKey.trim().replace("0x", "", ignoreCase = true)
+      .replace(" ", "").replace(":", "").lowercase()
+    if (keyHex.length != 32 || !keyHex.all { it in "0123456789abcdef" }) {
+      _uiState.value = _uiState.value.copy(
+        status = ConnectionStatus.DISCONNECTED,
+        errorMessage = "Invalid auth key — need exactly 32 hex characters (from Zepp / Gadgetbridge)."
+      )
+      try { gatt.disconnect() } catch (_: Exception) {}
+      return
+    }
+    val keyBytes = hexStringToByteArray(keyHex)
+    val packet = ByteArray(18)
+    packet[0] = 0x01
+    packet[1] = authByte
+    System.arraycopy(keyBytes, 0, packet, 2, 16)
+    Log.d(TAG, "Auth step 1: send key (byte=0x%02x)".format(authByte))
+    enqueueGatt {
+      authChar.value = packet
+      authChar.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+      gatt.writeCharacteristic(authChar)
+    }
+  }
+
   @SuppressLint("MissingPermission")
   private fun sendRequestRandomKey(gatt: BluetoothGatt, authChar: BluetoothGattCharacteristic) {
-    Log.d(TAG, "Sending Step 1: Request Random Key [0x01, 0x08]")
+    // Called after CCCD enable — start the full handshake with the key.
+    sendAuthKey(gatt, authChar)
+  }
+
+  @SuppressLint("MissingPermission")
+  private fun requestRandomNumber(gatt: BluetoothGatt, authChar: BluetoothGattCharacteristic) {
+    Log.d(TAG, "Auth step 2: request random (byte=0x%02x)".format(authByte))
     enqueueGatt {
-      authChar.value = byteArrayOf(0x01, 0x08)
+      authChar.value = byteArrayOf(0x02, authByte)
+      authChar.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
       gatt.writeCharacteristic(authChar)
     }
   }
@@ -726,57 +790,89 @@ class MiBandManager(private val context: Context) {
   ) {
     if (value.size < 3 || value[0] != 0x10.toByte()) return
 
-    val opCode = value[1].toInt()
-    val status = value[2].toInt()
+    val opCode = value[1].toInt() and 0xFF
+    val status = value[2].toInt() and 0xFF
+    Log.d(TAG, "Auth notify: op=0x%02x status=0x%02x len=%d".format(opCode, status, value.size))
 
-    if (opCode == 0x01) {
-      // Challenge received [0x10, 0x01, 0x01, ...16 challenge bytes]
-      if (status != 0x01 || value.size < 19) {
-        Log.w(TAG, "Challenge rejected or not needed. Falling back to direct connection.")
-        _uiState.value = _uiState.value.copy(status = ConnectionStatus.CONNECTED)
-        subscribeToSensors(gatt)
-        return
-      }
-
-      val challenge = value.copyOfRange(3, 19)
-      try {
-        val authKeyBytes = hexStringToByteArray(_uiState.value.authKey)
-        val cipher = Cipher.getInstance("AES/ECB/NoPadding")
-        val keySpec = SecretKeySpec(authKeyBytes, "AES")
-        cipher.init(Cipher.ENCRYPT_MODE, keySpec)
-        val encryptedChallenge = cipher.doFinal(challenge)
-
-        val responsePacket = ByteArray(18)
-        responsePacket[0] = 0x03
-        responsePacket[1] = 0x08
-        System.arraycopy(encryptedChallenge, 0, responsePacket, 2, 16)
-
-        enqueueGatt {
-          authChar.value = responsePacket
-          gatt.writeCharacteristic(authChar)
+    when (opCode) {
+      0x01 -> {
+        // Key accepted / rejected
+        if (status != 0x01) {
+          if (!authTriedAltByte) {
+            authTriedAltByte = true
+            authByte = if (authByte.toInt() == 0) 0x08 else 0x00
+            Log.w(TAG, "Key step rejected — retrying with AUTH_BYTE=0x%02x".format(authByte))
+            sendAuthKey(gatt, authChar)
+            return
+          }
+          failAuth(gatt, "Auth key rejected by band (token invalid). Re-copy the 32-char key from Zepp Life or Gadgetbridge.")
+          return
         }
-        Log.d(TAG, "Sent AES-128 challenge response to band.")
-      } catch (e: Exception) {
-        Log.e(TAG, "AES encryption error: ${e.message}. Proceeding to sensors.")
-        _uiState.value = _uiState.value.copy(status = ConnectionStatus.CONNECTED)
-        subscribeToSensors(gatt)
+        requestRandomNumber(gatt, authChar)
       }
-    } else if (opCode == 0x03) {
-      if (status == 0x01) {
-        Log.i(TAG, "MI BAND 5 AUTHENTICATION SUCCESSFUL!")
-        _uiState.value = _uiState.value.copy(
-          status = ConnectionStatus.CONNECTED,
-          errorMessage = null
-        )
-      } else {
-        Log.w(TAG, "Band auth challenge status $status, proceeding with standard services.")
-        _uiState.value = _uiState.value.copy(
-          status = ConnectionStatus.CONNECTED,
-          errorMessage = null
-        )
+      0x02 -> {
+        // Challenge: [0x10, 0x02, 0x01, ...16 bytes]
+        if (status != 0x01 || value.size < 19) {
+          failAuth(gatt, "Band rejected random challenge — check the auth key.")
+          return
+        }
+        val challenge = value.copyOfRange(3, 19)
+        try {
+          val keyHex = _uiState.value.authKey.trim().replace("0x", "", ignoreCase = true)
+            .replace(" ", "").replace(":", "")
+          val authKeyBytes = hexStringToByteArray(keyHex)
+          if (authKeyBytes.size != 16) {
+            failAuth(gatt, "Invalid auth key length (need 16 bytes / 32 hex chars).")
+            return
+          }
+          val cipher = Cipher.getInstance("AES/ECB/NoPadding")
+          cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(authKeyBytes, "AES"))
+          val encrypted = cipher.doFinal(challenge)
+          val response = ByteArray(18)
+          response[0] = 0x03
+          response[1] = authByte
+          System.arraycopy(encrypted, 0, response, 2, 16)
+          Log.d(TAG, "Auth step 3: send encrypted challenge")
+          enqueueGatt {
+            authChar.value = response
+            authChar.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+            gatt.writeCharacteristic(authChar)
+          }
+        } catch (e: Exception) {
+          failAuth(gatt, "AES error: ${e.message}")
+        }
       }
-      subscribeToSensors(gatt)
+      0x03 -> {
+        if (status == 0x01) {
+          Log.i(TAG, "Huami authentication successful")
+          authTriedAltByte = false
+          _uiState.value = _uiState.value.copy(status = ConnectionStatus.CONNECTED, errorMessage = null)
+          subscribeToSensors(gatt)
+        } else {
+          // Wrong key → status often 0x10 or 0x00
+          if (!authTriedAltByte) {
+            authTriedAltByte = true
+            authByte = if (authByte.toInt() == 0) 0x08 else 0x00
+            Log.w(TAG, "Encrypted response rejected — retrying with AUTH_BYTE=0x%02x".format(authByte))
+            sendAuthKey(gatt, authChar)
+            return
+          }
+          failAuth(gatt, "Token invalid — auth key does not match this band. Get a fresh key from Zepp / Gadgetbridge and try again.")
+        }
+      }
     }
+  }
+
+  @SuppressLint("MissingPermission")
+  private fun failAuth(gatt: BluetoothGatt, message: String) {
+    Log.e(TAG, message)
+    _uiState.value = _uiState.value.copy(
+      status = ConnectionStatus.DISCONNECTED,
+      errorMessage = message,
+      syncing = false,
+      syncMessage = null
+    )
+    try { gatt.disconnect() } catch (_: Exception) {}
   }
 
   @SuppressLint("MissingPermission")
@@ -911,11 +1007,20 @@ class MiBandManager(private val context: Context) {
   }
 
   private fun hexStringToByteArray(s: String): ByteArray {
-    val len = s.length
-    val data = ByteArray(len / 2)
+    val clean = s.trim()
+      .replace("0x", "", ignoreCase = true)
+      .replace(" ", "")
+      .replace(":", "")
+      .replace("-", "")
+      .lowercase()
+    require(clean.length % 2 == 0) { "Hex string must have even length" }
+    val data = ByteArray(clean.length / 2)
     var i = 0
-    while (i < len) {
-      data[i / 2] = ((Character.digit(s[i], 16) shl 4) + Character.digit(s[i + 1], 16)).toByte()
+    while (i < clean.length) {
+      val hi = Character.digit(clean[i], 16)
+      val lo = Character.digit(clean[i + 1], 16)
+      require(hi >= 0 && lo >= 0) { "Invalid hex: ${clean[i]}${clean[i + 1]}" }
+      data[i / 2] = ((hi shl 4) + lo).toByte()
       i += 2
     }
     return data
