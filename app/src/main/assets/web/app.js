@@ -202,7 +202,7 @@
   function isSleepKind(kind) {
     const k = Number(kind);
     if (!Number.isFinite(k)) return false;
-    return k === 120 || k === 121 || k === 122 || k === 9 || k === 11;
+    return k === 120 || k === 121 || k === 122 || k === 9 || k === 11 || k === 4 || k === 5;
   }
   function isSleepStageValue(value) {
     if (value == null || value === '') return false;
@@ -314,8 +314,8 @@
       }
       day.hrSeries = (day._hrBuckets || []).map((b) => b.c ? Math.round(b.s / b.c) : null);
       delete day._hrSum; delete day._hrCount; delete day._hrHourSum; delete day._hrHourCount; delete day._hrBuckets;
-      // Drop tiny "sleep" fragments (< 45 min) — usually noise / not a real night.
-      if (day.sleepMinutes > 0 && day.sleepMinutes < 45) {
+      // Drop tiny fragments (< 20 min) only — real nights and short naps stay.
+      if (day.sleepMinutes > 0 && day.sleepMinutes < 20) {
         day.sleepMinutes = 0; day.sleepStart = null; day.sleepEnd = null;
         day.deepSleepMinutes = 0; day.lightSleepMinutes = 0; day.remSleepMinutes = 0;
       }
