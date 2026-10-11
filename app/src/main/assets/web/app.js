@@ -290,10 +290,11 @@
         const zone = classifyHrZone(heartRate, hrBaseline);
         if (zone) day.hrZoneMinutes[zone] += 1;
       }
+      // Only count real sleep kinds / explicit stage columns. Never invent sleep from
+      // "quiet intensity at night" — that produced fake ~30 min nights.
       const explicitSleep = isSleepStageValue(sleep) || isSleepStageValue(deepSleep) || isSleepStageValue(remSleep);
       const kindSleep = opts.hasKind && isSleepKind(rawKind);
-      const quiet = rawIntensity===0 || rawIntensity===null;
-      if (explicitSleep || kindSleep || (!opts.hasKind && opts.hasIntensity && (hour>=18||hour<14) && quiet)) {
+      if (explicitSleep || kindSleep) {
         const night = ensure(nightDateKey(d));
         night.sleepMinutes += 1;
         const iso = d.toISOString();
@@ -313,6 +314,11 @@
       }
       day.hrSeries = (day._hrBuckets || []).map((b) => b.c ? Math.round(b.s / b.c) : null);
       delete day._hrSum; delete day._hrCount; delete day._hrHourSum; delete day._hrHourCount; delete day._hrBuckets;
+      // Drop tiny "sleep" fragments (< 45 min) — usually noise / not a real night.
+      if (day.sleepMinutes > 0 && day.sleepMinutes < 45) {
+        day.sleepMinutes = 0; day.sleepStart = null; day.sleepEnd = null;
+        day.deepSleepMinutes = 0; day.lightSleepMinutes = 0; day.remSleepMinutes = 0;
+      }
       if (!day.distanceMeters && day.steps) { day.distanceMeters = Math.round(day.steps*stride); day.estimated = true; }
       if (!day.calories && day.steps) { day.calories = Math.round(day.steps*0.04); day.estimated = true; }
     });
