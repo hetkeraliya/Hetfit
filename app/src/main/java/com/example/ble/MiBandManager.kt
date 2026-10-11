@@ -1163,6 +1163,36 @@ class MiBandManager(private val context: Context) {
     writeConfig(byteArrayOf(0x02, idx.toByte(), hour.toByte(), minute.toByte(), repeat.toByte()))
   }
 
+  /**
+   * Read the phone's next system alarm (Clock app) and push it to band slot 0 as a one-shot.
+   * Android only exposes the *next* alarm via [AlarmManager.nextAlarmClock], not the full list.
+   */
+  fun syncPhoneAlarmsToBand(): String {
+    if (!linkReady()) return "Connect the band first"
+    return try {
+      val am = context.getSystemService(android.app.AlarmManager::class.java)
+      val next = am?.nextAlarmClock
+      if (next == null) return "No upcoming phone alarm found"
+      val cal = java.util.Calendar.getInstance().apply { timeInMillis = next.triggerTime }
+      val hour = cal.get(java.util.Calendar.HOUR_OF_DAY)
+      val minute = cal.get(java.util.Calendar.MINUTE)
+      sendAlarm(0, true, hour, minute, 0) // one-shot on slot 0
+      // Persist into settings so reconnect re-applies it
+      val s = try { org.json.JSONObject(getBandSettingsJson()) } catch (_: Exception) { org.json.JSONObject() }
+      val arr = s.optJSONArray("alarms") ?: org.json.JSONArray()
+      while (arr.length() < 1) arr.put(org.json.JSONObject())
+      arr.put(0, org.json.JSONObject().put("slot", 0).put("enabled", true).put("hour", hour).put("minute", minute).put("days", 0))
+      s.put("alarms", arr)
+      controlPrefs.edit().putString("settings", s.toString()).apply()
+      val label = "%02d:%02d".format(hour, minute)
+      lastAck = "Phone alarm $label sent to band"
+      "Synced phone alarm $label → band slot 1"
+    } catch (e: Exception) {
+      Log.w(TAG, "syncPhoneAlarmsToBand: ${e.message}")
+      "Could not read phone alarms: ${e.message}"
+    }
+  }
+
   fun applyBandSettings() {
     if (!linkReady()) return
     val s = try { org.json.JSONObject(getBandSettingsJson()) } catch (e: Exception) { return }
