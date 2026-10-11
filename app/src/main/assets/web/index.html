@@ -72,18 +72,19 @@
     <p id="stale-banner" class="stale-banner hidden">Band data looks stale — export from Gadgetbridge again.</p>
 
     <nav class="tab-strip" id="tab-strip">
-      <button class="tab-strip-btn active" data-page="chart">Home</button>
-      <button class="tab-strip-btn" data-page="vitals">Health</button>
-      <button class="tab-strip-btn" data-page="body">Body</button>
-      <button class="tab-strip-btn" data-page="journal">Journal</button>
-      <button class="tab-strip-btn" data-page="plan">Plan</button>
-      <button class="tab-strip-btn" data-page="run">Run</button>
-      <button class="tab-strip-btn" data-page="more">More</button>
+      <span class="tab-indicator" id="tab-indicator"></span>
+      <button class="tab-strip-btn active" data-group="vitals" data-page="chart" type="button"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg><span>Vitals</span></button>
+      <button class="tab-strip-btn" data-group="wellness" data-page="wellness" type="button"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.4-9.3-9A5.3 5.3 0 0 1 12 6a5.3 5.3 0 0 1 9.3 6c-2.3 4.6-9.3 9-9.3 9z"/></svg><span>Wellness</span></button>
+      <button class="tab-strip-btn" data-group="activity" data-page="run" type="button"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="4" r="2"/><path d="M4 22l4-7 3 2 3-5-3-3-4 1M14 12l3 3 4 1"/></svg><span>Activity</span></button>
+      <button class="tab-strip-btn" data-group="plan" data-page="plan" type="button"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M8 2v4M16 2v4M3 10h18"/></svg><span>Plan</span></button>
+      <button class="tab-strip-btn" data-group="settings" data-page="settings" type="button"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Settings</span></button>
     </nav>
+
+    <div class="group-chips" id="group-chips"></div>
 
     <div class="tab-pages">
 
-      <section class="tab-page active" data-page="chart">
+      <section class="tab-page active" data-page="chart" data-group="vitals" data-label="Overview">
         <div class="hero-metrics">
           <div class="home-date-row">
             <button type="button" id="home-prev-day" class="date-nav-btn" aria-label="Previous day">‹</button>
@@ -301,7 +302,7 @@
         </div>
       </section>
 
-      <section class="tab-page" data-page="vitals">
+      <section class="tab-page" data-page="vitals" data-group="vitals" data-label="Health">
         <div class="sheet-stack health-sheet">
           <div class="health-block">
             <div class="block-head">
@@ -368,6 +369,13 @@
             </div>
           </div>
 
+        </div>
+      </section>
+
+      <section class="tab-page" data-page="sleep" data-group="vitals" data-label="Sleep"><div class="sheet-stack"><div id="sleep-root"></div></div></section>
+
+      <section class="tab-page" data-page="wellness" data-group="wellness" data-label="Scores">
+        <div class="sheet-stack">
           <div class="glass-card insight-card score-card">
             <div class="insight-head"><span class="sparkle">◎</span><span>Today's score</span></div>
             <div class="score-row">
@@ -394,10 +402,35 @@
             <div class="insight-head"><span class="sparkle">🏅</span><span>Achievements</span></div>
             <div id="badge-grid" class="badge-grid"></div>
           </div>
+          <div id="pai-root"></div>
         </div>
       </section>
 
-      <section class="tab-page" data-page="body">
+      <section class="tab-page" data-page="life" data-group="wellness" data-label="Mood &amp; water"><div class="sheet-stack"><div id="life-root"></div></div></section>
+
+      <section class="tab-page" data-page="journal" data-group="wellness" data-label="Journal">
+        <div class="sheet-stack">
+          <div class="glass-card list-card">
+            <div class="insight-head"><span class="sparkle">✎</span><span>Note for <span id="note-date">this day</span></span></div>
+            <textarea id="note-input" rows="2" placeholder="Sports day, rest day, anything you want to remember…"></textarea>
+            <div id="journal-tags" class="journal-tags"></div>
+          </div>
+
+          <div class="glass-card list-card">
+            <div class="insight-head"><span class="sparkle">◐</span><span>Patterns</span></div>
+            <div id="correlation-list" class="correlation-list"></div>
+          </div>
+
+          <div class="export-row hidden">
+            <button type="button" id="export-csv" class="export-btn">Download CSV</button>
+            <button type="button" id="export-json" class="export-btn">Download JSON</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-page" data-page="run" data-group="activity" data-label="Run"><div id="run-root"></div></section>
+
+      <section class="tab-page" data-page="body" data-group="activity" data-label="Workouts">
         <div class="sheet-stack">
           <div class="glass-card list-card muscle-card">
             <div class="insight-head"><span class="sparkle">◈</span><span>Muscle focus · this week</span></div>
@@ -451,31 +484,7 @@
         </div>
       </section>
 
-      <section class="tab-page" data-page="journal">
-        <div class="sheet-stack">
-          <div class="glass-card list-card">
-            <div class="insight-head"><span class="sparkle">✎</span><span>Note for <span id="note-date">this day</span></span></div>
-            <textarea id="note-input" rows="2" placeholder="Sports day, rest day, anything you want to remember…"></textarea>
-            <div id="journal-tags" class="journal-tags"></div>
-          </div>
-
-          <div class="glass-card list-card">
-            <div class="insight-head"><span class="sparkle">◐</span><span>Patterns</span></div>
-            <div id="correlation-list" class="correlation-list"></div>
-          </div>
-
-          <div class="export-row">
-            <button type="button" id="export-csv" class="export-btn">Download CSV</button>
-            <button type="button" id="export-json" class="export-btn">Download JSON</button>
-          </div>
-        </div>
-      </section>
-
-      <section class="tab-page" data-page="run"><div id="run-root"></div></section>
-
-      <section class="tab-page" data-page="more"><div id="more-root"></div></section>
-
-      <section class="tab-page" data-page="plan">
+      <section class="tab-page" data-page="plan" data-group="plan" data-label="Plan">
         <div class="sheet-stack">
 
           <div class="sub-tab-row" id="plan-sub-tabs">
@@ -532,6 +541,11 @@
 
         </div>
       </section>
+
+      <section class="tab-page" data-page="settings" data-group="settings" data-label="Band"><div class="sheet-stack"><div id="band-root"></div></div></section>
+
+      <section class="tab-page" data-page="settings-data" data-group="settings" data-label="Data &amp; backup"><div class="sheet-stack"><div id="data-root"></div></div></section>
+
 
     </div>
 
