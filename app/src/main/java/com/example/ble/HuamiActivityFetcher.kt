@@ -138,9 +138,10 @@ class HuamiActivityFetcher(
     expectedLen = 0
     waitingData = false
     io.setNotify(data!!, false)
-    // The band labels a night as "sleep" only after you wake up, so always re-read the last 14 hours
-    // (rows are replaced by timestamp, so nothing gets duplicated).
-    val lookback = if (current == FetchKind.ACTIVITY && rounds == 1) 14L * 3600 * 1000 else 0L
+    // The band labels a night as "sleep" only after you wake up. Always re-read the last 36 hours
+    // so last night (and naps) are pulled even if a previous sync already advanced the cursor.
+    // Rows are replaced by timestamp, so nothing gets duplicated.
+    val lookback = if (current == FetchKind.ACTIVITY && rounds == 1) 36L * 3600 * 1000 else 0L
     val cal = GregorianCalendar().apply { timeInMillis = lastSyncMs() - lookback }
     val year = cal.get(Calendar.YEAR)
     val tz = (cal.timeZone.getOffset(cal.timeInMillis) / (1000 * 60 * 15)).toByte()
