@@ -68,7 +68,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -85,6 +84,8 @@ import androidx.core.content.ContextCompat
 import org.json.JSONObject
 import com.example.ble.BandSampleStore
 import com.example.ble.BandSyncService
+import com.example.run.RunTrackingService
+import com.example.run.ShareHelper
 import com.example.ble.ConnectionStatus
 import com.example.ble.MiBandDataSyncEngine
 import com.example.ble.MiBandManager
@@ -180,51 +181,13 @@ fun KestrelMainScreen(
   var hasNetworkError by remember { mutableStateOf(false) }
   var errorMessage by remember { mutableStateOf("") }
   var showDeviceMenu by remember { mutableStateOf(false) }
-  var showAiSettings by remember { mutableStateOf(false) }
-  var aiKeyInput by remember { mutableStateOf(com.example.ai.OpenCodeZenClient.get(context).apiKey) }
-  val scope = rememberCoroutineScope()
 
   val store = remember { BandSampleStore.get(context) }
-
-  fun askAiFromWeb(question: String, contextJson: String) {
-    val client = com.example.ai.OpenCodeZenClient.get(context)
-    if (!client.isConfigured()) {
-      webViewInstance?.post {
-        webViewInstance?.evaluateJavascript(
-          "window.kestrelAiReply && window.kestrelAiReply('Please set your OpenCode Zen API key first (AI tab → API Key Settings).', true);",
-          null
-        )
-      }
-      showAiSettings = true
-      return
-    }
-    val system = "You are Kestrel, a concise health coach. Use the user's real data when provided. Be practical and never invent diagnoses. Data: $contextJson"
-    Thread {
-      val result = kotlinx.coroutines.runBlocking { client.chat(system, question) }
-      val reply = result.getOrElse { "Error: ${it.message}" }
-      val isErr = result.isFailure
-      val safe = reply.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n").replace("\r", "")
-      webViewInstance?.post {
-        webViewInstance?.evaluateJavascript(
-          "window.kestrelAiReply && window.kestrelAiReply('$safe', $isErr);",
-          null
-        )
-      }
-    }.start()
-  }
 
   /** Pushes the REAL stored band history to the web UI and refreshes the widgets. */
   fun syncFullBandData(webView: WebView?, state: com.example.ble.MiBandState) {
     try {
-      val t = store.todayTotals()
-      val steps = maxOf(t.steps, state.liveSteps)
-      val hr = if (state.liveHeartRate > 0) state.liveHeartRate else t.lastHr
-      KestrelWidgetManager.saveHealthData(
-        context = context,
-        steps = steps.takeIf { it > 0 },
-        heartRate = hr.takeIf { it > 0 },
-        sleepMinutes = t.sleepMinutes.takeIf { it > 0 }
-      )
+      KestrelWidgetManager.refresh(context)
       MiBandDataSyncEngine.pushToWebView(webView, store, state, fullHistory = true)
     } catch (e: Exception) {
       Log.e(TAG, "Error pushing band data: ${e.message}")
@@ -238,17 +201,22 @@ fun KestrelMainScreen(
     }
   }
 
+  // Live run tracking: stream ticks into the web UI and refresh data when a run is saved.
+  LaunchedEffect(Unit) {
+    RunTrackingService.listener = { json ->
+      webViewInstance?.evaluateJavascript("window.kestrelRunTick && window.kestrelRunTick($json);", null)
+    }
+    RunTrackingService.onFinished = { startSec ->
+      MiBandDataSyncEngine.pushToWebView(webViewInstance, store, miBandManager.uiState.value, fullHistory = false)
+      webViewInstance?.evaluateJavascript("window.kestrelRunFinished && window.kestrelRunFinished($startSec);", null)
+    }
+  }
+
   // After every finished band sync, push the new history into the dashboard and widgets.
   LaunchedEffect(miBandManager) {
     miBandManager.onHistorySynced = { _ ->
       val st = miBandManager.uiState.value
-      val t = store.todayTotals()
-      KestrelWidgetManager.saveHealthData(
-        context = context,
-        steps = maxOf(t.steps, st.liveSteps).takeIf { it > 0 },
-        heartRate = (if (st.liveHeartRate > 0) st.liveHeartRate else t.lastHr).takeIf { it > 0 },
-        sleepMinutes = t.sleepMinutes.takeIf { it > 0 }
-      )
+      KestrelWidgetManager.refresh(context)
       MiBandDataSyncEngine.pushToWebView(webViewInstance, store, st, fullHistory = false)
     }
   }
@@ -436,26 +404,14 @@ fun KestrelMainScreen(
               userAgentString = "$userAgentString KestrelAndroidApp/1.0"
             }
 
-            val bridge = KestrelAndroidBridge(ctx) { action ->
-                when {
-                  action == "open_bluetooth_menu" -> showDeviceMenu = true
-                  action == "open_ai_settings" -> showAiSettings = true
-                  action.startsWith("ask_ai|") -> {
-                    val parts = action.split("|", limit = 3)
-                    val q = parts.getOrNull(1) ?: ""
-                    val ctxJson = parts.getOrNull(2) ?: "{}"
-                    askAiFromWeb(q, ctxJson)
-                  }
-                  action == "run_stopped" -> {
-                    webViewInstance?.let { wv ->
-                      val store = com.example.ble.BandSampleStore.get(ctx)
-                      com.example.ble.MiBandDataSyncEngine.pushSleepAndWorkouts(wv, store)
-                    }
-                  }
+            addJavascriptInterface(
+              KestrelAndroidBridge(ctx) { action ->
+                if (action == "open_bluetooth_menu") {
+                  showDeviceMenu = true
                 }
-              }
-            addJavascriptInterface(bridge, "KestrelAndroidBridge")
-            addJavascriptInterface(bridge, "KestrelAndroid")
+              },
+              "KestrelAndroidBridge"
+            )
 
             webChromeClient = object : WebChromeClient() {
               override fun onProgressChanged(view: WebView?, newProgress: Int) {
@@ -672,39 +628,6 @@ fun KestrelMainScreen(
           }
         )
       }
-
-      if (showAiSettings) {
-        androidx.compose.material3.AlertDialog(
-          onDismissRequest = { showAiSettings = false },
-          title = { androidx.compose.material3.Text("OpenCode Zen API Key") },
-          text = {
-            androidx.compose.foundation.layout.Column {
-              androidx.compose.material3.Text(
-                "Get a free key at opencode.ai (Zen). Model: space-bunny-free. Key is stored only on this device."
-              )
-              androidx.compose.material3.OutlinedTextField(
-                value = aiKeyInput,
-                onValueChange = { aiKeyInput = it },
-                label = { androidx.compose.material3.Text("API Key") },
-                singleLine = true,
-                modifier = androidx.compose.ui.Modifier.fillMaxWidth()
-              )
-            }
-          },
-          confirmButton = {
-            androidx.compose.material3.TextButton(onClick = {
-              com.example.ai.OpenCodeZenClient.get(context).apiKey = aiKeyInput
-              showAiSettings = false
-              android.widget.Toast.makeText(context, "API key saved", android.widget.Toast.LENGTH_SHORT).show()
-            }) { androidx.compose.material3.Text("Save") }
-          },
-          dismissButton = {
-            androidx.compose.material3.TextButton(onClick = { showAiSettings = false }) {
-              androidx.compose.material3.Text("Cancel")
-            }
-          }
-        )
-      }
     }
   }
 }
@@ -718,9 +641,6 @@ class KestrelAndroidBridge(
   private val context: Context,
   private val onAction: (String) -> Unit
 ) {
-  private var activeRunId: Long = -1
-  private var runStartTs: Long = 0
-
   @JavascriptInterface
   fun openBluetoothMenu() {
     onAction("open_bluetooth_menu")
@@ -759,55 +679,124 @@ class KestrelAndroidBridge(
     )
   }
 
-  // ---- AI (OpenCode Zen) ----
-  @JavascriptInterface
-  fun openAiSettings() {
-    onAction("open_ai_settings")
-  }
+  // ---------------- Running / activity recording ----------------
+  @JavascriptInterface fun startRun(type: Int, voice: Boolean) { RunTrackingService.send(context, RunTrackingService.ACTION_START, type, voice) }
+  @JavascriptInterface fun pauseRun() { RunTrackingService.send(context, RunTrackingService.ACTION_PAUSE) }
+  @JavascriptInterface fun resumeRun() { RunTrackingService.send(context, RunTrackingService.ACTION_RESUME) }
+  @JavascriptInterface fun finishRun() { RunTrackingService.send(context, RunTrackingService.ACTION_FINISH) }
+  @JavascriptInterface fun discardRun() { RunTrackingService.send(context, RunTrackingService.ACTION_DISCARD) }
+  @JavascriptInterface fun getRunState(): String = RunTrackingService.stateJson
+  @JavascriptInterface fun getLiveTrack(): String = RunTrackingService.liveTrackJson()
 
   @JavascriptInterface
-  fun askAi(question: String, contextJson: String) {
-    onAction("ask_ai|$question|$contextJson")
-  }
-
-  @JavascriptInterface
-  fun hasAiKey(): Boolean {
-    return com.example.ai.OpenCodeZenClient.get(context).isConfigured()
-  }
-
-  // ---- Running (Strava-like) ----
-  @JavascriptInterface
-  fun startRun() {
-    val store = com.example.ble.BandSampleStore.get(context)
-    runStartTs = System.currentTimeMillis() / 1000
-    activeRunId = store.insertWorkout(
-      type = "Run",
-      startTs = runStartTs,
-      source = "manual"
-    )
-    Toast.makeText(context, "Run started", Toast.LENGTH_SHORT).show()
-    onAction("run_started")
-  }
-
-  @JavascriptInterface
-  fun stopRun() {
-    if (activeRunId < 0) {
-      Toast.makeText(context, "No active run", Toast.LENGTH_SHORT).show()
-      return
+  fun getRunTrack(startSec: Long): String {
+    val arr = org.json.JSONArray()
+    BandSampleStore.get(context).getTrack(startSec, 2500).forEach {
+      arr.put(org.json.JSONArray().put(it.ts).put(it.lat).put(it.lon).put(Math.round(it.alt * 10) / 10.0).put(it.hr))
     }
-    val endTs = System.currentTimeMillis() / 1000
-    val store = com.example.ble.BandSampleStore.get(context)
-    // Estimate distance from steps in the window (rough 0.75m/step)
-    var steps = 0
-    store.forEachChunk(runStartTs, 5000) { rows ->
-      steps += rows.sumOf { it.steps }
+    return arr.toString()
+  }
+
+  @JavascriptInterface
+  fun deleteRun(startSec: Long) { BandSampleStore.get(context).deleteWorkout(startSec) }
+
+  /** mode: "share" opens the share sheet, "save" writes to Downloads/Kestrel. */
+  @JavascriptInterface
+  fun exportGpx(startSec: Long, name: String, mode: String): String {
+    val gpx = ShareHelper.buildGpx(BandSampleStore.get(context), startSec, name)
+    val file = (if (name.isBlank()) "activity" else name).replace(' ', '_') + "_" + startSec + ".gpx"
+    return if (mode == "share") ShareHelper.shareTextFile(context, file, "application/gpx+xml", gpx)
+    else ShareHelper.saveTextFile(context, file, "application/gpx+xml", gpx)
+  }
+
+  @JavascriptInterface
+  fun shareImage(base64Png: String, fileName: String, text: String, target: String): String =
+    ShareHelper.shareImage(context, base64Png, fileName, text, target)
+
+  @JavascriptInterface
+  fun saveImageToGallery(base64Png: String, fileName: String): String = ShareHelper.saveImageToGallery(context, base64Png, fileName)
+
+  @JavascriptInterface
+  fun shareText(text: String) { ShareHelper.shareText(context, text) }
+
+  @JavascriptInterface
+  fun saveFile(name: String, mime: String, text: String): String = ShareHelper.saveTextFile(context, name, mime, text)
+
+  /** Sleep stages for the night ending on [dateKey] (yyyy-MM-dd): window is previous day 18:00 .. that day 18:00. */
+  @JavascriptInterface
+  fun getSleepNight(dateKey: String): String {
+    val o = org.json.JSONObject()
+    val arr = org.json.JSONArray()
+    try {
+      val d = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).parse(dateKey)
+      val cal = java.util.Calendar.getInstance().apply { time = d!! }
+      val dayStart = cal.timeInMillis / 1000
+      BandSampleStore.get(context).sleepSegments(dayStart - 6 * 3600, dayStart + 18 * 3600).forEach {
+        arr.put(org.json.JSONArray().put(it[0]).put(it[1]).put(it[2]))
+      }
+    } catch (_: Exception) { }
+    o.put("segs", arr)
+    return o.toString()
+  }
+
+  // ---------------- Band settings / alarms / notifications ----------------
+  @JavascriptInterface fun getBandSettings(): String = MiBandManager.get(context).getBandSettingsJson()
+
+  @JavascriptInterface
+  fun saveBandSettings(json: String): String {
+    val mgr = MiBandManager.get(context)
+    var result = ""
+    val latch = java.util.concurrent.CountDownLatch(1)
+    android.os.Handler(android.os.Looper.getMainLooper()).post { result = mgr.saveBandSettings(json); latch.countDown() }
+    latch.await(2, java.util.concurrent.TimeUnit.SECONDS)
+    return result
+  }
+
+  @JavascriptInterface
+  fun getNotifyConfig(): String {
+    val p = context.getSharedPreferences("band_notify", Context.MODE_PRIVATE)
+    val o = org.json.JSONObject()
+    o.put("enabled", p.getBoolean("enabled", false))
+    o.put("all", p.getBoolean("all", false))
+    o.put("packages", org.json.JSONArray(p.getStringSet("packages", com.example.ble.BandNotificationListener.DEFAULT_PACKAGES)!!.toList()))
+    o.put("access", isNotificationAccessGranted())
+    return o.toString()
+  }
+
+  @JavascriptInterface
+  fun setNotifyConfig(json: String) {
+    val o = org.json.JSONObject(json)
+    val set = HashSet<String>()
+    val arr = o.optJSONArray("packages")
+    if (arr != null) for (i in 0 until arr.length()) set.add(arr.getString(i))
+    context.getSharedPreferences("band_notify", Context.MODE_PRIVATE).edit()
+      .putBoolean("enabled", o.optBoolean("enabled")).putBoolean("all", o.optBoolean("all")).putStringSet("packages", set).apply()
+  }
+
+  private fun isNotificationAccessGranted(): Boolean =
+    androidx.core.app.NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
+
+  @JavascriptInterface
+  fun openNotificationAccess() {
+    val i = Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    context.startActivity(i)
+  }
+
+  @JavascriptInterface
+  fun sendTestNotification(): Boolean =
+    MiBandManager.get(context).sendBandNotification("Kestrel", "Test notification from your phone", 11)
+
+  // ---------------- Band data diagnostics / repair ----------------
+  @JavascriptInterface fun getStoreStats(): String = BandSampleStore.get(context).diagnostics()
+  @JavascriptInterface fun syncBandNow() { android.os.Handler(android.os.Looper.getMainLooper()).post { MiBandManager.get(context).syncNow() } }
+  @JavascriptInterface fun resyncEverything() { MiBandManager.get(context).resetAndResync() }
+  @JavascriptInterface
+  fun exportSamplesCsv(): String {
+    val sb = StringBuilder("timestamp,kind,intensity,steps,heart_rate,sleep,deep,rem\n")
+    BandSampleStore.get(context).forEachChunk(0L, 5000) { rows ->
+      rows.forEach { r -> sb.append(r.ts).append(',').append(r.kind).append(',').append(r.intensity).append(',').append(r.steps).append(',')
+        .append(r.hr).append(',').append(r.sleep).append(',').append(r.deep).append(',').append(r.rem).append('\n') }
     }
-    val distanceM = steps * 0.75
-    val durationMin = ((endTs - runStartTs) / 60).toInt().coerceAtLeast(1)
-    val calories = (distanceM / 1000.0 * 60).toInt() // rough
-    store.updateWorkoutEnd(activeRunId, endTs, distanceM, steps, null, null, calories)
-    activeRunId = -1
-    Toast.makeText(context, "Run saved · ${"%.2f".format(distanceM/1000)} km", Toast.LENGTH_SHORT).show()
-    onAction("run_stopped")
+    return ShareHelper.saveTextFile(context, "band_minutes.csv", "text/csv", sb.toString())
   }
 }
