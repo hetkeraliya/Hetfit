@@ -100,3 +100,13 @@
 .mo-stage i{display:block;height:100%}
 .mo-legend{display:flex;gap:14px;font-size:12px;font-weight:700;flex-wrap:wrap}
 .mo-legend b{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px}
+
+/* Band workout offer sheet */
+.rn-band-offer{position:fixed;inset:0;z-index:90;display:none;align-items:flex-end;justify-content:center;background:rgba(30,24,32,.45);backdrop-filter:blur(6px);padding:18px;box-sizing:border-box}
+.rn-band-offer.open{display:flex}
+.rn-band-offer-card{width:min(400px,100%);background:#fff;border-radius:28px;padding:28px 22px 22px;box-shadow:0 -8px 40px rgba(61,51,64,.2);text-align:center;animation:card-rise .4s cubic-bezier(.2,.8,.2,1) both}
+.rn-band-offer-icon{font-size:42px;margin-bottom:8px}
+.rn-band-offer-card h3{margin:0 0 8px;font-size:20px;font-weight:800;color:#3d3340}
+.rn-band-offer-card p{margin:0 0 20px;font-size:14px;line-height:1.45;color:#7A6879}
+.rn-band-offer-actions{display:flex;gap:10px}
+.rn-band-offer-actions .rn-btn{flex:1;padding:14px 12px;font-size:15px;border-radius:16px}
