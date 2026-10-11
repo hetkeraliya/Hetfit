@@ -885,7 +885,7 @@ class MiBandManager(private val context: Context) {
             sendAuthKey(gatt, authChar)
             return
           }
-          failAuth(gatt, "Auth key rejected by band (token invalid). Re-copy the 32-char key from Zepp Life or Gadgetbridge.")
+          failAuth(gatt, "The band is answering correctly, but it does not accept this key. It is already paired with a different key (usually Zepp's current one). Get the key again from your Zepp / Zepp Life account (unpairing the band in Zepp invalidates old keys), or factory-reset the band and remove it from Zepp, then pair here.")
           return
         }
         requestRandomNumber(gatt, authChar)
@@ -953,7 +953,7 @@ class MiBandManager(private val context: Context) {
             sendAuthKey(gatt, authChar)
             return
           }
-          failAuth(gatt, "Token invalid — auth key does not match this band. Get a fresh key from Zepp / Gadgetbridge and try again.")
+          failAuth(gatt, "The band is answering correctly, but it does not accept this key. It is already paired with a different key (usually Zepp's current one). Get the key again from your Zepp / Zepp Life account (unpairing the band in Zepp invalidates old keys), or factory-reset the band and remove it from Zepp, then pair here.")
         }
       }
     }
