@@ -20,9 +20,33 @@ data class BandSample(
 
 data class TodayTotals(val steps: Int, val lastHr: Int, val sleepMinutes: Int)
 
+/** A workout summary reported by the band (Gadgetbridge FetchSportsSummaryOperation). */
+data class BandWorkout(
+  val startSec: Long,
+  val endSec: Long,
+  val type: Int,
+  val steps: Int,
+  val activeSec: Int,
+  val calories: Int,
+  val distanceM: Int,
+  val avgHr: Int,
+  val maxHr: Int
+)
+
+/** Per-day values derived from stress and sleep-stage samples. Null = no data for that day. */
+data class DayExtras(
+  var stressAvg: Int? = null,
+  var stressMax: Int? = null,
+  var deepMin: Int? = null,
+  var lightMin: Int? = null,
+  var remMin: Int? = null
+)
+
+data class SmartExtras(val stressNow: Int, val stressAvg: Int, val deepMin: Int, val lightMin: Int, val remMin: Int)
+
 /** Persistent on-phone history of everything fetched from the band. Never contains generated data. */
 class BandSampleStore private constructor(context: Context) :
-  SQLiteOpenHelper(context.applicationContext, "band_samples.db", null, 1) {
+  SQLiteOpenHelper(context.applicationContext, "band_samples.db", null, 2) {
 
   override fun onCreate(db: SQLiteDatabase) {
     db.execSQL(
@@ -31,7 +55,123 @@ class BandSampleStore private constructor(context: Context) :
     )
   }
 
-  override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {}
+  override fun onOpen(db: SQLiteDatabase) {
+    super.onOpen(db)
+    createExtraTables(db)
+  }
+
+  override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+    createExtraTables(db)
+  }
+
+  private fun createExtraTables(db: SQLiteDatabase) {
+    db.execSQL("CREATE TABLE IF NOT EXISTS stress (ts INTEGER PRIMARY KEY, value INTEGER NOT NULL)")
+    db.execSQL(
+      "CREATE TABLE IF NOT EXISTS workouts (start_ts INTEGER PRIMARY KEY, end_ts INTEGER NOT NULL, type INTEGER NOT NULL, " +
+        "steps INTEGER NOT NULL, active_s INTEGER NOT NULL, calories INTEGER NOT NULL, distance_m INTEGER NOT NULL, " +
+        "avg_hr INTEGER NOT NULL, max_hr INTEGER NOT NULL)"
+    )
+  }
+
+  @Synchronized
+  fun insertStress(list: List<Pair<Long, Int>>) {
+    if (list.isEmpty()) return
+    val db = writableDatabase
+    db.beginTransaction()
+    try {
+      val cv = ContentValues()
+      for ((ts, v) in list) {
+        cv.clear(); cv.put("ts", ts); cv.put("value", v)
+        db.insertWithOnConflict("stress", null, cv, SQLiteDatabase.CONFLICT_REPLACE)
+      }
+      db.setTransactionSuccessful()
+    } finally { db.endTransaction() }
+  }
+
+  @Synchronized
+  fun insertWorkout(w: BandWorkout) {
+    val cv = ContentValues()
+    cv.put("start_ts", w.startSec); cv.put("end_ts", w.endSec); cv.put("type", w.type)
+    cv.put("steps", w.steps); cv.put("active_s", w.activeSec); cv.put("calories", w.calories)
+    cv.put("distance_m", w.distanceM); cv.put("avg_hr", w.avgHr); cv.put("max_hr", w.maxHr)
+    writableDatabase.insertWithOnConflict("workouts", null, cv, SQLiteDatabase.CONFLICT_REPLACE)
+  }
+
+  @Synchronized
+  fun workouts(limit: Int = 300): List<BandWorkout> {
+    val out = ArrayList<BandWorkout>()
+    readableDatabase.rawQuery(
+      "SELECT start_ts, end_ts, type, steps, active_s, calories, distance_m, avg_hr, max_hr FROM workouts ORDER BY start_ts DESC LIMIT $limit", null
+    ).use { c ->
+      while (c.moveToNext()) out.add(BandWorkout(c.getLong(0), c.getLong(1), c.getInt(2), c.getInt(3), c.getInt(4), c.getInt(5), c.getInt(6), c.getInt(7), c.getInt(8)))
+    }
+    return out
+  }
+
+  private fun dateKey(cal: Calendar, tsSec: Long, nightShift: Boolean): String {
+    cal.timeInMillis = tsSec * 1000
+    if (nightShift && cal.get(Calendar.HOUR_OF_DAY) >= 18) cal.add(Calendar.DAY_OF_YEAR, 1)
+    return "%04d-%02d-%02d".format(cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.DAY_OF_MONTH))
+  }
+
+  /** Stress average/max per day and deep/light/REM sleep minutes per night, from rows newer than [sinceTs]. */
+  @Synchronized
+  fun dayExtras(sinceTs: Long): Map<String, DayExtras> {
+    val out = HashMap<String, DayExtras>()
+    val cal = Calendar.getInstance()
+    val db = readableDatabase
+    val sum = HashMap<String, IntArray>() // [sum, count, max]
+    db.rawQuery("SELECT ts, value FROM stress WHERE ts >= ? AND value BETWEEN 1 AND 100", arrayOf(sinceTs.toString())).use { c ->
+      while (c.moveToNext()) {
+        val k = dateKey(cal, c.getLong(0), false)
+        val a = sum.getOrPut(k) { intArrayOf(0, 0, 0) }
+        val v = c.getInt(1)
+        a[0] += v; a[1]++; if (v > a[2]) a[2] = v
+      }
+    }
+    for ((k, a) in sum) {
+      val e = out.getOrPut(k) { DayExtras() }
+      e.stressAvg = Math.round(a[0].toFloat() / a[1]); e.stressMax = a[2]
+    }
+    db.rawQuery("SELECT ts, sleep, deep, rem FROM samples WHERE kind = 120 AND ts >= ?", arrayOf(sinceTs.toString())).use { c ->
+      while (c.moveToNext()) {
+        val k = dateKey(cal, c.getLong(0), true)
+        val e = out.getOrPut(k) { DayExtras() }
+        val deep = c.getInt(2) and 127
+        val rem = c.getInt(3) and 127
+        when {
+          rem > 55 -> e.remMin = (e.remMin ?: 0) + 1
+          deep > 42 -> e.deepMin = (e.deepMin ?: 0) + 1
+          else -> e.lightMin = (e.lightMin ?: 0) + 1
+        }
+      }
+    }
+    return out
+  }
+
+  /** For widgets / notification: latest stress, today's average, last night's sleep stages. */
+  @Synchronized
+  fun smartExtras(): SmartExtras {
+    val cal = Calendar.getInstance()
+    cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0)
+    val dayStart = cal.timeInMillis / 1000
+    val db = readableDatabase
+    val now = db.rawQuery("SELECT value FROM stress WHERE value BETWEEN 1 AND 100 ORDER BY ts DESC LIMIT 1", null)
+      .use { if (it.moveToFirst()) it.getInt(0) else 0 }
+    val avg = db.rawQuery("SELECT COALESCE(AVG(value),0) FROM stress WHERE value BETWEEN 1 AND 100 AND ts >= ?", arrayOf(dayStart.toString()))
+      .use { if (it.moveToFirst()) Math.round(it.getFloat(0)) else 0 }
+    var deep = 0; var light = 0; var rem = 0
+    db.rawQuery(
+      "SELECT deep, rem FROM samples WHERE kind = 120 AND ts >= ? AND ts < ?",
+      arrayOf((dayStart - 6 * 3600).toString(), (dayStart + 18 * 3600).toString())
+    ).use { c ->
+      while (c.moveToNext()) {
+        val d = c.getInt(0) and 127; val r = c.getInt(1) and 127
+        when { r > 55 -> rem++; d > 42 -> deep++; else -> light++ }
+      }
+    }
+    return SmartExtras(now, avg, deep, light, rem)
+  }
 
   @Synchronized
   fun insertAll(list: List<BandSample>): Int {
