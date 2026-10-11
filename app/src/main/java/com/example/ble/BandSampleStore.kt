@@ -18,9 +18,11 @@ data class BandSample(
   val rem: Int
 )
 
-/** True for any Huami sleep-stage kind (light / deep / REM). */
+/** True for any Huami sleep-stage kind (light / deep / REM). Covers Mi5 extended + older raw kinds. */
 fun isSleepKind(kind: Int): Boolean =
-  kind == 120 || kind == 121 || kind == 122 || kind == 9 || kind == 11
+  kind == 120 || kind == 121 || kind == 122 ||  // Mi Band 5 / Amazfit extended
+  kind == 9 || kind == 11 ||                     // older light / deep
+  kind == 4 || kind == 5                         // alternate light / deep used by some firmwares
 
 data class TodayTotals(val steps: Int, val lastHr: Int, val sleepMinutes: Int)
 
@@ -174,7 +176,7 @@ class BandSampleStore private constructor(context: Context) :
     // Include all sleep kinds: 120/9 light, 121/11 deep, 122 REM. Stage fields (deep/rem bytes)
     // are used when present; otherwise the kind itself decides the stage.
     db.rawQuery(
-      "SELECT ts, kind, deep, rem FROM samples WHERE kind IN (120,121,122,9,11) AND ts >= ?",
+      "SELECT ts, kind, deep, rem FROM samples WHERE kind IN (120,121,122,9,11,4,5) AND ts >= ?",
       arrayOf(sinceTs.toString())
     ).use { c ->
       while (c.moveToNext()) {
@@ -189,15 +191,15 @@ class BandSampleStore private constructor(context: Context) :
         if (e.sleepEndTs == null || t + 60 > e.sleepEndTs!!) e.sleepEndTs = t + 60
         when {
           kind == 122 || rem > 55 -> e.remMin = (e.remMin ?: 0) + 1
-          kind == 121 || kind == 11 || deep > 42 -> e.deepMin = (e.deepMin ?: 0) + 1
+          kind == 121 || kind == 11 || kind == 5 || deep > 42 -> e.deepMin = (e.deepMin ?: 0) + 1
           else -> e.lightMin = (e.lightMin ?: 0) + 1
         }
       }
     }
-    // Drop nights under 45 minutes — almost always sensor noise, not real sleep.
+    // Drop tiny fragments under 20 minutes (noise). Real nights and short naps stay.
     for ((_, e) in out) {
       val total = e.sleepMin ?: 0
-      if (total in 1..44) {
+      if (total in 1..19) {
         e.sleepMin = null; e.sleepStartTs = null; e.sleepEndTs = null
         e.deepMin = null; e.lightMin = null; e.remMin = null
       }
@@ -265,10 +267,10 @@ class BandSampleStore private constructor(context: Context) :
     val db = readableDatabase
     fun one(sql: String): Long = db.rawQuery(sql, null).use { if (it.moveToFirst()) it.getLong(0) else 0L }
     val total = one("SELECT COUNT(*) FROM samples")
-    val sleepRows = one("SELECT COUNT(*) FROM samples WHERE kind IN (120,121,122,9,11)")
+    val sleepRows = one("SELECT COUNT(*) FROM samples WHERE kind IN (120,121,122,9,11,4,5)")
     val first = one("SELECT COALESCE(MIN(ts),0) FROM samples")
     val last = one("SELECT COALESCE(MAX(ts),0) FROM samples")
-    val lastSleep = one("SELECT COALESCE(MAX(ts),0) FROM samples WHERE kind IN (120,121,122,9,11)")
+    val lastSleep = one("SELECT COALESCE(MAX(ts),0) FROM samples WHERE kind IN (120,121,122,9,11,4,5)")
     val stressRows = one("SELECT COUNT(*) FROM stress")
     val workouts = one("SELECT COUNT(*) FROM workouts")
     return "{\"samples\":$total,\"sleepRows\":$sleepRows,\"first\":$first,\"last\":$last,\"lastSleep\":$lastSleep," +
@@ -280,7 +282,7 @@ class BandSampleStore private constructor(context: Context) :
   fun sleepSegments(fromTs: Long, toTs: Long): List<LongArray> {
     val out = ArrayList<LongArray>()
     readableDatabase.rawQuery(
-      "SELECT ts, kind, deep, rem FROM samples WHERE kind IN (120,121,122,9,11) AND ts >= ? AND ts < ? ORDER BY ts",
+      "SELECT ts, kind, deep, rem FROM samples WHERE kind IN (120,121,122,9,11,4,5) AND ts >= ? AND ts < ? ORDER BY ts",
       arrayOf(fromTs.toString(), toTs.toString())
     ).use { c ->
       var cur: LongArray? = null
@@ -314,7 +316,7 @@ class BandSampleStore private constructor(context: Context) :
       .use { if (it.moveToFirst()) Math.round(it.getFloat(0)) else 0 }
     var deep = 0; var light = 0; var rem = 0
     db.rawQuery(
-      "SELECT kind, deep, rem FROM samples WHERE kind IN (120,121,122,9,11) AND ts >= ? AND ts < ?",
+      "SELECT kind, deep, rem FROM samples WHERE kind IN (120,121,122,9,11,4,5) AND ts >= ? AND ts < ?",
       arrayOf((dayStart - 6 * 3600).toString(), (dayStart + 18 * 3600).toString())
     ).use { c ->
       while (c.moveToNext()) {
@@ -397,7 +399,7 @@ class BandSampleStore private constructor(context: Context) :
     val sleepFrom = dayStart - 6 * 3600
     val sleepTo = dayStart + 18 * 3600
     val sleep = db.rawQuery(
-      "SELECT COUNT(*) FROM samples WHERE kind IN (120,121,122,9,11) AND ts >= ? AND ts < ?",
+      "SELECT COUNT(*) FROM samples WHERE kind IN (120,121,122,9,11,4,5) AND ts >= ? AND ts < ?",
       arrayOf(sleepFrom.toString(), sleepTo.toString())
     ).use { if (it.moveToFirst()) it.getInt(0) else 0 }
     return TodayTotals(steps, hr, sleep)
