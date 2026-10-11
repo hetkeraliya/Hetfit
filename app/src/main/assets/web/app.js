@@ -529,6 +529,49 @@
       if (changed) { persistAll(); refresh(); }
     } catch (e) { console.warn('[kestrelLiveMetric]', e); }
   };
+  // Per-day stress and sleep-stage values computed natively from the band's samples.
+  window.kestrelBandExtras = function(map) {
+    try {
+      const m = typeof map === 'string' ? JSON.parse(map) : map;
+      Object.keys(m || {}).forEach((key) => {
+        const e = m[key];
+        const day = state.localDayIndex[key] || (state.localDayIndex[key] = emptyDay(key));
+        if (e.stressAvg != null) { day.stressAvg = e.stressAvg; day.stressMax = e.stressMax; }
+        if (e.paiToday != null) { day.bandPaiToday = e.paiToday; day.bandPaiTotal = e.paiTotal; }
+        if (e.sleepMinutes > 0 && e.sleepStart && e.sleepEnd) {
+          day.sleepMinutes = e.sleepMinutes; day.sleepStart = e.sleepStart; day.sleepEnd = e.sleepEnd;
+        }
+        if (e.deepSleepMinutes != null) {
+          day.deepSleepMinutes = e.deepSleepMinutes; day.lightSleepMinutes = e.lightSleepMinutes; day.remSleepMinutes = e.remSleepMinutes;
+        }
+      });
+      persistAll(); refresh();
+    } catch (e) { console.warn('[kestrelBandExtras]', e); }
+  };
+  // Workouts recorded on the band itself (not synced as "single" ones; merged by id so re-sync never duplicates).
+  window.kestrelBandWorkouts = function(list) {
+    try {
+      const arr = typeof list === 'string' ? JSON.parse(list) : list;
+      if (!Array.isArray(arr) || !arr.length) return;
+      state.workouts = mergeWorkouts(state.workouts, arr);
+      persistAll();
+      renderWorkouts();
+      renderMuscleMap();
+      if (typeof refresh === 'function') refresh();
+    } catch (e) { console.warn('[kestrelBandWorkouts]', e); }
+  };
+  window.kestrelApp = {
+    get state() { return state; },
+    get settings() { return settings; },
+    persistAll: () => persistAll(),
+    refresh: () => refresh(),
+    saveSettings: () => saveSettings(),
+    fmt: (d) => fmt(d),
+    parseKey: (k) => parseKey(k),
+    addDays: (d, n) => addDays(d, n),
+    mergeWorkouts: (a, b) => mergeWorkouts(a, b),
+    renderWorkouts: () => { try { renderWorkouts(); renderMuscleMap(); } catch (e) {} }
+  };
   window.kestrelAddSingleWorkout = function(w) {
     if (!w) return;
     state.workouts = mergeWorkouts(state.workouts, [w]);
@@ -2078,6 +2121,13 @@
   }
 
   function download(name, text, mime) {
+    if (window.KestrelAndroidBridge && typeof window.KestrelAndroidBridge.saveFile === 'function') {
+      try {
+        const msg = window.KestrelAndroidBridge.saveFile(name, mime || 'text/plain', text);
+        if (window.KestrelAndroidBridge.showToast) window.KestrelAndroidBridge.showToast(String(msg));
+        return;
+      } catch (e) { console.warn('[download via bridge failed]', e); }
+    }
     const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([text],{type:mime})); a.download=name; a.click();
     setTimeout(()=>URL.revokeObjectURL(a.href),500);
   }
@@ -2093,7 +2143,7 @@
       document.querySelectorAll('.tab-page').forEach((sec) => {
         sec.classList.toggle('active', sec.dataset.page === page);
       });
-      const titles = { chart: 'Home', vitals: 'Health', body: 'Body', journal: 'Journal' };
+      const titles = { chart: 'Home', vitals: 'Health', body: 'Body', journal: 'Journal', run: 'Run', more: 'More' };
       if ($('screen-title')) $('screen-title').textContent = titles[page] || 'Home';
       document.getElementById('dashboard-view')?.classList.toggle('on-home', page === 'chart');
       document.getElementById('flame-badge')?.classList.toggle('hidden', page !== 'chart');
@@ -2259,189 +2309,3 @@
     }
   })();
 })();
-
-  /* ========== Kestrel extensions: Sleep sessions, Workouts, AI, Share ========== */
-
-  window.kestrelSleepSummary = function (summary) {
-    try {
-      state.sleepSummary = summary || { hasData: false };
-      localStorage.setItem('kestrel.sleepSummary', JSON.stringify(state.sleepSummary));
-      if (typeof renderSleepCard === 'function') renderSleepCard();
-      else updateSleepHero();
-    } catch (e) { console.warn('sleep summary', e); }
-  };
-
-  window.kestrelWorkouts = function (list) {
-    try {
-      state.workouts = Array.isArray(list) ? list : [];
-      localStorage.setItem(STORAGE_WORKOUTS, JSON.stringify(state.workouts));
-      if (typeof renderWorkouts === 'function') renderWorkouts();
-    } catch (e) { console.warn('workouts', e); }
-  };
-
-  function updateSleepHero() {
-    const s = state.sleepSummary;
-    const el = document.getElementById('sleep-summary-card');
-    if (!el) return;
-    if (!s || !s.hasData) {
-      el.innerHTML = '<div class="sleep-empty">No sleep data yet. Sync your band after a night of wear.</div>';
-      return;
-    }
-    const h = Math.floor(s.totalMinutes / 60);
-    const m = s.totalMinutes % 60;
-    el.innerHTML = `
-      <div class="sleep-hero">
-        <div class="sleep-total">${h}h ${m}m</div>
-        <div class="sleep-stages">
-          <span class="stage deep">Deep ${s.deepMinutes || 0}m</span>
-          <span class="stage light">Light ${s.lightMinutes || 0}m</span>
-          <span class="stage rem">REM ${s.remMinutes || 0}m</span>
-        </div>
-      </div>`;
-  }
-
-  function renderWorkouts() {
-    const list = state.workouts || [];
-    const el = document.getElementById('workouts-list');
-    if (!el) return;
-    if (!list.length) {
-      el.innerHTML = '<p class="muted">No runs yet. Start a run from the Run tab.</p>';
-      return;
-    }
-    el.innerHTML = list.map(w => {
-      const mins = w.endTs ? Math.round((w.endTs - w.startTs) / 60) : '–';
-      const km = w.distanceM != null ? (w.distanceM / 1000).toFixed(2) + ' km' : '';
-      const date = new Date(w.startTs * 1000).toLocaleDateString();
-      return `<div class="workout-card">
-        <div class="wo-type">${escapeHtml(w.type || 'Run')}</div>
-        <div class="wo-meta">${date} · ${mins} min ${km}</div>
-        <div class="wo-stats">${w.avgHr ? 'Avg HR ' + w.avgHr : ''} ${w.calories ? '· ' + w.calories + ' kcal' : ''}</div>
-        <button class="share-wo-btn" data-id="${w.id}">Share</button>
-      </div>`;
-    }).join('');
-    el.querySelectorAll('.share-wo-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const id = Number(btn.dataset.id);
-        const w = (state.workouts || []).find(x => x.id === id);
-        if (w) shareWorkoutStory(w);
-      });
-    });
-  }
-
-  function escapeHtml(s) {
-    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  }
-
-  /* ----- Strava-like share card (canvas → image) ----- */
-  function shareWorkoutStory(w) {
-    const canvas = document.createElement('canvas');
-    canvas.width = 1080; canvas.height = 1920;
-    const ctx = canvas.getContext('2d');
-    // Kestrel theme gradient
-    const g = ctx.createLinearGradient(0, 0, 0, 1920);
-    g.addColorStop(0, '#1F1A20'); g.addColorStop(0.5, '#2A232B'); g.addColorStop(1, '#3D3340');
-    ctx.fillStyle = g; ctx.fillRect(0, 0, 1080, 1920);
-    ctx.fillStyle = '#FFEED7';
-    ctx.font = 'bold 72px Plus Jakarta Sans, system-ui, sans-serif';
-    ctx.fillText('Kestrel', 80, 160);
-    ctx.font = '600 48px Plus Jakarta Sans, system-ui, sans-serif';
-    ctx.fillText((w.type || 'Run').toUpperCase(), 80, 280);
-    const mins = w.endTs ? Math.round((w.endTs - w.startTs) / 60) : 0;
-    const km = w.distanceM != null ? (w.distanceM / 1000).toFixed(2) : '–';
-    ctx.font = 'bold 120px Plus Jakarta Sans, system-ui, sans-serif';
-    ctx.fillText(km + ' km', 80, 480);
-    ctx.font = '500 44px Plus Jakarta Sans, system-ui, sans-serif';
-    ctx.fillStyle = '#AA98A9';
-    ctx.fillText(mins + ' min', 80, 560);
-    if (w.avgHr) ctx.fillText('Avg HR ' + w.avgHr, 80, 640);
-    if (w.calories) ctx.fillText(w.calories + ' kcal', 80, 720);
-    ctx.fillStyle = 'rgba(255,238,215,0.5)';
-    ctx.font = '400 32px Plus Jakarta Sans, system-ui, sans-serif';
-    ctx.fillText(new Date(w.startTs * 1000).toLocaleString(), 80, 1800);
-
-    canvas.toBlob(blob => {
-      if (!blob) return;
-      if (navigator.share && navigator.canShare) {
-        const file = new File([blob], 'kestrel-run.png', { type: 'image/png' });
-        navigator.share({ files: [file], title: 'Kestrel Run', text: 'My run on Kestrel' }).catch(() => downloadBlob(blob, 'kestrel-run.png'));
-      } else {
-        downloadBlob(blob, 'kestrel-run.png');
-      }
-    }, 'image/png');
-  }
-
-  function downloadBlob(blob, name) {
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = name;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-  }
-
-  /* ----- AI Health Chat (OpenCode Zen / Space Bunny Free) ----- */
-  window.kestrelAiReply = function (text, isError) {
-    const box = document.getElementById('ai-messages');
-    if (!box) return;
-    const div = document.createElement('div');
-    div.className = 'ai-msg ' + (isError ? 'ai-err' : 'ai-bot');
-    div.textContent = text;
-    box.appendChild(div);
-    box.scrollTop = box.scrollHeight;
-  };
-
-  function sendAiQuestion() {
-    const input = document.getElementById('ai-input');
-    const q = (input && input.value || '').trim();
-    if (!q) return;
-    const box = document.getElementById('ai-messages');
-    if (box) {
-      const div = document.createElement('div');
-      div.className = 'ai-msg ai-user';
-      div.textContent = q;
-      box.appendChild(div);
-    }
-    input.value = '';
-    // Build health context from local state
-    const s = state.sleepSummary || {};
-    const day = selectedDay ? selectedDay() : {};
-    const context = {
-      steps: day.steps || 0,
-      sleepMinutes: s.totalMinutes || day.sleepMinutes || 0,
-      deep: s.deepMinutes, light: s.lightMinutes, rem: s.remMinutes,
-      lastHr: day.heartRateAvg || null,
-      workouts: (state.workouts || []).slice(0, 5)
-    };
-    if (window.KestrelAndroid && window.KestrelAndroid.askAi) {
-      window.KestrelAndroid.askAi(q, JSON.stringify(context));
-    } else {
-      window.kestrelAiReply('AI bridge not available. Open the app on Android.', true);
-    }
-  }
-
-  // Wire AI send if elements exist
-  document.addEventListener('DOMContentLoaded', () => {
-    const sendBtn = document.getElementById('ai-send');
-    if (sendBtn) sendBtn.addEventListener('click', sendAiQuestion);
-    const aiInput = document.getElementById('ai-input');
-    if (aiInput) aiInput.addEventListener('keydown', e => { if (e.key === 'Enter') sendAiQuestion(); });
-
-    // Restore sleep summary
-    try {
-      const saved = localStorage.getItem('kestrel.sleepSummary');
-      if (saved) state.sleepSummary = JSON.parse(saved);
-      updateSleepHero();
-    } catch (_) {}
-  });
-
-  // Running: start / stop via Android bridge
-  window.kestrelStartRun = function () {
-    if (window.KestrelAndroid && window.KestrelAndroid.startRun) {
-      window.KestrelAndroid.startRun();
-    }
-  };
-  window.kestrelStopRun = function () {
-    if (window.KestrelAndroid && window.KestrelAndroid.stopRun) {
-      window.KestrelAndroid.stopRun();
-    }
-  };
-
