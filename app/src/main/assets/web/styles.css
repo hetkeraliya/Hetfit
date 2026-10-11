@@ -1203,3 +1203,25 @@ body.modal-open { overflow: hidden; }
   .today-steps { font-size: 36px; }
   .metric-big { font-size: 28px; }
 }
+
+/* Sleep + Run + AI extensions */
+.sleep-summary-card { background: rgba(42,35,43,0.7); border: 1px solid rgba(170,152,169,0.25); }
+.sleep-hero .sleep-total { font-size: 28px; font-weight: 800; color: #FFEED7; }
+.sleep-stages { display: flex; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+.sleep-stages .stage { font-size: 12px; padding: 4px 10px; border-radius: 999px; background: rgba(170,152,169,0.2); color: #FFEED7; }
+.sleep-stages .stage.deep { background: rgba(90,70,160,0.45); }
+.sleep-stages .stage.rem { background: rgba(180,100,140,0.4); }
+.sleep-empty, .muted { color: rgba(255,238,215,0.55); font-size: 13px; }
+
+.workout-card { background: rgba(0,0,0,0.22); border-radius: 14px; padding: 12px 14px; margin-bottom: 10px; border: 1px solid rgba(170,152,169,0.2); }
+.wo-type { font-weight: 700; color: #FFEED7; }
+.wo-meta, .wo-stats { font-size: 12px; color: #AA98A9; margin-top: 2px; }
+.share-wo-btn { margin-top: 8px; background: transparent; border: 1px solid #AA98A9; color: #FFEED7; border-radius: 10px; padding: 6px 12px; font-size: 12px; cursor: pointer; }
+
+.primary-btn { background: linear-gradient(135deg,#AA98A9,#7B6B7A); color: #1F1A20; border: none; border-radius: 14px; padding: 12px 18px; font-weight: 700; cursor: pointer; }
+.secondary-btn { background: transparent; color: #FFEED7; border: 1px solid rgba(170,152,169,0.5); border-radius: 14px; padding: 12px 18px; font-weight: 600; cursor: pointer; }
+
+.ai-msg { padding: 10px 14px; border-radius: 14px; max-width: 90%; font-size: 14px; line-height: 1.4; }
+.ai-user { align-self: flex-end; background: rgba(170,152,169,0.35); color: #FFEED7; }
+.ai-bot { align-self: flex-start; background: rgba(0,0,0,0.28); color: #FFEED7; }
+.ai-err { align-self: flex-start; background: rgba(160,40,40,0.35); color: #ffc9c9; }
