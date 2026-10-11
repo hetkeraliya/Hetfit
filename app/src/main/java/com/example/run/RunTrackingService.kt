@@ -283,6 +283,10 @@ class RunTrackingService : Service(), LocationListener {
     if (tickCount % 2 == 0) {
       try { getSystemService(NotificationManager::class.java).notify(NOTIF_ID, buildNotification(elapsed)) } catch (_: Exception) { }
     }
+    // Keep continuous HR alive on the band (~every 75 s) so live pace + HR stay fresh.
+    if (!paused && tickCount % 75 == 0) {
+      try { MiBandManager.get(this).bandRunKeepAlive() } catch (_: Exception) { }
+    }
   }
 
   private fun spokenTime(sec: Int): String {
