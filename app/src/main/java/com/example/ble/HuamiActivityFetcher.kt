@@ -23,6 +23,14 @@ interface BandGattIo {
   fun write(ch: BluetoothGattCharacteristic, value: ByteArray)
 }
 
+/** What we pull from the band, in order. Each type keeps its own "last synced" timestamp. */
+private enum class FetchKind(val code: Byte, val prefKey: String, val label: String) {
+  ACTIVITY(0x01, "fetch_last_sync_ms", "activity"),
+  STRESS(0x13, "fetch_last_stress_ms", "stress"),
+  SPORTS(0x05, "fetch_last_sports_ms", "workouts"),
+  PAI(0x0d, "fetch_last_pai_ms", "PAI")
+}
+
 /**
  * Port of Gadgetbridge's AbstractFetchOperation + FetchActivityOperation for the Mi Band 5
  * (legacy Huami protocol, 8-byte samples, one per minute).
@@ -33,7 +41,8 @@ interface BandGattIo {
  *  3. enable notifications on 0x0005, write [0x02] to 0x0004
  *  4. 0x0005 streams [counter, data...] packets
  *  5. notify [0x10, 0x02, 0x01, (crc)] on 0x0004 = transfer finished
- *  Repeats from the last saved timestamp until the band has nothing newer.
+ *  Repeats from the last saved timestamp until the band has nothing newer, for activity (0x01),
+ *  automatic stress (0x13) and workout summaries (0x05).
  *  Data is NOT acknowledged, so it stays on the band (same as Gadgetbridge "keep data on device").
  */
 class HuamiActivityFetcher(
@@ -61,10 +70,21 @@ class HuamiActivityFetcher(
   private var chunkStartTs = 0L
   private var rounds = 0
   private var total = 0
-  private var firstRoundSince = 0L
+  private var workoutsSaved = 0
+  private var stressSaved = 0
+  private val queue = ArrayDeque<FetchKind>()
+  private var current = FetchKind.ACTIVITY
 
   private val watchdog = Runnable {
-    if (running) finish(false, "Band stopped responding. Check the auth key and press Sync again.")
+    if (!running) return@Runnable
+    if (total > 0 || current != FetchKind.ACTIVITY) {
+      // Activity already saved (or an optional type is unsupported on this band): carry on with the next type.
+      Log.w(TAG, "No answer for ${current.label}, skipping")
+      waitingData = false
+      nextTask()
+    } else {
+      finish(false, "Band stopped responding. Check the auth key and press Sync again.")
+    }
   }
 
   fun start(): Boolean {
@@ -76,19 +96,35 @@ class HuamiActivityFetcher(
       return false
     }
     running = true
-    rounds = 0
     total = 0
-    firstRoundSince = lastSyncMs()
+    workoutsSaved = 0
+    stressSaved = 0
+    queue.clear()
+    queue.addAll(FetchKind.values())
     listener.onProgress(0, "Syncing history…")
     io.setNotify(control!!, true)
-    beginRound()
+    nextTask()
     return true
   }
 
   fun cancel() { if (running) finish(false, "Sync cancelled") }
 
+  private fun nextTask() {
+    if (queue.isEmpty()) {
+      val extra = buildString {
+        if (stressSaved > 0) append(", stress")
+        if (workoutsSaved > 0) append(", $workoutsSaved workout(s)")
+      }
+      finish(true, "Synced $total minutes$extra")
+      return
+    }
+    current = queue.removeFirst()
+    rounds = 0
+    beginRound()
+  }
+
   private fun lastSyncMs(): Long {
-    val saved = prefs.getLong("fetch_last_sync_ms", 0L)
+    val saved = prefs.getLong(current.prefKey, 0L)
     if (saved > 0) return saved
     // First ever sync: ask for everything the band still has (Gadgetbridge default is 100 days).
     return System.currentTimeMillis() - 100L * 24 * 3600 * 1000
@@ -102,11 +138,14 @@ class HuamiActivityFetcher(
     expectedLen = 0
     waitingData = false
     io.setNotify(data!!, false)
-    val cal = GregorianCalendar().apply { timeInMillis = lastSyncMs() }
+    // The band labels a night as "sleep" only after you wake up, so always re-read the last 14 hours
+    // (rows are replaced by timestamp, so nothing gets duplicated).
+    val lookback = if (current == FetchKind.ACTIVITY && rounds == 1) 14L * 3600 * 1000 else 0L
+    val cal = GregorianCalendar().apply { timeInMillis = lastSyncMs() - lookback }
     val year = cal.get(Calendar.YEAR)
     val tz = (cal.timeZone.getOffset(cal.timeInMillis) / (1000 * 60 * 15)).toByte()
     val cmd = byteArrayOf(
-      0x01, 0x01,
+      0x01, current.code,
       (year and 0xFF).toByte(), ((year shr 8) and 0xFF).toByte(),
       (cal.get(Calendar.MONTH) + 1).toByte(),
       cal.get(Calendar.DAY_OF_MONTH).toByte(),
@@ -137,10 +176,14 @@ class HuamiActivityFetcher(
   }
 
   private fun onStartResponse(v: ByteArray) {
-    if (v[2] != 0x01.toByte()) { finish(total > 0, "Band refused the history request (auth key?)"); return }
-    if (v.size < 15) { finish(total > 0, "Malformed history response"); return }
+    if (v[2] != 0x01.toByte()) {
+      Log.w(TAG, "Band refused ${current.label} request")
+      if (current == FetchKind.ACTIVITY && total == 0) { finish(false, "Band refused the history request (auth key?)"); return }
+      nextTask(); return
+    }
+    if (v.size < 15) { Log.w(TAG, "Malformed ${current.label} response"); nextTask(); return }
     expectedLen = u32(v, 3)
-    if (expectedLen == 0) { Log.i(TAG, "Nothing newer on band"); finish(true, "Up to date"); return }
+    if (expectedLen == 0) { Log.i(TAG, "Nothing newer for ${current.label}"); nextTask(); return }
     chunkStartTs = parseBandTime(v, 7)
     Log.i(TAG, "Round $rounds: expecting $expectedLen from ${chunkStartTs}")
     waitingData = true
@@ -157,7 +200,7 @@ class HuamiActivityFetcher(
       lastCounter = expected
       buffer.write(v, 1, v.size - 1)
       val pct = if (expectedLen > 0) (buffer.size() * 100L / expectedLen).toInt().coerceIn(0, 99) else 0
-      listener.onProgress(pct, "Downloading history… $pct%")
+      listener.onProgress(pct, "Downloading ${current.label}… $pct%")
     } else {
       Log.w(TAG, "Bad packet counter ${v[0]} expected $expected")
       operationValid = false
@@ -165,11 +208,32 @@ class HuamiActivityFetcher(
   }
 
   private fun onFetchFinished(v: ByteArray) {
-    if (v[2] != 0x01.toByte()) { finish(total > 0, "Band reported an error while sending data"); return }
+    if (v[2] != 0x01.toByte()) { Log.w(TAG, "Band error while sending ${current.label}"); nextTask(); return }
     waitingData = false
     if (!operationValid) { finish(total > 0, "Transfer was interrupted. It will resume on the next sync."); return }
     val bytes = buffer.toByteArray()
-    if (bytes.size % 8 != 0) { finish(total > 0, "Unexpected data size ${bytes.size}"); return }
+    val prevSync = lastSyncMs()
+    val newSyncMs: Long = when (current) {
+      FetchKind.ACTIVITY -> saveActivity(bytes) ?: run { finish(total > 0, "Unexpected data size ${bytes.size}"); return }
+      FetchKind.STRESS -> saveStress(bytes)
+      FetchKind.SPORTS -> saveSports(bytes)
+      FetchKind.PAI -> savePai(bytes)
+    }
+    prefs.edit().putLong(current.prefKey, maxOf(prevSync, newSyncMs)).apply()
+    Log.i(TAG, "${current.label}: next since $newSyncMs")
+
+    val progressed = newSyncMs > prevSync
+    val maxRounds = if (current == FetchKind.SPORTS) 25 else 30
+    if (progressed && rounds < maxRounds && newSyncMs < System.currentTimeMillis() - 60_000) {
+      beginRound()
+    } else {
+      nextTask()
+    }
+  }
+
+  /** 8 bytes per minute. Returns the next "since" in ms, or null if the size is wrong. */
+  private fun saveActivity(bytes: ByteArray): Long? {
+    if (bytes.size % 8 != 0) return null
     val n = bytes.size / 8
     val samples = ArrayList<BandSample>(n)
     for (i in 0 until n) {
@@ -189,17 +253,59 @@ class HuamiActivityFetcher(
     }
     store.insertAll(samples)
     total += n
-    val prevSync = lastSyncMs()
-    val newSyncMs = (chunkStartTs + n * 60L) * 1000L
-    prefs.edit().putLong("fetch_last_sync_ms", newSyncMs).apply()
-    Log.i(TAG, "Saved $n samples, next since $newSyncMs")
+    return (chunkStartTs + n * 60L) * 1000L
+  }
 
-    val progressed = newSyncMs > prevSync
-    if (progressed && rounds < 30 && newSyncMs < System.currentTimeMillis() - 60_000) {
-      beginRound()
-    } else {
-      finish(true, "Synced $total minutes of data")
+  /** 1 byte per minute, 0xFF = no reading (Gadgetbridge FetchStressAutoOperation). */
+  private fun saveStress(bytes: ByteArray): Long {
+    val list = ArrayList<Pair<Long, Int>>()
+    var ts = chunkStartTs
+    for (b in bytes) {
+      val v = b.toInt() and 0xFF
+      if (v != 0xFF && v in 1..100) list.add(ts to v)
+      ts += 60
     }
+    store.insertStress(list)
+    stressSaved += list.size
+    return ts * 1000L
+  }
+
+  /** 102-byte records (Gadgetbridge FetchPaiOperation): we keep PAI today / total per record timestamp. */
+  private fun savePai(bytes: ByteArray): Long {
+    val list = ArrayList<Triple<Long, Float, Float>>()
+    var lastTs = chunkStartTs
+    try {
+      val b = java.nio.ByteBuffer.wrap(bytes).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+      while (b.remaining() >= 102) {
+        val type = b.get().toInt() and 0xFF
+        if (type != 5) break
+        val ts = b.int.toLong() and 0xFFFFFFFFL
+        b.get()                              // utc offset (quarter hours)
+        b.position(b.position() + 31)        // unknown
+        b.float; b.float; b.float            // PAI low / moderate / high
+        b.short; b.short; b.short            // minutes low / moderate / high
+        val today = b.float
+        val total = b.float
+        b.position(b.position() + 39)        // unknown
+        if (today.isFinite() && total.isFinite() && ts > 1_000_000_000L) { list.add(Triple(ts, today, total)); lastTs = ts }
+      }
+    } catch (e: Exception) {
+      Log.w(TAG, "PAI parse failed: ${e.message}")
+    }
+    store.insertPai(list)
+    return (lastTs + 60) * 1000L
+  }
+
+  /** One workout summary per round (Gadgetbridge FetchSportsSummaryOperation). */
+  private fun saveSports(bytes: ByteArray): Long {
+    val w = HuamiSportsSummaryParser.parse(bytes, chunkStartTs)
+    if (w == null) {
+      Log.w(TAG, "Could not parse workout summary (${bytes.size} bytes)")
+      return (chunkStartTs + 60) * 1000L // skip it so we never loop on the same record
+    }
+    store.insertWorkout(w)
+    workoutsSaved++
+    return (w.endSec + 60) * 1000L
   }
 
   private fun finish(success: Boolean, message: String) {
