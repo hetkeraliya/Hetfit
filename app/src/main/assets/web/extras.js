@@ -18,18 +18,21 @@
   let tab = 'sleep';
   let sleepKey = null;
 
-  function render() {
-    const root = $('more-root'); if (!root || !app()) return;
+  function activeGroup() { const b = document.querySelector('.tab-strip-btn.active'); return b ? b.dataset.group : 'vitals'; }
+  function into(rootId, fn) {
+    const root = $(rootId); if (!root) return;
     root.innerHTML = '';
-    const stack = h('div', 'sheet-stack'); root.appendChild(stack);
-    const tabs = h('div', 'sub-tab-row');
-    [['sleep', 'Sleep'], ['life', 'Water & mood'], ['band', 'Band'], ['backup', 'Backup']].forEach(([k, l]) => {
-      const b = h('button', 'sub-tab-btn' + (tab === k ? ' active' : ''), l); b.type = 'button';
-      b.onclick = () => { tab = k; render(); }; tabs.appendChild(b);
-    });
-    stack.appendChild(tabs);
-    if (tab === 'sleep') renderSleep(stack); else if (tab === 'life') renderLife(stack); else if (tab === 'band') renderBand(stack); else renderBackup(stack);
+    const stack = h('div', 'fx-stack'); root.appendChild(stack);
+    try { fn(stack); } catch (e) { console.warn('[extras ' + rootId + ']', e); }
   }
+  function renderAll(group) {
+    if (!app()) return;
+    group = group || activeGroup();
+    if (group === 'vitals') into('sleep-root', renderSleep);
+    else if (group === 'wellness') { into('pai-root', renderPai); into('life-root', renderLife); }
+    else if (group === 'settings') { into('band-root', (st) => { renderConn(st); renderBand(st); }); into('data-root', renderBackup); }
+  }
+  function render() { renderAll(activeGroup()); }
 
   // ---------------- Sleep stages ----------------
   function renderSleep(stack) {
@@ -171,7 +174,7 @@
     ['com.google.android.gm', 'Gmail'], ['com.google.android.apps.messaging', 'Messages'], ['com.google.android.dialer', 'Phone (missed calls)'], ['com.twitter.android', 'X / Twitter'], ['com.snapchat.android', 'Snapchat']];
   const DAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
-  function renderBand(stack) {
+  function renderPai(stack) {
     // PAI
     const days = (app().state.localDayIndex) || {};
     const rows = []; for (let i = 6; i >= 0; i--) { const k = keyOf(new Date(Date.now() - i * 86400000)); rows.push([k, days[k] || {}]); }
@@ -182,7 +185,9 @@
       (latest ? '7-day score · +' + Math.round(latest[1].bandPaiToday || 0) + ' today' : 'Syncs from your band. Needs a few days of heart-rate data.') + '</span></div>' +
       '<div class="rn-bars" style="border:0;padding:0;background:transparent;margin-top:8px">' + rows.map((r) => '<div><span>' + (r[1].bandPaiToday ? Math.round(r[1].bandPaiToday) : '') + '</span><em style="height:' + Math.max(3, ((r[1].bandPaiToday || 0) / mx) * 70) + 'px"></em><span>' + r[0].slice(8) + '</span></div>').join('') + '</div>';
     stack.appendChild(pai);
+  }
 
+  function renderBand(stack) {
     if (!A || !A.getBandSettings) {
       const c = h('div', 'rn-card'); c.innerHTML = '<h4>Band controls</h4><p class="mo-note" style="margin-top:0">Settings, alarms and phone notifications are available in the Android app.</p>'; stack.appendChild(c); return;
     }
@@ -197,6 +202,7 @@
     set.innerHTML = '<h4>Band settings</h4>' +
       '<div style="display:flex;justify-content:space-between;align-items:center;font-weight:600;padding:6px 0"><span>Heart-rate check every</span>' + sel('bs-hr', [[0, 'Off'], [1, '1 min'], [5, '5 min'], [10, '10 min'], [30, '30 min']], st.hrInterval == null ? 5 : st.hrInterval) + '</div>' +
       chk('bs-sleephr', 'Heart rate during sleep', st.sleepHr !== false) + chk('bs-lift', 'Raise wrist to wake screen', st.lift !== false) + chk('bs-goal', 'Notify when step goal is reached', st.goalNotify !== false) +
+      chk('bs-runbuzz', 'Buzz band when I start / finish a run and every km', st.runBuzz !== false) + chk('bs-mirror', 'Start GPS tracking on phone when I start a workout on the band', st.mirrorWorkout !== false) +
       chk('bs-inact', 'Sedentary reminder', st.inactivity.enabled) +
       '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px;font-weight:600"><span>after</span>' + sel('bs-ithr', [[30, '30 min'], [45, '45 min'], [60, '60 min'], [90, '90 min']], st.inactivity.threshold) +
       '<span>between</span>' + sel('bs-ish', Array.from({ length: 24 }, (_, i) => [i, pad2(i) + ':00']), st.inactivity.startHour) + '<span>and</span>' + sel('bs-ieh', Array.from({ length: 24 }, (_, i) => [i, pad2(i) + ':00']), st.inactivity.endHour) + '</div>';
@@ -218,7 +224,7 @@
     save.querySelector('#bs-save').onclick = () => {
       const g = (id) => stack.querySelector('#' + id);
       const out = {
-        hrInterval: Number(g('bs-hr').value), sleepHr: g('bs-sleephr').checked, lift: g('bs-lift').checked, goalNotify: g('bs-goal').checked,
+        hrInterval: Number(g('bs-hr').value), sleepHr: g('bs-sleephr').checked, lift: g('bs-lift').checked, goalNotify: g('bs-goal').checked, runBuzz: g('bs-runbuzz').checked, mirrorWorkout: g('bs-mirror').checked,
         inactivity: { enabled: g('bs-inact').checked, threshold: Number(g('bs-ithr').value), startHour: Number(g('bs-ish').value), endHour: Number(g('bs-ieh').value) },
         alarms: st.alarms.slice(0, 5).map((a, i) => {
           const tv = (g('al-t' + i).value || '07:00').split(':'); let days = 0;
@@ -292,11 +298,49 @@
     const n = h('div', 'rn-card'); n.innerHTML = '<h4>Offline</h4><p class="mo-note" style="margin-top:0">Kestrel stores everything on this phone. Band sync, GPS recording, charts and sharing all work without internet.</p>'; stack.appendChild(n);
   }
 
+  // ---------------- Band connection card (Settings) ----------------
+  let connTimer = 0;
+  function renderConn(stack) {
+    const c = h('div', 'rn-card fx-conn');
+    c.innerHTML = '<h4>Band connection</h4><div id="cn-body" class="mo-note" style="margin:0 0 10px">Loading…</div>' +
+      '<div class="mo-btns"><button class="primary" id="cn-connect">Connect / pair</button><button id="cn-sync">Sync now</button><button id="cn-hr">Measure heart rate</button><button id="cn-buzz">Vibrate band</button></div>' +
+      '<div class="fx-prog" id="cn-prog"><i></i></div>';
+    stack.appendChild(c);
+    if (!A || !A.getBandStatus) { c.querySelector('#cn-body').textContent = 'Band controls are available in the Android app.'; return; }
+    const body = c.querySelector('#cn-body'), prog = c.querySelector('#cn-prog');
+    const paint = () => {
+      if (!c.isConnected) { clearInterval(connTimer); return; }
+      let s = {}; try { s = JSON.parse(A.getBandStatus()); } catch (e) {}
+      const st = (s.status || 'DISCONNECTED');
+      const label = { CONNECTED: 'Connected', CONNECTING: 'Connecting…', AUTHENTICATING: 'Authenticating…', SCANNING: 'Searching…', DISCONNECTED: 'Not connected' }[st] || st;
+      body.innerHTML = '<b style="font-size:16px">' + label + '</b>' + (s.battery > 0 ? ' · battery ' + s.battery + '%' : '') + (st === 'CONNECTED' && s.hr > 0 ? ' · ♥ ' + s.hr + ' bpm' : '') +
+        '<br>' + (s.lastSync ? 'Last sync ' + new Date(s.lastSync).toLocaleString() : 'Not synced yet') +
+        (s.syncing ? '<br>' + (s.message || 'Syncing…') : '') + (s.ack ? '<br>Band replied: ' + s.ack : '') + (s.error ? '<br><span style="color:#c0564f">' + s.error + '</span>' : '');
+      c.classList.toggle('is-on', st === 'CONNECTED');
+      prog.classList.toggle('on', !!s.syncing);
+      prog.firstElementChild.style.width = (s.syncing ? Math.max(6, s.percent || 0) : 0) + '%';
+    };
+    paint(); clearInterval(connTimer); connTimer = setInterval(paint, 1500);
+    c.querySelector('#cn-connect').onclick = () => A.openBluetoothMenu && A.openBluetoothMenu();
+    c.querySelector('#cn-sync').onclick = () => { A.syncBandNow(); toast('Syncing…'); setTimeout(paint, 400); };
+    c.querySelector('#cn-hr').onclick = () => toast(A.measureHeartRateNow ? A.measureHeartRateNow() : 'Update the app to use this');
+    c.querySelector('#cn-buzz').onclick = () => toast(A.sendTestNotification() ? 'Sent to band' : 'Connect the band first');
+  }
+
+  let dataTimer = 0;
   function init() {
-    if (!$('more-root')) return;
-    render();
-    const strip = $('tab-strip');
-    if (strip) strip.addEventListener('click', (e) => { const b = e.target.closest('.tab-strip-btn'); if (b && b.dataset.page === 'more') { sleepKey = null; render(); } });
+    if (!$('sleep-root')) return;
+    renderAll('vitals');
+    document.addEventListener('kestrel:group', (e) => { sleepKey = null; renderAll(e.detail); });
+    // keep Sleep / Mood cards live when new band data arrives (never while the user is typing in a form)
+    document.addEventListener('kestrel:data', () => {
+      clearTimeout(dataTimer);
+      dataTimer = setTimeout(() => {
+        const g = activeGroup(); if (g === 'settings') return;
+        const ae = document.activeElement; if (ae && /INPUT|TEXTAREA|SELECT/.test(ae.tagName)) return;
+        renderAll(g);
+      }, 350);
+    });
   }
   window.kestrelMoreRender = render;
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else setTimeout(init, 50);
