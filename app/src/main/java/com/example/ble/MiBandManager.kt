@@ -1104,34 +1104,54 @@ class MiBandManager(private val context: Context) {
   }
 
   /**
-   * Stream phone GPS to the band (Gadgetbridge HuamiSupport.sendPhoneGps / encodePhoneGpsPayload).
+   * Stream phone GPS to the band — same protocol as Gadgetbridge HuamiSupport.sendPhoneGps
+   * (Mi Band 4/5/6, Amazfit Band 5). Used by Zepp / Mi Fit during outdoor workouts so the
+   * band can show live speed, distance and the route cursor.
+   *
    * status: 0x01 ACQUIRED, 0x02 SEARCHING, 0x04 DISABLED, null = position-only update.
+   * location may be null only for SEARCHING / DISABLED status packets.
    */
+  @Volatile private var lastPhoneGpsSentMs = 0L
+
   fun sendPhoneGps(status: Int?, location: android.location.Location?) {
     if (!linkReady()) return
+    if (!settingFlag("sendGpsToBand", true)) return
+    // Status-only packets (SEARCHING / DISABLED) are allowed without a fix.
+    if (location == null && status == null) return
     val ch = fee0Char(chunkedCharUuid) ?: return
+
     var flags = 0
     var length = 4
-    if (status != null) { flags = flags or 0x1; length += 1 }
-    if (location != null) { flags = flags or 0x40000; length += 31 }
+    if (status != null) { flags = flags or 0x1; length += 1 }          // WORKOUT_GPS_FLAG_STATUS
+    if (location != null) { flags = flags or 0x40000; length += 31 }  // WORKOUT_GPS_FLAG_POSITION
+
+    // Payload matches Gadgetbridge encodePhoneGpsPayload + leading 0x06 type byte.
     val buf = java.nio.ByteBuffer.allocate(1 + length).order(java.nio.ByteOrder.LITTLE_ENDIAN)
-    buf.put(0x06.toByte()) // chunked type for GPS
+    buf.put(0x06.toByte())
     buf.putInt(flags)
     if (status != null) buf.put(status.toByte())
     if (location != null) {
       buf.putInt((location.longitude * 3_000_000.0).toInt())
       buf.putInt((location.latitude * 3_000_000.0).toInt())
-      buf.putInt(((if (location.hasSpeed()) location.speed else 0f) * 10).toInt())
-      buf.putInt(((if (location.hasAltitude()) location.altitude else 0.0) * 100).toInt())
-      buf.putLong(location.time)
-      buf.putInt(-1)           // 0xffffffff
-      buf.putShort(0)          // bearing placeholder
+      val speed = if (location.hasSpeed()) location.speed else 0f
+      buf.putInt((speed * 10f).toInt())
+      val alt = if (location.hasAltitude()) location.altitude else 0.0
+      buf.putInt((alt * 100.0).toInt())
+      buf.putLong(if (location.time > 0) location.time else System.currentTimeMillis())
+      buf.putInt(-1) // 0xffffffff — constant in GB captures
+      val bearing = if (location.hasBearing()) location.bearing.toInt().toShort() else 0
+      buf.putShort(bearing)
       buf.put(0.toByte())
     }
     writeChunked(ch, 6, buf.array())
+    lastPhoneGpsSentMs = System.currentTimeMillis()
   }
 
-  /** Gadgetbridge writeToChunkedOld: [0, flags|type, counter] + ≤17 data bytes. */
+  /** True if we should flag the next fix as ACQUIRED (GPS was lost for > 5 s). */
+  fun needsGpsAcquiredFlag(): Boolean =
+    System.currentTimeMillis() - lastPhoneGpsSentMs > 5_000
+
+  /** Gadgetbridge writeToChunkedOld: [0, flags|type, counter] + data (max MTU-6, default 17). */
   private fun writeChunked(ch: BluetoothGattCharacteristic, type: Int, payload: ByteArray) {
     val maxChunk = 17
     var remaining = payload.size
@@ -1140,10 +1160,10 @@ class MiBandManager(private val context: Context) {
       val n = minOf(remaining, maxChunk)
       var flags = type and 0x0F
       if (remaining <= maxChunk) {
-        flags = flags or 0x80
+        flags = flags or 0x80 // last chunk
         if (count == 0) flags = flags or 0x40
       } else if (count > 0) {
-        flags = flags or 0x40
+        flags = flags or 0x40 // consecutive
       }
       val chunk = ByteArray(n + 3)
       chunk[0] = 0
