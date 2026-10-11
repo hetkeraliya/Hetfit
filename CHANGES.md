@@ -1,21 +1,36 @@
-# Band sync rewrite (Gadgetbridge protocol)
+# Kestrel feature update
 
-NEW  ble/HuamiActivityFetcher.kt   real history fetch (ported from Gadgetbridge AbstractFetchOperation/FetchActivityOperation)
-NEW  ble/BandSampleStore.kt        local SQLite store of every minute sample from the band
-NEW  ble/BandSyncService.kt        foreground service + notification: Sync / Disconnect (-> Connect), base data
-EDIT ble/MiBandManager.kt          shared instance, auto-sync on connect, reconnect, Sync, API 33 callbacks
-EDIT ble/MiBandDataSyncEngine.kt   sends REAL stored rows to the web UI (all fake generation removed)
-EDIT MainActivity.kt               uses shared manager, no disconnect on close, pushes real data, notif permission
-EDIT AndroidManifest.xml           FGS permissions, service, singleTask
-EDIT widget/*, res/layout/widget_*.xml   plain <View> (crashes RemoteViews = "can't load widget") -> FrameLayout; no fake defaults
-EDIT assets/web/app.js             kestrelBandSamples*/kestrelLiveMetric, purge old fake days, no demo seed
-Workouts are NOT synced over Bluetooth. Gadgetbridge zip import is unchanged.
+## Sleep (fixed)
+- Proper sleep session detection from kind=120 + deep/rem flags
+- Night window 18:00–18:00, min 20 min sessions
+- Stages: deep / light / REM / awake
+- Structured sleep summary pushed to web UI (`kestrelSleepSummary`)
+- Home card shows total + stage breakdown
 
-# Round 2
-NEW  ble/HuamiSportsSummaryParser.kt   workout summary parser (port of Gadgetbridge HuamiActivitySummaryParser)
-EDIT ble/HuamiActivityFetcher.kt       now fetches activity + automatic stress (0x13) + workout summaries (0x05)
-EDIT ble/BandSampleStore.kt            stress + workouts tables, per-day stress / sleep-stage (deep/light/REM) stats
-NEW  widget/KestrelGlassWidgets.kt     6 new frosted-glass widgets: steps ring, heart rate, sleep, stress, last workout, band status (Sync/Connect)
-EDIT drawables bg_widget_*, progress_*  frosted-glass cool theme for all widgets
-EDIT assets/web/app.js                 kestrelBandExtras / kestrelBandWorkouts
-CI   .github/workflows/build-apk.yml   creates debug.keystore + placeholder google-services.json
+## Running (Strava-like)
+- Manual Start / Stop Run from Run tab
+- Workouts stored in SQLite on device
+- Distance estimated from steps, calories estimated
+- Recent workouts list + Share button
+
+## Story-style sharing
+- Generates a themed 1080×1920 PNG card (Kestrel colors)
+- Uses Web Share API when available, otherwise downloads
+
+## AI (OpenCode Zen)
+- Provider: https://opencode.ai/zen/v1
+- Default free model: space-bunny-free
+- User pastes API key → saved only on device (SharedPreferences)
+- Health chat with local sleep / steps / workout context
+- Settings dialog from AI tab
+
+## Offline
+- All band data, workouts, sleep, and API key stay on device
+- AI only needs network when you send a question
+
+## Files touched
+- ble/BandSampleStore.kt (sleep sessions + workouts table)
+- ble/MiBandDataSyncEngine.kt (richer push)
+- ai/OpenCodeZenClient.kt (new)
+- MainActivity.kt (JS bridge + AI dialog + run)
+- assets/web/app.js, index.html, styles.css
