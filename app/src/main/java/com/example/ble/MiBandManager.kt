@@ -1022,12 +1022,13 @@ class MiBandManager(private val context: Context) {
           offerTimeout = timeout
           handler.postDelayed(timeout, 45_000)
         }
-        0x03 -> if (active && mirroredRun) RunTrackingService.send(context, RunTrackingService.ACTION_PAUSE)
-        0x04 -> if (active && mirroredRun) RunTrackingService.send(context, RunTrackingService.ACTION_RESUME)
-        0x05 -> { // End on band
+        0x03 -> if (mirroredRun) RunTrackingService.send(context, RunTrackingService.ACTION_PAUSE)
+        0x04 -> if (mirroredRun) RunTrackingService.send(context, RunTrackingService.ACTION_RESUME)
+        0x05 -> { // End on band → always stop phone recording if we were mirroring
           offerTimeout?.let { handler.removeCallbacks(it) }
           pendingOfferType = -1
-          if (active && mirroredRun) {
+          if (mirroredRun) {
+            Log.i(TAG, "Band ended workout — finishing phone recording")
             RunTrackingService.send(context, RunTrackingService.ACTION_FINISH)
             mirroredRun = false
           }
@@ -1046,8 +1047,8 @@ class MiBandManager(private val context: Context) {
     offerTimeout?.let { handler.removeCallbacks(it) }
     pendingOfferType = -1
     mirroredRun = true
-    RunTrackingService.send(context, RunTrackingService.ACTION_START, t, true)
-    return "Tracking ${labelForAppType(t)} on phone — GPS map + band heart rate"
+    RunTrackingService.send(context, RunTrackingService.ACTION_START, t, true, fromBand = true)
+    return "Tracking ${labelForAppType(t)} on phone — map from GPS, pace + HR from band"
   }
 
   /** User declined — band keeps recording on its own; phone does nothing. */
