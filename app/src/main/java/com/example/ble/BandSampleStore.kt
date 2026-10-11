@@ -194,6 +194,14 @@ class BandSampleStore private constructor(context: Context) :
         }
       }
     }
+    // Drop nights under 45 minutes — almost always sensor noise, not real sleep.
+    for ((_, e) in out) {
+      val total = e.sleepMin ?: 0
+      if (total in 1..44) {
+        e.sleepMin = null; e.sleepStartTs = null; e.sleepEndTs = null
+        e.deepMin = null; e.lightMin = null; e.remMin = null
+      }
+    }
     return out
   }
 
