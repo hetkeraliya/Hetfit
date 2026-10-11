@@ -202,7 +202,7 @@
     set.innerHTML = '<h4>Band settings</h4>' +
       '<div style="display:flex;justify-content:space-between;align-items:center;font-weight:600;padding:6px 0"><span>Heart-rate check every</span>' + sel('bs-hr', [[0, 'Off'], [1, '1 min'], [5, '5 min'], [10, '10 min'], [30, '30 min']], st.hrInterval == null ? 5 : st.hrInterval) + '</div>' +
       chk('bs-sleephr', 'Heart rate during sleep', st.sleepHr !== false) + chk('bs-lift', 'Raise wrist to wake screen', st.lift !== false) + chk('bs-goal', 'Notify when step goal is reached', st.goalNotify !== false) +
-      chk('bs-runbuzz', 'Buzz band when I start / finish a run and every km', st.runBuzz !== false) + chk('bs-mirror', 'Ask to track on phone (GPS map + band HR) when I start a workout on the band', st.mirrorWorkout !== false) +
+      chk('bs-runbuzz', 'Buzz band when I start / finish a run and every km', st.runBuzz !== false) + chk('bs-mirror', 'Ask to track on phone (GPS map + band HR) when I start a workout on the band', st.mirrorWorkout !== false) + chk('bs-gpsband', 'Send phone GPS to band during workouts (speed & distance on band)', st.sendGpsToBand !== false) +
       chk('bs-inact', 'Sedentary reminder', st.inactivity.enabled) +
       '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px;font-weight:600"><span>after</span>' + sel('bs-ithr', [[30, '30 min'], [45, '45 min'], [60, '60 min'], [90, '90 min']], st.inactivity.threshold) +
       '<span>between</span>' + sel('bs-ish', Array.from({ length: 24 }, (_, i) => [i, pad2(i) + ':00']), st.inactivity.startHour) + '<span>and</span>' + sel('bs-ieh', Array.from({ length: 24 }, (_, i) => [i, pad2(i) + ':00']), st.inactivity.endHour) + '</div>';
@@ -233,7 +233,7 @@
     save.querySelector('#bs-save').onclick = () => {
       const g = (id) => stack.querySelector('#' + id);
       const out = {
-        hrInterval: Number(g('bs-hr').value), sleepHr: g('bs-sleephr').checked, lift: g('bs-lift').checked, goalNotify: g('bs-goal').checked, runBuzz: g('bs-runbuzz').checked, mirrorWorkout: g('bs-mirror').checked,
+        hrInterval: Number(g('bs-hr').value), sleepHr: g('bs-sleephr').checked, lift: g('bs-lift').checked, goalNotify: g('bs-goal').checked, runBuzz: g('bs-runbuzz').checked, mirrorWorkout: g('bs-mirror').checked, sendGpsToBand: g('bs-gpsband').checked,
         inactivity: { enabled: g('bs-inact').checked, threshold: Number(g('bs-ithr').value), startHour: Number(g('bs-ish').value), endHour: Number(g('bs-ieh').value) },
         alarms: st.alarms.slice(0, 5).map((a, i) => {
           const tv = (g('al-t' + i).value || '07:00').split(':'); let days = 0;
