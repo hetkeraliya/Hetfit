@@ -6,7 +6,7 @@ import java.nio.ByteOrder
 /** Port of Gadgetbridge HuamiActivitySummaryParser (the numeric fields we show). */
 object HuamiSportsSummaryParser {
 
-  fun parse(bytes: ByteArray, startSec: Long): BandWorkout? {
+  fun parse(bytes: ByteArray, startSec: Long): BandWorkoutRow? {
     if (bytes.size < 40) return null
     return try {
       val b = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
@@ -58,7 +58,7 @@ object HuamiSportsSummaryParser {
       }
 
       fun hr(v: Int) = if (v in 30..220) v else 0
-      BandWorkout(
+      BandWorkoutRow(
         startSec = startSec,
         endSec = startSec + duration,
         type = type,
