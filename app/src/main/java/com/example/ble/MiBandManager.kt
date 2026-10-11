@@ -943,6 +943,10 @@ class MiBandManager(private val context: Context) {
   @Volatile private var lastAck: String? = null
   private var pendingBandWorkoutType = -1
   private var mirroredRun = false
+  /** Offered to the UI when the band starts a workout; UI should ask the user Yes/No. */
+  @Volatile var onBandWorkoutOffer: ((typeCode: Int, label: String) -> Unit)? = null
+  private var pendingOfferType = -1
+  private var offerTimeout: Runnable? = null
 
   /** Everything the Settings page shows in its "Band connection" card. */
   fun statusJson(): String {
@@ -987,24 +991,71 @@ class MiBandManager(private val context: Context) {
   /** Band workout type (Huami) -> Kestrel run type (1 run, 3 walk, 4 ride); -1 = no GPS tracking. */
   private fun appRunTypeFor(bandType: Int): Int = when (bandType) { 0x01 -> 1; 0x04 -> 3; 0x03 -> 4; else -> -1 }
 
-  /** Workout characteristic: [0x11, status] with 2 start, 3 pause, 4 resume, 5 end. Mirrors the workout on the phone (GPS route). */
+  private fun labelForAppType(t: Int): String = when (t) { 3 -> "Walk"; 4 -> "Ride"; 15 -> "Hike"; else -> "Run" }
+
+  /**
+   * Workout characteristic: [0x11, status] with 2 start, 3 pause, 4 resume, 5 end.
+   * On Start we do NOT auto-record — we ask the user via [onBandWorkoutOffer].
+   * Only if they accept do we start phone GPS + pull live HR from the band.
+   */
   private fun handleWorkoutNotification(v: ByteArray) {
     if (v.size < 2 || v[0] != 0x11.toByte()) return
     if (!settingFlag("mirrorWorkout", true)) return
     val active = RunTrackingService.stateJson.contains("\"active\":true")
     try {
       when (v[1].toInt() and 0xFF) {
-        0x02 -> {
+        0x02 -> { // Start on band
           val t = appRunTypeFor(pendingBandWorkoutType)
-          if (t > 0 && !active) { mirroredRun = true; RunTrackingService.send(context, RunTrackingService.ACTION_START, t, true) }
+          if (t <= 0 || active || mirroredRun) return
+          pendingOfferType = t
+          offerTimeout?.let { handler.removeCallbacks(it) }
+          val label = labelForAppType(t)
+          Log.i(TAG, "Band workout started ($label) — offering phone tracking")
+          onBandWorkoutOffer?.invoke(t, label)
+          // Auto-decline after 45s if the user never answers
+          val timeout = Runnable {
+            if (pendingOfferType == t && !mirroredRun) {
+              pendingOfferType = -1
+              Log.i(TAG, "Band workout offer timed out — not tracking on phone")
+            }
+          }
+          offerTimeout = timeout
+          handler.postDelayed(timeout, 45_000)
         }
         0x03 -> if (active && mirroredRun) RunTrackingService.send(context, RunTrackingService.ACTION_PAUSE)
         0x04 -> if (active && mirroredRun) RunTrackingService.send(context, RunTrackingService.ACTION_RESUME)
-        0x05 -> if (active && mirroredRun) { RunTrackingService.send(context, RunTrackingService.ACTION_FINISH); mirroredRun = false }
+        0x05 -> { // End on band
+          offerTimeout?.let { handler.removeCallbacks(it) }
+          pendingOfferType = -1
+          if (active && mirroredRun) {
+            RunTrackingService.send(context, RunTrackingService.ACTION_FINISH)
+            mirroredRun = false
+          }
+        }
       }
     } catch (e: Exception) {
-      Log.w(TAG, "Could not mirror band workout on phone: ${e.message}")
+      Log.w(TAG, "Could not handle band workout: ${e.message}")
     }
+  }
+
+  /** User accepted the “track this band workout on phone?” prompt. Starts GPS map + band HR. */
+  fun acceptBandWorkoutOffer(typeCode: Int = -1): String {
+    val t = if (typeCode > 0) typeCode else pendingOfferType
+    if (t <= 0) return "No pending band workout"
+    if (RunTrackingService.stateJson.contains("\"active\":true")) return "A recording is already active"
+    offerTimeout?.let { handler.removeCallbacks(it) }
+    pendingOfferType = -1
+    mirroredRun = true
+    RunTrackingService.send(context, RunTrackingService.ACTION_START, t, true)
+    return "Tracking ${labelForAppType(t)} on phone — GPS map + band heart rate"
+  }
+
+  /** User declined — band keeps recording on its own; phone does nothing. */
+  fun declineBandWorkoutOffer() {
+    offerTimeout?.let { handler.removeCallbacks(it) }
+    pendingOfferType = -1
+    mirroredRun = false
+    Log.i(TAG, "User declined phone tracking for band workout")
   }
 
   // ---------------- Phone-started activity -> band ----------------
