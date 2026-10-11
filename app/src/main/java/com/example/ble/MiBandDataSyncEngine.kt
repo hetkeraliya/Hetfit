@@ -37,8 +37,12 @@ object MiBandDataSyncEngine {
           rows.forEachIndexed { i, r ->
             if (i > 0) sb.append(',')
             // [timestamp, rawIntensity, steps, heartRate, rawKind] - the 5 columns the web aggregator reads.
-            // Kinds other than "sleep" are normalised to 1 (awake) so not-worn / charging minutes are never counted as sleep.
-            val kind = if (r.kind == 120) 120 else 1
+            // Keep every sleep kind (120/121/122/9/11). Everything else that is not a known
+            // awake activity is normalised to 1 so not-worn (115) / charging (118) never count as sleep.
+            val kind = when {
+              isSleepKind(r.kind) -> r.kind
+              else -> 1
+            }
             val hr = if (r.hr in 1..253) r.hr else 0
             sb.append('[').append(r.ts).append(',').append(r.intensity).append(',')
               .append(r.steps).append(',').append(hr).append(',').append(kind).append(']')
