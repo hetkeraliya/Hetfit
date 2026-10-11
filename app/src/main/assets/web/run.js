@@ -685,6 +685,49 @@
     txt('Recorded offline with Kestrel', W / 2, H - 70, 26, 600, tpl === 'route' ? 'rgba(255,255,255,.75)' : soft, 'center', 2);
   }
 
+  // ---------- band → phone offer ----------
+  // When a workout is started ON the band, the native side calls kestrelBandWorkoutOffer.
+  // We ask the user once; Yes = phone GPS map + live band HR; No = band only.
+  function showBandWorkoutOffer(info) {
+    const type = (info && info.type) || 1;
+    const label = (info && info.label) || 'Run';
+    let sheet = $('rn-band-offer');
+    if (!sheet) {
+      sheet = h('div', 'rn-band-offer');
+      sheet.id = 'rn-band-offer';
+      document.body.appendChild(sheet);
+    }
+    sheet.innerHTML =
+      '<div class="rn-band-offer-card">' +
+      '<div class="rn-band-offer-icon">⌚</div>' +
+      '<h3>' + label + ' started on band</h3>' +
+      '<p>Track it on your phone too? GPS map comes from the phone; heart rate and steps come from the band.</p>' +
+      '<div class="rn-band-offer-actions">' +
+      '<button type="button" class="rn-btn" id="rn-band-no">Not now</button>' +
+      '<button type="button" class="rn-btn primary" id="rn-band-yes">Track on phone</button>' +
+      '</div></div>';
+    sheet.classList.add('open');
+    const close = () => sheet.classList.remove('open');
+    sheet.querySelector('#rn-band-no').onclick = () => {
+      close();
+      if (A && A.declineBandWorkout) try { A.declineBandWorkout(); } catch (e) {}
+      toast('OK — band keeps recording on its own');
+    };
+    sheet.querySelector('#rn-band-yes').onclick = () => {
+      close();
+      if (!A || !A.acceptBandWorkout) { toast('Open the Android app to track.'); return; }
+      try {
+        const msg = A.acceptBandWorkout(type);
+        toast(msg || 'Tracking on phone');
+        finishing = false; livePts = [];
+        openLive(true);
+        // Jump to Activity tab so the live screen is in context
+        if (window.kestrelGoto) window.kestrelGoto('activity');
+      } catch (e) { toast('Could not start tracking'); }
+    };
+  }
+  window.kestrelBandWorkoutOffer = showBandWorkoutOffer;
+
   // ---------- wiring ----------
   function init() {
     if (!$('run-root')) return;
