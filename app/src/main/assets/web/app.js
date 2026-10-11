@@ -2152,35 +2152,45 @@
   }
   window.addEventListener('resize', moveTabIndicator);
 
+  let currentPage = 'chart';
+
+  function showPage(pageId, silent) {
+    const group = currentGroup;
+    const pages = Array.from(document.querySelectorAll('.tab-page[data-group="' + group + '"]'));
+    if (!pages.length) return;
+    let target = pages.find((p) => p.dataset.page === pageId) || pages[0];
+    currentPage = target.dataset.page;
+    pages.forEach((sec) => {
+      const on = sec === target;
+      sec.classList.toggle('active', on);
+      if (on) {
+        sec.querySelectorAll(':scope > .sheet-stack > *, :scope > * > .glass-card, :scope > .hero-metrics, :scope > .sheet-stack > .rn-card')
+          .forEach((c, i) => c.style.setProperty('--i', Math.min(i, 9)));
+      }
+    });
+    const bar = $('group-chips');
+    if (bar) bar.querySelectorAll('.chip').forEach((c) => c.classList.toggle('active', c.dataset.page === currentPage));
+    if (!silent) window.scrollTo({ top: 0, behavior: 'auto' });
+    try { document.dispatchEvent(new CustomEvent('kestrel:page', { detail: { group, page: currentPage } })); } catch (e) {}
+  }
+
   function buildChips(group) {
     const bar = $('group-chips'); if (!bar) return;
     const secs = Array.from(document.querySelectorAll('.tab-page[data-group="' + group + '"]'));
     bar.innerHTML = '';
     bar.classList.toggle('hidden', secs.length < 2);
-    secs.forEach((sec, i) => {
+    const prefer = secs.find((s) => s.dataset.page === currentPage) || secs[0];
+    currentPage = prefer ? prefer.dataset.page : currentPage;
+    secs.forEach((sec) => {
       const chip = document.createElement('button');
-      chip.type = 'button'; chip.className = 'chip' + (i === 0 ? ' active' : '');
-      chip.innerHTML = sec.dataset.label || sec.dataset.page; chip.dataset.page = sec.dataset.page;
-      chip.addEventListener('click', () => {
-        const y = sec.getBoundingClientRect().top + window.scrollY - (bar.offsetHeight + 8);
-        window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
-      });
+      chip.type = 'button';
+      chip.className = 'chip' + (sec.dataset.page === currentPage ? ' active' : '');
+      chip.innerHTML = sec.dataset.label || sec.dataset.page;
+      chip.dataset.page = sec.dataset.page;
+      chip.addEventListener('click', () => showPage(sec.dataset.page));
       bar.appendChild(chip);
     });
   }
-  function syncChips() {
-    const bar = $('group-chips'); if (!bar || bar.classList.contains('hidden')) return;
-    const secs = Array.from(document.querySelectorAll('.tab-page.active'));
-    let cur = secs[0];
-    secs.forEach((sec) => { if (sec.getBoundingClientRect().top <= bar.offsetHeight + 40) cur = sec; });
-    bar.querySelectorAll('.chip').forEach((c) => {
-      const on = cur && c.dataset.page === cur.dataset.page;
-      if (on && !c.classList.contains('active')) c.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
-      c.classList.toggle('active', !!on);
-    });
-  }
-  let chipRaf = 0;
-  window.addEventListener('scroll', () => { if (chipRaf) return; chipRaf = requestAnimationFrame(() => { chipRaf = 0; syncChips(); }); }, { passive: true });
 
   function renderGroup(group) {
     try {
@@ -2198,14 +2208,24 @@
     if (pagesEl) { pagesEl.classList.remove('dir-fwd', 'dir-back'); void pagesEl.offsetWidth; pagesEl.classList.add('dir-' + dir); }
     currentGroup = group;
     document.querySelectorAll('.tab-strip-btn').forEach((b) => b.classList.toggle('active', b.dataset.group === group));
-    let n = 0;
+    // Default page for each group
+    const defaults = { vitals: 'chart', wellness: 'wellness', activity: 'run', plan: 'plan', settings: 'settings' };
+    const groupPages = Array.from(document.querySelectorAll('.tab-page[data-group="' + group + '"]'));
+    const prefer = groupPages.find((p) => p.dataset.page === currentPage && p.dataset.group === group)
+      || groupPages.find((p) => p.dataset.page === defaults[group])
+      || groupPages[0];
+    currentPage = prefer ? prefer.dataset.page : defaults[group] || 'chart';
+    // Only ONE page active at a time (was activating every page in the group → cursed stacked UI)
     document.querySelectorAll('.tab-page').forEach((sec) => {
-      const on = sec.dataset.group === group;
+      const on = sec.dataset.group === group && sec.dataset.page === currentPage;
       sec.classList.toggle('active', on);
-      if (on) { sec.style.setProperty('--sec-i', n++); sec.querySelectorAll(':scope > .sheet-stack > *, :scope > * > .glass-card, :scope > .hero-metrics, :scope > .sheet-stack > .rn-card').forEach((c, i) => c.style.setProperty('--i', Math.min(i, 9))); }
+      if (on) {
+        sec.querySelectorAll(':scope > .sheet-stack > *, :scope > * > .glass-card, :scope > .hero-metrics, :scope > .sheet-stack > .rn-card')
+          .forEach((c, i) => c.style.setProperty('--i', Math.min(i, 9)));
+      }
     });
     if ($('screen-title')) $('screen-title').textContent = GROUP_TITLES[group];
-    document.getElementById('dashboard-view')?.classList.toggle('on-home', group === 'vitals');
+    document.getElementById('dashboard-view')?.classList.toggle('on-home', group === 'vitals' && currentPage === 'chart');
     document.getElementById('flame-badge')?.classList.toggle('hidden', group !== 'vitals');
     const bleBtn = document.getElementById('ble-dash-btn');
     if (bleBtn) { bleBtn.classList.remove('hidden'); bleBtn.style.display = 'inline-flex'; }
@@ -2216,6 +2236,7 @@
     countUpAll();
   }
   window.kestrelGoto = goToGroup;
+  window.kestrelShowPage = showPage;
 
   // Count-up animation for the big numbers whenever they change.
   function countUpAll() {
