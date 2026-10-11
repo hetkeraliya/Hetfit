@@ -195,13 +195,14 @@
     candidates.sort((a,b) => b.rows - a.rows || b.brand - a.brand);
     return candidates[0] || null;
   }
+  // Raw activity kinds written by Gadgetbridge:
+  //   Mi Band 5 / Amazfit Band 5 (HUAMI_EXTENDED_ACTIVITY_SAMPLE): 120 sleep, 121 deep, 122 REM, 115 not worn, 118 charging, 64 running
+  //   Mi Band 2-4 / Bip / GTS (MI_BAND / HUAMI_ACTIVITY_SAMPLE):   9 light sleep, 11 deep sleep, 3 not worn, 6 charging
+  // The old check used bit masks, which counted "not worn" (115) and "charging" (118) as sleep and ignored light sleep (9).
   function isSleepKind(kind) {
     const k = Number(kind);
     if (!Number.isFinite(k)) return false;
-    const legacySleep = k===2 || k===4 || k===5 || k===6;
-    const huamiSleep = (k>=112 && k<=123) || k===240 || k===249 || k===250;
-    const activityKindSleep = (k & 0x00000002) || (k & 0x00000004) || (k & 0x01000000);
-    return legacySleep || huamiSleep || !!activityKindSleep;
+    return k === 120 || k === 121 || k === 122 || k === 9 || k === 11;
   }
   function isSleepStageValue(value) {
     if (value == null || value === '') return false;
@@ -958,6 +959,8 @@
     renderToday(index); renderDevices(); renderDayRow(); renderChart(); renderHourly(); renderPills(); renderRecords(index); renderWorkouts(); renderNote(); renderScore(); renderAuraUI();
     insightText.textContent = insightFor(state.series);
     try { renderStrain(); renderMuscleMap(); renderJournal(); renderCorrelations(); renderBadges(); } catch (err) { console.error('phase 1/2 render failed', err); }
+    try { document.dispatchEvent(new CustomEvent('kestrel:data')); } catch (e) {}
+    try { countUpAll(); } catch (e) {}
   }
 
   function renderToday(index) {
@@ -2132,44 +2135,114 @@
     setTimeout(()=>URL.revokeObjectURL(a.href),500);
   }
 
-  // ---------------- Tab navigation between pages ----------------
+  // ---------------- Tab navigation: 5 grouped pages ----------------
+  // Vitals (steps / heart / calories / sleep) · Wellness (scores, strain, PAI, mood, journal)
+  // Activity (run + workouts) · Plan · Settings (band, alarms, notifications, backup)
+  const GROUP_TITLES = { vitals: 'Vitals', wellness: 'Wellness', activity: 'Activity', plan: 'Plan', settings: 'Settings' };
+  const GROUP_ORDER = ['vitals', 'wellness', 'activity', 'plan', 'settings'];
+  let currentGroup = 'vitals';
   const tabStrip = $('tab-strip');
+
+  function moveTabIndicator() {
+    const ind = $('tab-indicator'), act = tabStrip && tabStrip.querySelector('.tab-strip-btn.active');
+    if (!ind || !act) return;
+    ind.style.width = act.offsetWidth + 'px';
+    ind.style.transform = 'translateX(' + act.offsetLeft + 'px)';
+    ind.classList.add('ready');
+  }
+  window.addEventListener('resize', moveTabIndicator);
+
+  function buildChips(group) {
+    const bar = $('group-chips'); if (!bar) return;
+    const secs = Array.from(document.querySelectorAll('.tab-page[data-group="' + group + '"]'));
+    bar.innerHTML = '';
+    bar.classList.toggle('hidden', secs.length < 2);
+    secs.forEach((sec, i) => {
+      const chip = document.createElement('button');
+      chip.type = 'button'; chip.className = 'chip' + (i === 0 ? ' active' : '');
+      chip.innerHTML = sec.dataset.label || sec.dataset.page; chip.dataset.page = sec.dataset.page;
+      chip.addEventListener('click', () => {
+        const y = sec.getBoundingClientRect().top + window.scrollY - (bar.offsetHeight + 8);
+        window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
+      });
+      bar.appendChild(chip);
+    });
+  }
+  function syncChips() {
+    const bar = $('group-chips'); if (!bar || bar.classList.contains('hidden')) return;
+    const secs = Array.from(document.querySelectorAll('.tab-page.active'));
+    let cur = secs[0];
+    secs.forEach((sec) => { if (sec.getBoundingClientRect().top <= bar.offsetHeight + 40) cur = sec; });
+    bar.querySelectorAll('.chip').forEach((c) => {
+      const on = cur && c.dataset.page === cur.dataset.page;
+      if (on && !c.classList.contains('active')) c.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+      c.classList.toggle('active', !!on);
+    });
+  }
+  let chipRaf = 0;
+  window.addEventListener('scroll', () => { if (chipRaf) return; chipRaf = requestAnimationFrame(() => { chipRaf = 0; syncChips(); }); }, { passive: true });
+
+  function renderGroup(group) {
+    try {
+      if (group === 'vitals') { renderDayRow(); renderChart(); renderToday(visibleDays()); renderHourly(); }
+      else if (group === 'wellness') { renderStrain(); renderBadges(); renderCorrelations(); renderNote(); }
+      else if (group === 'activity') { renderWorkouts(); renderMuscleMap(); renderRecords(visibleDays()); }
+    } catch (err) { console.warn('[renderGroup]', group, err); }
+    try { document.dispatchEvent(new CustomEvent('kestrel:group', { detail: group })); } catch (e) {}
+  }
+
+  function goToGroup(group, silent) {
+    if (!GROUP_TITLES[group]) group = 'vitals';
+    const dir = GROUP_ORDER.indexOf(group) >= GROUP_ORDER.indexOf(currentGroup) ? 'fwd' : 'back';
+    const pagesEl = document.querySelector('.tab-pages');
+    if (pagesEl) { pagesEl.classList.remove('dir-fwd', 'dir-back'); void pagesEl.offsetWidth; pagesEl.classList.add('dir-' + dir); }
+    currentGroup = group;
+    document.querySelectorAll('.tab-strip-btn').forEach((b) => b.classList.toggle('active', b.dataset.group === group));
+    let n = 0;
+    document.querySelectorAll('.tab-page').forEach((sec) => {
+      const on = sec.dataset.group === group;
+      sec.classList.toggle('active', on);
+      if (on) { sec.style.setProperty('--sec-i', n++); sec.querySelectorAll(':scope > .sheet-stack > *, :scope > * > .glass-card, :scope > .hero-metrics, :scope > .sheet-stack > .rn-card').forEach((c, i) => c.style.setProperty('--i', Math.min(i, 9))); }
+    });
+    if ($('screen-title')) $('screen-title').textContent = GROUP_TITLES[group];
+    document.getElementById('dashboard-view')?.classList.toggle('on-home', group === 'vitals');
+    document.getElementById('flame-badge')?.classList.toggle('hidden', group !== 'vitals');
+    const bleBtn = document.getElementById('ble-dash-btn');
+    if (bleBtn) { bleBtn.classList.remove('hidden'); bleBtn.style.display = 'inline-flex'; }
+    buildChips(group);
+    moveTabIndicator();
+    if (!silent) window.scrollTo({ top: 0, behavior: 'auto' });
+    renderGroup(group);
+    countUpAll();
+  }
+  window.kestrelGoto = goToGroup;
+
+  // Count-up animation for the big numbers whenever they change.
+  function countUpAll() {
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    document.querySelectorAll('.tab-page.active .metric-big, .tab-page.active .today-steps, .tab-page.active .score-value').forEach((el) => {
+      const txt = (el.textContent || '').trim();
+      if (!/^\d[\d,]*(\.\d+)?$/.test(txt)) return;
+      const end = parseFloat(txt.replace(/,/g, '')), dec = (txt.split('.')[1] || '').length, comma = txt.indexOf(',') >= 0;
+      if (!isFinite(end) || end === 0 || el._cu === txt) return;
+      el._cu = txt;
+      const t0 = performance.now(), dur = 650;
+      const step = (t) => {
+        const p = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - p, 3), v = end * e;
+        el.textContent = comma ? Math.round(v).toLocaleString('en-US') : v.toFixed(dec);
+        if (p < 1) requestAnimationFrame(step); else el.textContent = txt;
+      };
+      requestAnimationFrame(step);
+    });
+  }
+
   if (tabStrip) {
     tabStrip.addEventListener('click', (e) => {
       const btn = e.target.closest('.tab-strip-btn');
       if (!btn) return;
-      const page = btn.dataset.page;
-      document.querySelectorAll('.tab-strip-btn').forEach((b) => b.classList.toggle('active', b === btn));
-      document.querySelectorAll('.tab-page').forEach((sec) => {
-        sec.classList.toggle('active', sec.dataset.page === page);
-      });
-      const titles = { chart: 'Home', vitals: 'Health', body: 'Body', journal: 'Journal', run: 'Run', more: 'More' };
-      if ($('screen-title')) $('screen-title').textContent = titles[page] || 'Home';
-      document.getElementById('dashboard-view')?.classList.toggle('on-home', page === 'chart');
-      document.getElementById('flame-badge')?.classList.toggle('hidden', page !== 'chart');
-      
-      // Keep BLE connect button accessible
-      const bleBtn = document.getElementById('ble-dash-btn');
-      if (bleBtn) {
-        bleBtn.classList.remove('hidden');
-        bleBtn.style.display = 'inline-flex';
-      }
-
-      // Re-render tab specific data
-      if (page === 'body') {
-        renderWorkouts();
-        renderMuscleMap();
-        renderRecords(visibleDays());
-      } else if (page === 'vitals') {
-        renderToday(visibleDays());
-        renderHourly();
-      } else if (page === 'chart') {
-        renderDayRow();
-        renderChart();
-      } else if (page === 'journal') {
-        renderNote();
-      }
+      goToGroup(btn.dataset.group);
     });
+    setTimeout(() => { buildChips('vitals'); moveTabIndicator(); }, 60);
   }
 
   gbFileInput.addEventListener('change', () => { const f=gbFileInput.files[0]; fileLabel.textContent=f?f.name:'Choose zip or database'; gbStatus.textContent=''; });
