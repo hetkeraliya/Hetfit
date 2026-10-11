@@ -12,7 +12,10 @@ import android.bluetooth.BluetoothProfile
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.location.LocationManager
 import android.os.Build
@@ -485,16 +488,49 @@ class MiBandManager(private val context: Context) {
       Log.w(TAG, "Gatt close error: ${e.message}")
     }
 
-    // Trigger Android system pairing if not already bonded
+    authTrace = ""
+    limitedMode = false
+    // Like Gadgetbridge: finish Android pairing FIRST, then open the GATT link. Doing both at once made the band drop
+    // or ignore the authentication step.
     if (device.bondState != BluetoothDevice.BOND_BONDED) {
+      trace("pairing")
+      var started = false
+      lateinit var receiver: BroadcastReceiver
+      val go = {
+        if (!started) {
+          started = true
+          try { context.unregisterReceiver(receiver) } catch (_: Exception) {}
+          trace("bond=" + device.bondState)
+          handler.post { startGatt(device) }
+        }
+      }
+      receiver = object : BroadcastReceiver() {
+        @Suppress("DEPRECATION")
+        override fun onReceive(c: Context?, i: Intent?) {
+          val d = i?.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
+          if (d?.address != device.address) return
+          val st = i?.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, -1) ?: -1
+          val prev = i?.getIntExtra(BluetoothDevice.EXTRA_PREVIOUS_BOND_STATE, -1) ?: -1
+          if (st == BluetoothDevice.BOND_BONDED || (st == BluetoothDevice.BOND_NONE && prev == BluetoothDevice.BOND_BONDING)) go()
+        }
+      }
       try {
-        device.createBond()
+        context.registerReceiver(receiver, IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED))
+        val ok = device.createBond()
+        if (!ok) go() else handler.postDelayed({ go() }, 30_000)
       } catch (e: Exception) {
         Log.w(TAG, "createBond exception: ${e.message}")
+        go()
       }
+    } else {
+      startGatt(device)
     }
+  }
 
-    // Connect with TRANSPORT_LE
+  @SuppressLint("MissingPermission")
+  private fun startGatt(device: BluetoothDevice) {
+    if (userDisconnected) return
+    try { bluetoothGatt?.close() } catch (_: Exception) {}
     bluetoothGatt = device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
   }
 
@@ -602,6 +638,7 @@ class MiBandManager(private val context: Context) {
       }
 
       Log.d(TAG, "Services discovered. Checking authentication & sensor services...")
+      trace("services")
       val authService = gatt.getService(AUTH_SERVICE_UUID)
       val authChar = authService?.getCharacteristic(AUTH_CHAR_UUID)
 
@@ -646,6 +683,7 @@ class MiBandManager(private val context: Context) {
       status: Int
     ) {
       Log.d(TAG, "onDescriptorWrite uuid: ${descriptor?.uuid} status: $status")
+      if (descriptor?.characteristic?.uuid == AUTH_CHAR_UUID) trace("cccd=$status")
       completeGattOperation()
 
       if (descriptor?.characteristic?.uuid == AUTH_CHAR_UUID && gatt != null) {
@@ -754,6 +792,12 @@ class MiBandManager(private val context: Context) {
   private var authTriedAltByte = false
   /** Gadgetbridge only sends the key while pairing; on a normal reconnect it goes straight to "request random number". */
   private var authUseKeyFirst = false
+  @Volatile private var authTrace = ""
+  @Volatile private var limitedMode = false
+  private fun trace(msg: String) {
+    authTrace = (if (authTrace.isEmpty()) msg else "$authTrace > $msg").takeLast(170)
+    Log.d(TAG, "auth trace: $authTrace")
+  }
   private var authFlowId = 0
   private var gattOpToken = 0
 
@@ -775,6 +819,7 @@ class MiBandManager(private val context: Context) {
     packet[1] = authByte
     System.arraycopy(keyBytes, 0, packet, 2, 16)
     Log.d(TAG, "Auth step 1: send key (byte=0x%02x)".format(authByte))
+    trace("sent-key")
     enqueueGatt {
       authChar.value = packet
       authChar.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
@@ -793,6 +838,7 @@ class MiBandManager(private val context: Context) {
   @SuppressLint("MissingPermission")
   private fun requestRandomNumber(gatt: BluetoothGatt, authChar: BluetoothGattCharacteristic) {
     Log.d(TAG, "Auth step 2: request random (byte=0x%02x)".format(authByte))
+    trace("sent-random")
     enqueueGatt {
       authChar.value = byteArrayOf(0x02, authByte)
       authChar.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
@@ -811,6 +857,7 @@ class MiBandManager(private val context: Context) {
     val opCode = value[1].toInt() and 0xFF
     val status = value[2].toInt() and 0xFF
     Log.d(TAG, "Auth notify: op=0x%02x status=0x%02x len=%d".format(opCode, status, value.size))
+    trace("reply %02x/%02x".format(opCode, status))
 
     when (opCode) {
       0x01 -> {
@@ -910,7 +957,14 @@ class MiBandManager(private val context: Context) {
         sendAuthKey(gatt, ch)
         armAuthWatchdog(gatt)
       } else {
-        failAuth(gatt, "The band did not answer the authentication request. Close Zepp / Gadgetbridge (the band talks to one app at a time), switch phone Bluetooth off and on, wake the band, then connect again.")
+        // Keep the link instead of dropping it: live heart-rate / steps / battery still work on many firmwares.
+        trace("no-reply")
+        limitedMode = true
+        _uiState.value = _uiState.value.copy(
+          status = ConnectionStatus.CONNECTED,
+          errorMessage = "Band did not answer authentication, so history sync is off (live mode only). Force-stop Zepp / Gadgetbridge, forget the band in Android Bluetooth settings, then Connect / pair again."
+        )
+        subscribeToSensors(gatt)
       }
     }, 8000)
   }
@@ -944,7 +998,7 @@ class MiBandManager(private val context: Context) {
     handler.postDelayed({ applyBandSettings() }, 9000)
     // Pull the band's stored history as soon as the link is usable (like Gadgetbridge does on connect).
     handler.postDelayed({
-      if (_uiState.value.status == ConnectionStatus.CONNECTED && !fetcher.running) syncNow()
+      if (_uiState.value.status == ConnectionStatus.CONNECTED && !limitedMode && !fetcher.running) syncNow()
     }, 3000)
     // 1. Subscribe to Steps / Activity
     val activityService = gatt.getService(ACTIVITY_SERVICE_UUID)
@@ -1124,7 +1178,7 @@ class MiBandManager(private val context: Context) {
     val o = org.json.JSONObject()
     o.put("status", st.status.name); o.put("battery", st.batteryPercent); o.put("hr", st.liveHeartRate)
     o.put("lastSync", st.lastSyncMillis); o.put("syncing", st.syncing); o.put("percent", st.syncPercent)
-    o.put("message", st.syncMessage ?: ""); o.put("error", st.errorMessage ?: ""); o.put("ack", lastAck ?: "")
+    o.put("message", st.syncMessage ?: ""); o.put("error", st.errorMessage ?: ""); o.put("ack", lastAck ?: ""); o.put("trace", authTrace); o.put("limited", limitedMode)
     return o.toString()
   }
 
