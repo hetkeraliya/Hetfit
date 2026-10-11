@@ -76,6 +76,8 @@
       <button class="tab-strip-btn" data-page="body">Body</button>
       <button class="tab-strip-btn" data-page="journal">Journal</button>
       <button class="tab-strip-btn" data-page="plan">Plan</button>
+      <button class="tab-strip-btn" data-page="run">Run</button>
+      <button class="tab-strip-btn" data-page="ai">AI</button>
     </nav>
 
     <div class="tab-pages">
@@ -94,7 +96,12 @@
             <span class="today-steps" id="today-steps">–</span>
             <span class="today-sub" id="today-sub">steps</span>
           </div>
-          <div class="home-track-wrap">
+          
+          <div id="sleep-summary-card" class="sleep-summary-card glass-card" style="margin:12px 0;padding:16px;border-radius:18px;">
+            <div class="sleep-empty">Sleep will appear here after night sync</div>
+          </div>
+
+        <div class="home-track-wrap">
             <span class="on-track-pill" id="on-track-label">On Track</span>
             <svg id="home-steps-svg" viewBox="0 0 320 88" class="home-steps-svg" aria-hidden="true">
               <path id="home-steps-path" class="home-line" fill="none" />
