@@ -247,8 +247,12 @@ class RunTrackingService : Service(), LocationListener {
         MiBandManager.get(this).bandRunStarted(label, bandType = bandTypeFor(type))
       } catch (_: Exception) { }
     } else {
-      // Keep continuous HR streaming while we mirror the band session.
-      try { MiBandManager.get(this).bandRunKeepAlive() } catch (_: Exception) { }
+      // Band already opened the workout; keep HR on and tell the band phone GPS is searching.
+      try {
+        MiBandManager.get(this).bandRunKeepAlive()
+        MiBandManager.get(this).sendPhoneGps(status = 0x02, location = null)
+        gpsSearchingSent = true
+      } catch (_: Exception) { }
     }
   }
 
@@ -293,11 +297,19 @@ class RunTrackingService : Service(), LocationListener {
   }
 
   // ---- GPS ----
-  // Strict filters so standing still does not invent distance (common phone GPS drift).
+  // Share every usable fix with the band (Gadgetbridge / Zepp / Mi Fit style).
+  // Distance on the phone still uses stricter filters so idle drift is not counted.
   override fun onLocationChanged(loc: Location) {
     if (!running || paused) return
     accuracy = if (loc.hasAccuracy()) loc.accuracy else -1f
-    // Reject weak fixes hard (was 30 m — still let a lot of indoor drift through).
+
+    // Always stream to the band when we have coordinates — band UI needs live speed/position
+    // even before the phone accepts a fix for distance. Matches Gadgetbridge 1 Hz GPS service.
+    if (loc.latitude != 0.0 || loc.longitude != 0.0) {
+      streamGpsToBand(loc)
+    }
+
+    // Phone-side distance filters (do not invent movement while standing still).
     if (!loc.hasAccuracy() || loc.accuracy > 18f) {
       consecutiveGoodFixes = 0
       return
@@ -307,12 +319,10 @@ class RunTrackingService : Service(), LocationListener {
       lastLoc = loc
       consecutiveGoodFixes = 1
       addPoint(loc)
-      maybeSendGpsToBand(loc, first = true)
       return
     }
     val dt = (loc.time - last.time) / 1000.0
     if (dt <= 0.0 || dt > 30.0) {
-      // Large time gap — reset consecutive chain, keep last fix as anchor.
       lastLoc = loc
       consecutiveGoodFixes = 1
       return
@@ -320,16 +330,14 @@ class RunTrackingService : Service(), LocationListener {
     val d = last.distanceTo(loc).toDouble()
     val v = d / dt
     val maxV = when (type) { 4 -> 22.0; 3 -> 4.5; else -> 8.5 }
-    val minV = when (type) { 4 -> 1.2; 3 -> 0.7; else -> 0.9 }  // m/s — must actually be moving
-    val minD = when (type) { 4 -> 6.0; else -> 5.0 }             // metres between fixes
-    if (v > maxV) { consecutiveGoodFixes = 0; return }           // teleport / glitch
+    val minV = when (type) { 4 -> 1.2; 3 -> 0.7; else -> 0.9 }
+    val minD = when (type) { 4 -> 6.0; else -> 5.0 }
+    if (v > maxV) { consecutiveGoodFixes = 0; return }
     if (d < minD || v < minV) {
-      // Stationary or tiny jitter — do NOT add distance, keep lastLoc as anchor.
       consecutiveGoodFixes = 0
       return
     }
     consecutiveGoodFixes++
-    // Need a short streak of real movement before counting (stops "GPS starts when idle").
     if (consecutiveGoodFixes < 3) {
       lastLoc = loc
       return
@@ -338,20 +346,25 @@ class RunTrackingService : Service(), LocationListener {
     lastLoc = loc
     lastMoveMs = System.currentTimeMillis()
     addPoint(loc)
-    maybeSendGpsToBand(loc, first = false)
   }
 
-  private fun maybeSendGpsToBand(loc: Location, first: Boolean) {
+  /**
+   * Push phone GPS to the band every ~1 s (Gadgetbridge onSetGpsLocation).
+   * Re-sends ACQUIRED if the last packet was > 5 s ago so the band knows the lock is back.
+   */
+  private fun streamGpsToBand(loc: Location) {
     val now = System.currentTimeMillis()
-    if (!first && now - lastGpsSentToBandMs < 1000) return
+    if (now - lastGpsSentToBandMs < 900) return
     lastGpsSentToBandMs = now
     try {
       val mgr = MiBandManager.get(this)
       if (!gpsSearchingSent) {
-        mgr.sendPhoneGps(status = 0x02, location = null) // SEARCHING
+        // Status-only SEARCHING — band shows “getting GPS…”
+        mgr.sendPhoneGps(status = 0x02, location = null)
         gpsSearchingSent = true
       }
-      mgr.sendPhoneGps(status = if (first) 0x01 else null, location = loc) // ACQUIRED on first good fix
+      val status = if (mgr.needsGpsAcquiredFlag()) 0x01 else null // ACQUIRED after gap
+      mgr.sendPhoneGps(status = status, location = loc)
     } catch (_: Exception) { }
   }
 
