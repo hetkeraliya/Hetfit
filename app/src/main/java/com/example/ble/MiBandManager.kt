@@ -54,6 +54,17 @@ val CLIENT_CONFIG_DESCRIPTOR_UUID: UUID = UUID.fromString("00002902-0000-1000-80
 val DEVICE_EVENT_CHAR_UUID: UUID = UUID.fromString("00000010-0000-3512-2118-0009af100700")
 val WORKOUT_CHAR_UUID: UUID = UUID.fromString("0000000f-0000-3512-2118-0009af100700")
 
+/** Bluetooth SIG Immediate Alert (find device / vibrate). */
+val IMMEDIATE_ALERT_SERVICE_UUID: UUID = UUID.fromString("00001802-0000-1000-8000-00805f9b34fb")
+val ALERT_LEVEL_CHAR_UUID: UUID = UUID.fromString("00002a06-0000-1000-8000-00805f9b34fb")
+
+/** Bluetooth SIG Current Time Service (sync phone clock to band). */
+val CURRENT_TIME_SERVICE_UUID: UUID = UUID.fromString("00001805-0000-1000-8000-00805f9b34fb")
+val CURRENT_TIME_CHAR_UUID: UUID = UUID.fromString("00002a2b-0000-1000-8000-00805f9b34fb")
+
+/** Huami user-settings characteristic (step goal, user info). */
+val USER_SETTINGS_CHAR_UUID: UUID = UUID.fromString("00000008-0000-3512-2118-0009af100700")
+
 enum class ConnectionStatus {
   DISCONNECTED,
   SCANNING,
@@ -778,6 +789,8 @@ class MiBandManager(private val context: Context) {
       listOf(configCharUuid, DEVICE_EVENT_CHAR_UUID, WORKOUT_CHAR_UUID).forEach { u -> svc.getCharacteristic(u)?.let { gattIo.setNotify(it, true) } }
     }
     gatt.getService(HR_SERVICE_UUID)?.getCharacteristic(HR_CONTROL_POINT_CHAR_UUID)?.let { gattIo.setNotify(it, true) }
+    // Align band clock with the phone as soon as the link is ready (Gadgetbridge onSetTime).
+    handler.postDelayed({ if (linkReady()) try { syncTimeToBand() } catch (_: Exception) {} }, 900)
     // Apply stored alarms / heart-rate settings once those subscriptions are in place, and retry once for slow bands.
     handler.postDelayed({ applyBandSettings() }, 2500)
     handler.postDelayed({ applyBandSettings() }, 9000)
@@ -974,6 +987,213 @@ class MiBandManager(private val context: Context) {
     writeHrControl(byteArrayOf(0x15, 0x02, 0x01))
     handler.postDelayed({ if (linkReady()) writeHrControl(byteArrayOf(0x15, 0x02, 0x00)) }, 30_000)
     return "Measuring… keep the band snug for about 20 seconds"
+  }
+
+  // ---------------- Gadgetbridge-style band features ----------------
+
+  private var findDeviceStop: Runnable? = null
+
+  /**
+   * Find band — vibrate repeatedly (Huami ALERT_LEVEL = 3), same as Gadgetbridge onFindDevice.
+   * Stops automatically after ~12 s, or call [stopFindBand].
+   */
+  fun findBand(start: Boolean = true): String {
+    if (!linkReady()) return "Connect the band first"
+    findDeviceStop?.let { handler.removeCallbacks(it) }
+    findDeviceStop = null
+    val gatt = bluetoothGatt ?: return "Not connected"
+    val ch = gatt.getService(IMMEDIATE_ALERT_SERVICE_UUID)?.getCharacteristic(ALERT_LEVEL_CHAR_UUID)
+      ?: gatt.getService(ACTIVITY_SERVICE_UUID)?.getCharacteristic(ALERT_LEVEL_CHAR_UUID)
+    if (ch == null) {
+      // Fallback: short vibration via config endpoint (0x03 style pulse)
+      writeConfig(byteArrayOf(0x03, 0x01, 0x00))
+      return if (start) "Buzz sent" else "Stopped"
+    }
+    fun writeLevel(level: Int) {
+      ch.value = byteArrayOf(level.toByte())
+      ch.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+      enqueueGatt {
+        try { gatt.writeCharacteristic(ch) } catch (_: Exception) {}
+        handler.postDelayed({ completeGattOperation() }, 80)
+      }
+    }
+    if (!start) {
+      writeLevel(0)
+      return "Find stopped"
+    }
+    writeLevel(3) // continuous high alert
+    // Re-trigger every 2.5 s for ~12 s (Mi Fit / Gadgetbridge style)
+    var pulses = 0
+    val loop = object : Runnable {
+      override fun run() {
+        if (!linkReady() || pulses >= 4) {
+          writeLevel(0)
+          findDeviceStop = null
+          return
+        }
+        pulses++
+        writeLevel(3)
+        handler.postDelayed(this, 2500)
+      }
+    }
+    findDeviceStop = loop
+    handler.postDelayed(loop, 2500)
+    handler.postDelayed({ stopFindBand() }, 12_000)
+    return "Finding band — it should vibrate"
+  }
+
+  fun stopFindBand(): String {
+    findDeviceStop?.let { handler.removeCallbacks(it) }
+    findDeviceStop = null
+    return findBand(false)
+  }
+
+  /** Sync phone date/time to the band (Gadgetbridge onSetTime / Current Time Service). */
+  fun syncTimeToBand(): String {
+    if (!linkReady()) return "Connect the band first"
+    val gatt = bluetoothGatt ?: return "Not connected"
+    val ch = gatt.getService(CURRENT_TIME_SERVICE_UUID)?.getCharacteristic(CURRENT_TIME_CHAR_UUID)
+    val cal = java.util.Calendar.getInstance()
+    val year = cal.get(java.util.Calendar.YEAR)
+    val payload = byteArrayOf(
+      (year and 0xFF).toByte(), ((year shr 8) and 0xFF).toByte(),
+      (cal.get(java.util.Calendar.MONTH) + 1).toByte(),
+      cal.get(java.util.Calendar.DAY_OF_MONTH).toByte(),
+      cal.get(java.util.Calendar.HOUR_OF_DAY).toByte(),
+      cal.get(java.util.Calendar.MINUTE).toByte(),
+      cal.get(java.util.Calendar.SECOND).toByte(),
+      (cal.get(java.util.Calendar.DAY_OF_WEEK) - 1).toByte(), // 0=Sun in BLE CTS
+      0, // fractions256
+      0  // adjust reason
+    )
+    if (ch != null) {
+      ch.value = payload
+      ch.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+      enqueueGatt {
+        try { gatt.writeCharacteristic(ch) } catch (_: Exception) {}
+        handler.postDelayed({ completeGattOperation() }, 120)
+      }
+    }
+    // Also push via Huami config endpoint used by some firmwares
+    writeConfig(byteArrayOf(
+      0x0a,
+      (year and 0xFF).toByte(), ((year shr 8) and 0xFF).toByte(),
+      (cal.get(java.util.Calendar.MONTH) + 1).toByte(),
+      cal.get(java.util.Calendar.DAY_OF_MONTH).toByte(),
+      cal.get(java.util.Calendar.HOUR_OF_DAY).toByte(),
+      cal.get(java.util.Calendar.MINUTE).toByte(),
+      cal.get(java.util.Calendar.SECOND).toByte(),
+      0x00, 0x00
+    ))
+    lastAck = "Time synced"
+    return "Phone time sent to band"
+  }
+
+  /** Step goal (Gadgetbridge goal) — written to user-settings char. */
+  fun setStepGoal(steps: Int): String {
+    if (!linkReady()) return "Connect the band first"
+    val goal = steps.coerceIn(1000, 100_000)
+    val gatt = bluetoothGatt ?: return "Not connected"
+    val ch = gatt.getService(ACTIVITY_SERVICE_UUID)?.getCharacteristic(USER_SETTINGS_CHAR_UUID)
+    // Huami: [0x10, goal LE u16, 0x00, 0x00] style goal packet used by GB
+    val goalBytes = byteArrayOf(
+      0x10, (goal and 0xFF).toByte(), ((goal shr 8) and 0xFF).toByte(), 0x00, 0x00
+    )
+    if (ch != null) {
+      ch.value = goalBytes
+      ch.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+      enqueueGatt {
+        try { gatt.writeCharacteristic(ch) } catch (_: Exception) {}
+        handler.postDelayed({ completeGattOperation() }, 120)
+      }
+    }
+    writeConfig(byteArrayOf(0x03, 0x00, (goal and 0xFF).toByte(), ((goal shr 8) and 0xFF).toByte()))
+    lastAck = "Step goal $goal"
+    return "Step goal set to $goal"
+  }
+
+  /**
+   * Incoming / ended call alert (Gadgetbridge onSetCallState).
+   * category 3 = IncomingCall. alert level 2 = phone call vibration pattern.
+   */
+  fun sendCallAlert(nameOrNumber: String, ringing: Boolean): Boolean {
+    if (!linkReady()) return false
+    if (ringing) {
+      sendBandNotification(nameOrNumber.ifBlank { "Incoming call" }, "Calling…", iconId = -1, category = 3)
+      // Also pulse alert level for phone-call vibration pattern
+      val gatt = bluetoothGatt ?: return true
+      val ch = gatt.getService(IMMEDIATE_ALERT_SERVICE_UUID)?.getCharacteristic(ALERT_LEVEL_CHAR_UUID) ?: return true
+      ch.value = byteArrayOf(2) // ALERT_LEVEL_PHONE_CALL
+      ch.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+      enqueueGatt {
+        try { gatt.writeCharacteristic(ch) } catch (_: Exception) {}
+        handler.postDelayed({ completeGattOperation() }, 60)
+      }
+    } else {
+      // Stop call vibration
+      val gatt = bluetoothGatt ?: return true
+      val ch = gatt.getService(IMMEDIATE_ALERT_SERVICE_UUID)?.getCharacteristic(ALERT_LEVEL_CHAR_UUID)
+      if (ch != null) {
+        ch.value = byteArrayOf(0)
+        ch.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+        enqueueGatt {
+          try { gatt.writeCharacteristic(ch) } catch (_: Exception) {}
+          handler.postDelayed({ completeGattOperation() }, 60)
+        }
+      }
+    }
+    return true
+  }
+
+  /**
+   * Weather snapshot for the band (Gadgetbridge onSendWeather, chunked type 1).
+   * temps in °C; condition: 0 clear, 1 clouds, 2 rain, 3 snow, 4 haze, 5 wind, 6 thunder.
+   */
+  fun sendWeather(
+    city: String,
+    tempC: Int,
+    condition: Int,
+    humidity: Int = 50,
+    windMs: Int = 0,
+    maxC: Int = tempC + 2,
+    minC: Int = tempC - 2
+  ): String {
+    if (!linkReady()) return "Connect the band first"
+    val ch = fee0Char(chunkedCharUuid) ?: return "Band not ready"
+    val name = city.toByteArray(Charsets.UTF_8).let { if (it.size > 16) it.copyOf(16) else it }
+    // Compact Huami weather payload used by older GB path (type 1)
+    val buf = java.nio.ByteBuffer.allocate(20 + name.size).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+    buf.put(0x08.toByte()) // weather subcommand variant
+    buf.put(condition.coerceIn(0, 6).toByte())
+    buf.put(tempC.toByte())
+    buf.put(maxC.toByte())
+    buf.put(minC.toByte())
+    buf.put(humidity.coerceIn(0, 100).toByte())
+    buf.put(windMs.coerceIn(0, 50).toByte())
+    buf.put(0) // aqi placeholder
+    buf.putInt((System.currentTimeMillis() / 1000).toInt())
+    buf.put(name.size.toByte())
+    buf.put(name)
+    writeChunked(ch, 1, buf.array())
+    lastAck = "Weather sent ($tempC°C)"
+    return "Weather sent to band: $tempC°C, $city"
+  }
+
+  /** Enable / disable continuous realtime steps notifications (already on by default after connect). */
+  fun setRealtimeSteps(enable: Boolean): String {
+    if (!linkReady()) return "Connect the band first"
+    val gatt = bluetoothGatt ?: return "Not connected"
+    val ch = gatt.getService(ACTIVITY_SERVICE_UUID)?.getCharacteristic(STEPS_CHAR_UUID) ?: return "No steps char"
+    gatt.setCharacteristicNotification(ch, enable)
+    val desc = ch.getDescriptor(CLIENT_CONFIG_DESCRIPTOR_UUID)
+    if (desc != null) {
+      desc.value = if (enable) BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE else BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE
+      enqueueGatt {
+        try { gatt.writeDescriptor(desc) } catch (_: Exception) {}
+        handler.postDelayed({ completeGattOperation() }, 100)
+      }
+    }
+    return if (enable) "Live steps on" else "Live steps off"
   }
 
   private fun settingFlag(key: String, def: Boolean): Boolean =
@@ -1232,6 +1452,27 @@ class MiBandManager(private val context: Context) {
         )
       )
     }
+    // Display / units / DND (Gadgetbridge ENDPOINT_DISPLAY + ENDPOINT_DND)
+    if (s.has("time24h")) writeConfig(if (s.optBoolean("time24h", true)) byteArrayOf(0x06, 0x02, 0x00, 0x01) else byteArrayOf(0x06, 0x02, 0x00, 0x00))
+    if (s.has("dateOnBand")) writeConfig(if (s.optBoolean("dateOnBand", true)) byteArrayOf(0x06, 0x0a, 0x00, 0x03) else byteArrayOf(0x06, 0x0a, 0x00, 0x00))
+    if (s.has("metric")) writeConfig(if (s.optBoolean("metric", true)) byteArrayOf(0x06, 0x03, 0x00, 0x00) else byteArrayOf(0x06, 0x03, 0x00, 0x01))
+    if (s.has("rotateWrist")) writeConfig(byteArrayOf(0x06, 0x0d, 0x00, if (s.optBoolean("rotateWrist")) 0x01 else 0x00))
+    if (s.has("showCaller")) writeConfig(byteArrayOf(0x06, 0x10, 0x00, 0x00, if (s.optBoolean("showCaller", true)) 0x01 else 0x00))
+    if (s.has("disconnectAlert")) writeConfig(
+      if (s.optBoolean("disconnectAlert")) byteArrayOf(0x06, 0x0c, 0x00, 0x01, 0, 0, 0, 0) else byteArrayOf(0x06, 0x0c, 0x00, 0x00, 0, 0, 0, 0)
+    )
+    if (s.has("dnd")) {
+      when (s.optString("dnd", "off")) {
+        "off" -> writeConfig(byteArrayOf(0x09, 0x82.toByte()))
+        "auto" -> writeConfig(byteArrayOf(0x09, 0x83.toByte()))
+        "scheduled" -> writeConfig(byteArrayOf(
+          0x09, 0x81.toByte(),
+          s.optInt("dndStartH", 22).coerceIn(0, 23).toByte(), s.optInt("dndStartM", 0).coerceIn(0, 59).toByte(),
+          s.optInt("dndEndH", 7).coerceIn(0, 23).toByte(), s.optInt("dndEndM", 0).coerceIn(0, 59).toByte()
+        ))
+      }
+    }
+    if (s.has("stepGoal")) try { setStepGoal(s.optInt("stepGoal", 8000)) } catch (_: Exception) {}
     val alarms = s.optJSONArray("alarms")
     if (alarms != null) {
       for (k in 0 until alarms.length()) {
@@ -1239,13 +1480,89 @@ class MiBandManager(private val context: Context) {
         sendAlarm(a.optInt("slot", k).coerceIn(0, 4), a.optBoolean("enabled"), a.optInt("hour", 7).coerceIn(0, 23), a.optInt("minute", 0).coerceIn(0, 59), a.optInt("days", 0))
       }
     }
+    val reminders = s.optJSONArray("reminders")
+    if (reminders != null) {
+      for (k in 0 until minOf(reminders.length(), 8)) {
+        val r = reminders.optJSONObject(k) ?: continue
+        sendReminder(k, r.optBoolean("enabled"), r.optString("text", ""), r.optLong("atMs", 0L), r.optString("repeat", "once"))
+      }
+      for (k in reminders.length() until 8) sendReminder(k, false, "", 0L, "once")
+    }
+  }
+
+  /** Reminder slot — Gadgetbridge sendReminderToDevice (chunked type 2). */
+  fun sendReminder(position: Int, enabled: Boolean, text: String, atMs: Long, repeat: String): String {
+    if (!linkReady()) return "Connect the band first"
+    val ch = fee0Char(chunkedCharUuid) ?: return "Band not ready"
+    val pos = position.coerceIn(0, 7)
+    if (!enabled || text.isBlank() || atMs <= 0L) {
+      writeChunked(ch, 2, byteArrayOf(0x0b, pos.toByte(), 0x08, 0, 0, 0, 0))
+      return "Reminder slot ${pos + 1} cleared"
+    }
+    val msg = text.toByteArray(Charsets.UTF_8).let { if (it.size > 40) it.copyOf(40) else it }
+    val cal = java.util.Calendar.getInstance().apply { timeInMillis = atMs }
+    var eventConfig = 0x01 or 0x08
+    when (repeat) {
+      "daily" -> eventConfig = eventConfig or 0x0fe0
+      "weekly" -> {
+        val dow = (cal.get(java.util.Calendar.DAY_OF_WEEK) + 5) % 7
+        eventConfig = eventConfig or (0x20 shl dow)
+      }
+    }
+    val buf = java.nio.ByteBuffer.allocate(14 + msg.size).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+    buf.put(0x0b.toByte()); buf.put(pos.toByte()); buf.putInt(eventConfig)
+    buf.put((cal.get(java.util.Calendar.YEAR) - 2000).toByte())
+    buf.put((cal.get(java.util.Calendar.MONTH) + 1).toByte())
+    buf.put(cal.get(java.util.Calendar.DAY_OF_MONTH).toByte())
+    buf.put(cal.get(java.util.Calendar.HOUR_OF_DAY).toByte())
+    buf.put(cal.get(java.util.Calendar.MINUTE).toByte())
+    buf.put(cal.get(java.util.Calendar.SECOND).toByte())
+    buf.put(0); buf.put(msg); buf.put(0)
+    writeChunked(ch, 2, buf.array())
+    return "Reminder sent to slot ${pos + 1}"
+  }
+
+  /** Music now-playing — Gadgetbridge encodeMusicState (chunked type 3). */
+  fun sendMusicInfo(artist: String, album: String, track: String, playing: Boolean, positionSec: Int = 0, durationSec: Int = 0): String {
+    if (!linkReady()) return "Connect the band first"
+    val ch = fee0Char(chunkedCharUuid) ?: return "Band not ready"
+    fun trunc(s: String, n: Int) = s.toByteArray(Charsets.UTF_8).let { if (it.size > n) it.copyOf(n) else it }
+    val a = trunc(artist, 60); val b = trunc(album, 60); val t = trunc(track, 60)
+    var flags = 0x01; var length = 5
+    if (a.isNotEmpty()) { flags = flags or 0x02; length += a.size + 1 }
+    if (b.isNotEmpty()) { flags = flags or 0x04; length += b.size + 1 }
+    if (t.isNotEmpty()) { flags = flags or 0x08; length += t.size + 1 }
+    if (durationSec > 0) { flags = flags or 0x10; length += 2 }
+    val buf = java.nio.ByteBuffer.allocate(length).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+    buf.put(flags.toByte()); buf.put(if (playing) 1 else 0); buf.put(0)
+    buf.putShort(positionSec.coerceIn(0, 65535).toShort())
+    if (a.isNotEmpty()) { buf.put(a); buf.put(0) }
+    if (b.isNotEmpty()) { buf.put(b); buf.put(0) }
+    if (t.isNotEmpty()) { buf.put(t); buf.put(0) }
+    if (durationSec > 0) buf.putShort(durationSec.coerceIn(0, 65535).toShort())
+    writeChunked(ch, 3, buf.array())
+    return "Music info sent"
+  }
+
+  fun sendMusicVolume(volume0to100: Int): String {
+    if (!linkReady()) return "Connect the band first"
+    val ch = fee0Char(chunkedCharUuid) ?: return "Band not ready"
+    writeChunked(ch, 3, byteArrayOf(0x40, volume0to100.coerceIn(0, 100).toByte()))
+    return "Volume sent"
+  }
+
+  fun factoryResetDisplay(): String {
+    if (!linkReady()) return "Connect the band first"
+    writeConfig(byteArrayOf(0x06, 0x0b, 0x00, 0x01))
+    return "Display reset command sent"
   }
 
   /**
-   * Shows a notification on the band. Mi Band 4/5 use the chunked characteristic with a Huami "custom" alert
-   * (category 0xFA + icon id) or a plain SMS-style alert. Message is "title\0body".
+   * Shows a notification on the band (Gadgetbridge onNotification).
+   * category: 0xFA custom Huami (default), 3 IncomingCall, 5 SMS, 1 Email.
+   * iconId: Huami icon for custom category; ignored for SMS/Email/Call.
    */
-  fun sendBandNotification(title: String, body: String, iconId: Int = 11): Boolean {
+  fun sendBandNotification(title: String, body: String, iconId: Int = 11, category: Int = 0xFA): Boolean {
     if (!linkReady()) return false
     val ch = fee0Char(chunkedCharUuid) ?: return false
     fun clip(t: String, max: Int): ByteArray {
@@ -1258,32 +1575,20 @@ class MiBandManager(private val context: Context) {
     val msg = ByteArray(titleB.size + 1 + bodyB.size)
     System.arraycopy(titleB, 0, msg, 0, titleB.size)
     System.arraycopy(bodyB, 0, msg, titleB.size + 1, bodyB.size)
-    val app = "\u0000Kestrel\u0000".toByteArray(Charsets.UTF_8)
-    val head = byteArrayOf(0xFA.toByte(), 0, 0, 0, 0, 1, iconId.toByte())
-    val payload = head + msg + app
-    // Same framing as Gadgetbridge writeToChunkedOld: [0, flags | type(0), counter] + up to 17 data bytes.
-    val maxChunk = 17
-    var remaining = payload.size
-    var count = 0
-    while (remaining > 0) {
-      val n = minOf(remaining, maxChunk)
-      var flags = 0
-      if (remaining <= maxChunk) {
-        flags = flags or 0x80
-        if (count == 0) flags = flags or 0x40
-      } else if (count > 0) {
-        flags = flags or 0x40
+    val cat = if (iconId < 0 && category == 0xFA) 3 else category // iconId -1 → treat as call
+    val payload = when (cat) {
+      3, 5, 1 -> {
+        // AlertCategory IncomingCall / SMS / Email — no custom icon byte
+        byteArrayOf(cat.toByte(), 1) + msg + "\u0000 \u0000".toByteArray(Charsets.UTF_8)
       }
-      val chunk = ByteArray(n + 3)
-      chunk[0] = 0
-      chunk[1] = flags.toByte()
-      chunk[2] = (count and 0xFF).toByte()
-      System.arraycopy(payload, count * maxChunk, chunk, 3, n)
-      gattIo.write(ch, chunk)
-      remaining -= n
-      count++
+      else -> {
+        val app = "\u0000Kestrel\u0000".toByteArray(Charsets.UTF_8)
+        val head = byteArrayOf(0xFA.toByte(), 0, 0, 0, 0, 1, iconId.coerceIn(0, 127).toByte())
+        head + msg + app
+      }
     }
-    return count > 0
+    writeChunked(ch, 0, payload)
+    return true
   }
 
   companion object {
