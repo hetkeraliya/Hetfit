@@ -1008,21 +1008,30 @@ class MiBandManager(private val context: Context) {
   }
 
   // ---------------- Phone-started activity -> band ----------------
-  // Huami has no reliable phone→band "open workout screen" command (Gadgetbridge only reacts to
-  // workouts started ON the band). When a run starts in the app we:
-  //  1) switch the band into continuous heart-rate mode (live HR for pace UI),
-  //  2) buzz with a notification that includes current pace/HR at every km,
-  //  3) re-assert continuous HR periodically so firmware that times out keeps streaming.
-  fun bandRunStarted(label: String) {
+  // Official Zepp/Mi Fit can open a workout on the band from the phone; that exact command is not
+  // fully reverse-engineered for Mi Band 5 in Gadgetbridge. We approximate the same experience:
+  //  1) continuous HR on the band
+  //  2) try workout-status START on the workout characteristic
+  //  3) stream phone GPS to the band (Gadgetbridge "Send GPS during workout" format)
+  //  4) km buzz with pace + HR
+  fun bandRunStarted(label: String, bandType: Int = 0x01) {
     mirroredRun = false
     if (!linkReady()) return
-    writeHrControl(byteArrayOf(0x15, 0x01, 0x01))                    // continuous heart rate
+    writeHrControl(byteArrayOf(0x15, 0x01, 0x01))
+    // Best-effort: signal workout start on the workout characteristic (same channel the band uses).
+    try {
+      val ch = fee0Char(WORKOUT_CHAR_UUID)
+      if (ch != null) {
+        gattIo.write(ch, byteArrayOf(0x11, 0x02)) // status Start (as observed band→phone)
+      }
+    } catch (e: Exception) {
+      Log.w(TAG, "Workout start write failed: ${e.message}")
+    }
+    sendPhoneGps(status = 0x02, location = null) // SEARCHING
     if (settingFlag("runBuzz", true)) {
-      // icon 1 ≈ workout / activity style alert on Mi Band 5
-      sendBandNotification("Kestrel", "$label started — live HR on", iconId = 1)
+      sendBandNotification("Kestrel", "$label started — live HR + GPS", iconId = 1)
     }
   }
-  /** Re-assert continuous HR while a phone-side activity is running (call ~every 60–90 s). */
   fun bandRunKeepAlive() {
     if (!linkReady()) return
     writeHrControl(byteArrayOf(0x15, 0x01, 0x01))
@@ -1034,10 +1043,65 @@ class MiBandManager(private val context: Context) {
   }
   fun bandRunFinished(summary: String) {
     if (!linkReady()) return
+    try {
+      fee0Char(WORKOUT_CHAR_UUID)?.let { gattIo.write(it, byteArrayOf(0x11, 0x05)) } // End
+    } catch (_: Exception) { }
     if (settingFlag("runBuzz", true)) sendBandNotification("Kestrel", summary, iconId = 1)
-    // stop continuous HR and restore the user's interval / sleep-HR settings
     writeHrControl(byteArrayOf(0x15, 0x01, 0x00))
     applyBandSettings()
+  }
+
+  /**
+   * Stream phone GPS to the band (Gadgetbridge HuamiSupport.sendPhoneGps / encodePhoneGpsPayload).
+   * status: 0x01 ACQUIRED, 0x02 SEARCHING, 0x04 DISABLED, null = position-only update.
+   */
+  fun sendPhoneGps(status: Int?, location: android.location.Location?) {
+    if (!linkReady()) return
+    val ch = fee0Char(chunkedCharUuid) ?: return
+    var flags = 0
+    var length = 4
+    if (status != null) { flags = flags or 0x1; length += 1 }
+    if (location != null) { flags = flags or 0x40000; length += 31 }
+    val buf = java.nio.ByteBuffer.allocate(1 + length).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+    buf.put(0x06.toByte()) // chunked type for GPS
+    buf.putInt(flags)
+    if (status != null) buf.put(status.toByte())
+    if (location != null) {
+      buf.putInt((location.longitude * 3_000_000.0).toInt())
+      buf.putInt((location.latitude * 3_000_000.0).toInt())
+      buf.putInt(((if (location.hasSpeed()) location.speed else 0f) * 10).toInt())
+      buf.putInt(((if (location.hasAltitude()) location.altitude else 0.0) * 100).toInt())
+      buf.putLong(location.time)
+      buf.putInt(-1)           // 0xffffffff
+      buf.putShort(0)          // bearing placeholder
+      buf.put(0.toByte())
+    }
+    writeChunked(ch, 6, buf.array())
+  }
+
+  /** Gadgetbridge writeToChunkedOld: [0, flags|type, counter] + ≤17 data bytes. */
+  private fun writeChunked(ch: BluetoothGattCharacteristic, type: Int, payload: ByteArray) {
+    val maxChunk = 17
+    var remaining = payload.size
+    var count = 0
+    while (remaining > 0) {
+      val n = minOf(remaining, maxChunk)
+      var flags = type and 0x0F
+      if (remaining <= maxChunk) {
+        flags = flags or 0x80
+        if (count == 0) flags = flags or 0x40
+      } else if (count > 0) {
+        flags = flags or 0x40
+      }
+      val chunk = ByteArray(n + 3)
+      chunk[0] = 0
+      chunk[1] = flags.toByte()
+      chunk[2] = (count and 0xFF).toByte()
+      System.arraycopy(payload, count * maxChunk, chunk, 3, n)
+      gattIo.write(ch, chunk)
+      remaining -= n
+      count++
+    }
   }
 
   /** Alarm slot 0..4: [0x02, slot|0x80 if enabled, hour, minute, repeat-days mask]. */
