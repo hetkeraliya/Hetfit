@@ -108,6 +108,64 @@ class RunTrackingService : Service(), LocationListener {
   private var fromBand = false
   private var bandStepsAtStart = -1
   private var bandDistAtStart = -1
+  private var lastPaceSource = "gps"
+  /** Running scale: bandMeters * scale ≈ gpsMeters. Starts at 1, learns while both streams are available. */
+  private var bandScale = 1.0
+  private var calibSamples = 0
+
+  private fun loadCalibration() {
+    val p = getSharedPreferences("kestrel_calib", MODE_PRIVATE)
+    bandScale = p.getFloat("band_scale_$type", 1f).toDouble().coerceIn(0.4, 2.5)
+    calibSamples = p.getInt("band_scale_n_$type", 0)
+  }
+
+  private fun saveCalibration() {
+    getSharedPreferences("kestrel_calib", MODE_PRIVATE).edit()
+      .putFloat("band_scale_$type", bandScale.toFloat())
+      .putInt("band_scale_n_$type", calibSamples)
+      .apply()
+  }
+
+  /**
+   * Soft calibration: no hard pace cutoffs.
+   * When GPS and band both report movement, slowly learn a scale factor.
+   * Output is a weighted blend — more GPS weight when accuracy is better.
+   * When GPS is missing, use band distance × learned scale.
+   */
+  private fun fuseDistance(gpsM: Double, bandM: Double, acc: Float): Double {
+    val bandCal = if (bandM > 0) bandM * bandScale else -1.0
+
+    // Learn: only when both have meaningful distance and GPS lock looks usable.
+    if (gpsM > 30 && bandM > 30 && acc in 0f..25f) {
+      val ratio = gpsM / bandM
+      if (ratio in 0.35..2.8) {
+        // Exponential moving average — more trust as samples grow, but never jumps.
+        val alpha = if (calibSamples < 8) 0.25 else 0.08
+        bandScale = (bandScale * (1 - alpha) + ratio * alpha).coerceIn(0.4, 2.5)
+        calibSamples++
+        if (calibSamples % 5 == 0) saveCalibration()
+      }
+    }
+
+    return when {
+      gpsM <= 0 && bandCal <= 0 -> 0.0
+      gpsM <= 0 -> { lastPaceSource = "band"; bandCal }
+      bandCal <= 0 -> { lastPaceSource = "gps"; gpsM }
+      else -> {
+        // Weight GPS higher when accuracy is better (0 m → full GPS, 30 m → mostly band).
+        val gpsW = when {
+          acc < 0f -> 0.55
+          acc <= 8f -> 0.85
+          acc <= 15f -> 0.65
+          acc <= 25f -> 0.40
+          else -> 0.20
+        }
+        val blended = gpsM * gpsW + bandCal * (1.0 - gpsW)
+        lastPaceSource = if (gpsW >= 0.5) "gps" else "band"
+        blended
+      }
+    }
+  }
 
   private val tick = object : Runnable {
     override fun run() {
@@ -153,6 +211,7 @@ class RunTrackingService : Service(), LocationListener {
     type = t
     voice = speak
     fromBand = fromBandSession
+    loadCalibration()
     createChannel()
     try {
       val n = buildNotification()
@@ -318,21 +377,18 @@ class RunTrackingService : Service(), LocationListener {
     val now = System.currentTimeMillis()
     val st = MiBandManager.get(this).uiState.value
 
-    // Band session distance/steps (delta since start) — preferred for pace when mirroring the band.
-    val bandDistM = if (fromBand && bandDistAtStart >= 0 && st.liveDistanceMeters >= bandDistAtStart)
+    // Band session distance/steps (delta since start) — always tracked for calibration.
+    val bandDistM = if (bandDistAtStart >= 0 && st.liveDistanceMeters >= bandDistAtStart)
       (st.liveDistanceMeters - bandDistAtStart).toDouble() else -1.0
     val bandSteps = if (bandStepsAtStart >= 0 && st.liveSteps >= bandStepsAtStart)
       st.liveSteps - bandStepsAtStart else 0
 
-    // Prefer band distance when this is a mirrored band workout and the band reports movement.
-    val effectiveDist = when {
-      fromBand && bandDistM > distanceM && bandDistM > 5 -> bandDistM
-      else -> distanceM
-    }
+    // Soft calibration blend of GPS + band (learns scale over time, no hard rules).
+    val effectiveDist = fuseDistance(distanceM, bandDistM, accuracy)
 
     if (!paused) {
       val moving = when {
-        fromBand && bandDistM > 0 -> true  // band is counting distance → treat as moving
+        lastPaceSource == "band" && bandDistM > 0 -> true
         gpsOn -> (now - lastMoveMs) < 6000
         else -> true
       }
@@ -371,7 +427,9 @@ class RunTrackingService : Service(), LocationListener {
       put("gpsDistanceM", Math.round(distanceM))
       put("bandDistanceM", if (bandDistM >= 0) Math.round(bandDistM) else 0)
       put("avgPace", avgPace); put("curPace", curPace)
-      put("paceSource", if (fromBand && bandDistM > distanceM) "band" else "gps")
+      put("paceSource", lastPaceSource)
+      put("bandScale", Math.round(bandScale * 1000) / 1000.0)
+      put("calibSamples", calibSamples)
       put("hr", if (st.liveHeartRate in 30..220) st.liveHeartRate else 0)
       put("avgHr", if (hrCount > 0) (hrSum / hrCount).toInt() else 0); put("maxHr", hrMax)
       put("steps", steps); put("accuracy", Math.round(accuracy))
@@ -456,6 +514,7 @@ class RunTrackingService : Service(), LocationListener {
         } catch (_: Exception) { }
       }
     }
+    saveCalibration()
     stateJson = "{\"active\":false}"
     listener?.invoke(stateJson)
     liveClear()
