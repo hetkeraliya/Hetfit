@@ -212,6 +212,17 @@ fun KestrelMainScreen(
     }
   }
 
+  // Band started a workout → ask the user whether to track it on the phone (GPS map + band HR).
+  LaunchedEffect(miBandManager) {
+    miBandManager.onBandWorkoutOffer = { typeCode, label ->
+      val safe = label.replace("'", "\\'")
+      webViewInstance?.evaluateJavascript(
+        "window.kestrelBandWorkoutOffer && window.kestrelBandWorkoutOffer({type:$typeCode,label:'$safe'});",
+        null
+      )
+    }
+  }
+
   // After every finished band sync, push the new history into the dashboard and widgets.
   LaunchedEffect(miBandManager) {
     miBandManager.onHistorySynced = { _ ->
@@ -687,6 +698,15 @@ class KestrelAndroidBridge(
   @JavascriptInterface fun discardRun() { RunTrackingService.send(context, RunTrackingService.ACTION_DISCARD) }
   @JavascriptInterface fun getRunState(): String = RunTrackingService.stateJson
   @JavascriptInterface fun getLiveTrack(): String = RunTrackingService.liveTrackJson()
+
+  /** User tapped Yes on the “band started a workout — track on phone?” dialog. */
+  @JavascriptInterface fun acceptBandWorkout(type: Int): String =
+    MiBandManager.get(context).acceptBandWorkoutOffer(type)
+
+  /** User tapped No — band keeps recording alone. */
+  @JavascriptInterface fun declineBandWorkout() {
+    MiBandManager.get(context).declineBandWorkoutOffer()
+  }
 
   @JavascriptInterface
   fun getRunTrack(startSec: Long): String {
