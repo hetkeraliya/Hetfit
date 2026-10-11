@@ -40,7 +40,9 @@ class BandNotificationListener : NotificationListenerService() {
       lastKey = key; lastAt = now
 
       val app = try { ctx.packageManager.getApplicationLabel(ctx.packageManager.getApplicationInfo(sbn.packageName, 0)).toString() } catch (e: Exception) { sbn.packageName }
-      mgr.sendBandNotification(if (title.isNotEmpty()) title else app, text, iconFor(sbn.packageName))
+      val cat = categoryFor(sbn.packageName)
+      val icon = iconFor(sbn.packageName)
+      mgr.sendBandNotification(if (title.isNotEmpty()) title else app, text, iconId = icon, category = cat)
     } catch (e: Exception) {
       android.util.Log.w("BandNotify", "failed: ${e.message}")
     }
@@ -50,7 +52,9 @@ class BandNotificationListener : NotificationListenerService() {
     val DEFAULT_PACKAGES: Set<String> = setOf(
       "com.whatsapp", "com.whatsapp.w4b", "org.telegram.messenger", "com.instagram.android", "com.facebook.orca",
       "com.google.android.gm", "com.google.android.apps.messaging", "com.samsung.android.messaging", "com.android.mms",
-      "com.google.android.dialer", "com.android.server.telecom", "com.twitter.android", "com.snapchat.android"
+      "com.google.android.dialer", "com.android.server.telecom", "com.twitter.android", "com.snapchat.android",
+      "com.google.android.apps.maps", "com.spotify.music", "com.google.android.youtube", "com.discord",
+      "com.linkedin.android", "com.reddit.frontpage", "org.thoughtcrime.securesms"
     )
 
     /** Huami icon ids (Gadgetbridge HuamiIcon). 11 = generic app. */
@@ -63,7 +67,18 @@ class BandNotificationListener : NotificationListenerService() {
       "com.twitter.android" -> 4
       "com.snapchat.android" -> 6
       "com.google.android.gm" -> 34
+      "com.spotify.music" -> 27
+      "com.google.android.youtube" -> 28
+      "com.discord" -> 11
+      "org.thoughtcrime.securesms" -> 7
       else -> 11
+    }
+
+    /** AlertCategory: 5 SMS, 1 Email, 0xFA custom. */
+    fun categoryFor(pkg: String): Int = when (pkg) {
+      "com.google.android.apps.messaging", "com.samsung.android.messaging", "com.android.mms" -> 5
+      "com.google.android.gm", "com.microsoft.office.outlook", "com.yahoo.mobile.client.android.mail" -> 1
+      else -> 0xFA
     }
   }
 }
