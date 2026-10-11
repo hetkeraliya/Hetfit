@@ -19,6 +19,8 @@
     <uses-permission
         android:name="android.permission.BLUETOOTH_CONNECT" />
 
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- Background band connection + notification (Gadgetbridge-style) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
@@ -61,6 +63,31 @@
         </activity>
 
         <service
+            android:name=".ble.BandNotificationListener"
+            android:exported="true"
+            android:label="Kestrel band notifications"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
+        <service
+            android:name=".run.RunTrackingService"
+            android:exported="false"
+            android:foregroundServiceType="location" />
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+        <service
             android:name=".ble.BandSyncService"
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
@@ -89,6 +116,78 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_quick_stats_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.KestrelStepsRingWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_steps_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_glass_steps_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.KestrelHeartWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_heart_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_glass_heart_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.KestrelSleepWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_sleep_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_glass_sleep_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.KestrelStressWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_stress_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_glass_stress_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.KestrelWorkoutWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_workout_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_glass_workout_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.KestrelBandWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_band_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_glass_band_info" />
         </receiver>
     </application>
 
