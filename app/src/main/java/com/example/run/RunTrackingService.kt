@@ -24,7 +24,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.example.MainActivity
 import com.example.ble.BandSampleStore
-import com.example.ble.BandWorkout
+import com.example.ble.BandWorkoutRow
 import com.example.ble.MiBandManager
 import com.example.ble.TrackPoint
 import org.json.JSONArray
@@ -323,7 +323,7 @@ class RunTrackingService : Service(), LocationListener {
       val startSec = startMs / 1000
       val steps = if (stepsAtStart >= 0) (MiBandManager.get(this).uiState.value.liveSteps - stepsAtStart).coerceAtLeast(0) else 0
       store.insertWorkout(
-        BandWorkout(
+        BandWorkoutRow(
           startSec = startSec, endSec = startSec + elapsed, type = type, steps = steps, activeSec = movingSec,
           calories = 0, distanceM = Math.round(distanceM).toInt(),
           avgHr = if (hrCount > 0) (hrSum / hrCount).toInt() else 0, maxHr = hrMax
