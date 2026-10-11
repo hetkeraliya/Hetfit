@@ -167,7 +167,14 @@ class BandSyncService : Service() {
     }
 
     // Keep the home-screen widgets in step with what the notification shows.
-    KestrelWidgetManager.refresh(this)
+    if (steps > 0 || hr > 0 || totals.sleepMinutes > 0) {
+      KestrelWidgetManager.saveHealthData(
+        this,
+        steps = steps.takeIf { it > 0 },
+        heartRate = hr.takeIf { it > 0 },
+        sleepMinutes = totals.sleepMinutes.takeIf { it > 0 }
+      )
+    }
     return b.build()
   }
 
