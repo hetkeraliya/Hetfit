@@ -209,14 +209,23 @@
     stack.appendChild(set);
 
     const al = h('div', 'rn-card');
-    al.innerHTML = '<h4>Band alarms</h4>' + st.alarms.slice(0, 5).map((a, i) =>
+    al.innerHTML = '<h4>Band alarms</h4>' +
+      '<div class="mo-btns" style="margin-bottom:12px"><button type="button" id="al-phone-sync" class="primary">Sync phone alarm → band</button></div>' +
+      '<p class="mo-note" style="margin-top:0">Pulls your next Clock-app alarm and writes it to band slot 1. Android only exposes the next alarm, not the full list.</p>' +
+      st.alarms.slice(0, 5).map((a, i) =>
       '<div style="padding:10px 0;border-bottom:1px solid var(--line)"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px">' +
       '<input type="time" id="al-t' + i + '" class="mo-input" style="width:auto;font-size:20px;font-weight:800" value="' + pad2(a.hour) + ':' + pad2(a.minute) + '">' +
       '<input type="checkbox" id="al-e' + i + '" ' + (a.enabled ? 'checked' : '') + ' style="width:24px;height:24px;accent-color:var(--accent)"></div>' +
       '<div class="mo-tags" style="margin:8px 0 0" id="al-d' + i + '">' + DAYS.map((d, j) => '<button type="button" data-b="' + (1 << j) + '" class="' + ((a.days & (1 << j)) ? 'active' : '') + '">' + d + '</button>').join('') + '</div></div>').join('') +
-      '<p class="mo-note">No day selected = rings once. Alarms run on the band itself, so they work without the phone nearby. (This band model has no “smart wake” window in the protocol.)</p>';
+      '<p class="mo-note">No day selected = rings once. Alarms run on the band itself, so they work without the phone nearby.</p>';
     stack.appendChild(al);
     al.querySelectorAll('.mo-tags button').forEach((b) => (b.onclick = () => b.classList.toggle('active')));
+    const phoneSync = al.querySelector('#al-phone-sync');
+    if (phoneSync) phoneSync.onclick = () => {
+      if (!A.syncPhoneAlarmsToBand) { toast('Update the app binary for this feature'); return; }
+      toast(A.syncPhoneAlarmsToBand());
+      setTimeout(() => renderAll('settings'), 600);
+    };
 
     const save = h('div', 'rn-card');
     save.innerHTML = '<div class="mo-btns"><button class="primary" id="bs-save">Save to band</button></div><p class="mo-note">Settings are stored here and re-sent every time the band connects.</p>';
