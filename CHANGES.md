@@ -32,3 +32,9 @@ MORE   assets/web/extras.js       sleep stages + timeline, water, mood, backup /
 BAND   ble/BandNotificationListener.kt  phone notifications -> band (chunked Huami alert, per-app allow list)
        MiBandManager: band settings (HR interval, sleep HR, raise-to-wake, goal notice, sedentary reminder), 5 band alarms, PAI fetch (0x0d)
        assets/web/extras.js  More > Band tab: PAI, settings, alarms, notifications
+
+## Auth hang fix
+- Auth now follows Gadgetbridge's reconnect flow: enable notifications, then request the random number (0x02 0x00). The key (0x01) is only sent as a fallback.
+- Auth watchdog: no reply in 8 s -> retry key-first once, then fail with a clear message instead of hanging.
+- GATT queue watchdog: an operation whose callback never arrives is released after 4 s.
+- Auth key cleanup is case-insensitive and strips 0x, spaces, colons, dashes.
