@@ -161,6 +161,7 @@ class RunTrackingService : Service(), LocationListener {
     } catch (_: Exception) { }
     handler.post(tick)
     speak("Recording started")
+    try { MiBandManager.get(this).bandRunStarted(when (type) { 3 -> "Walk"; 4 -> "Ride"; 15 -> "Hike"; else -> "Run" }) } catch (_: Exception) { }
   }
 
   private fun startLocation(): Boolean {
@@ -253,6 +254,7 @@ class RunTrackingService : Service(), LocationListener {
         val split = movingSec - lastKmMoving; lastKmMoving = movingSec
         speak("$km kilometer${if (km > 1) "s" else ""}. Time ${spokenTime(movingSec)}. Last kilometer ${spokenTime(split)}." +
           if (hr in 30..220) " Heart rate $hr." else "")
+        try { MiBandManager.get(this).bandRunKm(km, String.format(Locale.US, "%d:%02d", split / 60, split % 60), hr) } catch (_: Exception) { }
       }
     }
     val elapsed = elapsedSec(now)
@@ -332,6 +334,7 @@ class RunTrackingService : Service(), LocationListener {
       store.insertTrack(startSec, points)
       savedStart = startSec
       speak("Saved. ${String.format(Locale.getDefault(), "%.2f", distanceM / 1000.0)} kilometers in ${spokenTime(movingSec)}.")
+      try { MiBandManager.get(this).bandRunFinished(String.format(Locale.US, "Saved %.2f km · %d:%02d", distanceM / 1000.0, movingSec / 60, movingSec % 60)) } catch (_: Exception) { }
     }
     stateJson = "{\"active\":false}"
     listener?.invoke(stateJson)
