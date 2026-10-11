@@ -21,7 +21,7 @@ data class BandSample(
 data class TodayTotals(val steps: Int, val lastHr: Int, val sleepMinutes: Int)
 
 /** A workout summary reported by the band (Gadgetbridge FetchSportsSummaryOperation). */
-data class BandWorkout(
+data class BandWorkoutRow(
   val startSec: Long,
   val endSec: Long,
   val type: Int,
@@ -117,7 +117,7 @@ class BandSampleStore private constructor(context: Context) :
   }
 
   @Synchronized
-  fun insertWorkout(w: BandWorkout) {
+  fun insertWorkout(w: BandWorkoutRow) {
     val cv = ContentValues()
     cv.put("start_ts", w.startSec); cv.put("end_ts", w.endSec); cv.put("type", w.type)
     cv.put("steps", w.steps); cv.put("active_s", w.activeSec); cv.put("calories", w.calories)
@@ -126,12 +126,12 @@ class BandSampleStore private constructor(context: Context) :
   }
 
   @Synchronized
-  fun workouts(limit: Int = 300): List<BandWorkout> {
-    val out = ArrayList<BandWorkout>()
+  fun workouts(limit: Int = 300): List<BandWorkoutRow> {
+    val out = ArrayList<BandWorkoutRow>()
     readableDatabase.rawQuery(
       "SELECT start_ts, end_ts, type, steps, active_s, calories, distance_m, avg_hr, max_hr FROM workouts ORDER BY start_ts DESC LIMIT $limit", null
     ).use { c ->
-      while (c.moveToNext()) out.add(BandWorkout(c.getLong(0), c.getLong(1), c.getInt(2), c.getInt(3), c.getInt(4), c.getInt(5), c.getInt(6), c.getInt(7), c.getInt(8)))
+      while (c.moveToNext()) out.add(BandWorkoutRow(c.getLong(0), c.getLong(1), c.getInt(2), c.getInt(3), c.getInt(4), c.getInt(5), c.getInt(6), c.getInt(7), c.getInt(8)))
     }
     return out
   }
