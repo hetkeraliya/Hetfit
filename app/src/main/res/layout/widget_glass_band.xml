@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/glass_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_widget_card"
+    android:orientation="horizontal"
+    android:gravity="center_vertical">
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+    <TextView
+        android:id="@+id/tv_value"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Mi Smart Band 5"
+        android:textColor="@color/glass_text"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:maxLines="1"
+         />
+    <TextView
+        android:id="@+id/tv_sub"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Disconnected"
+        android:textColor="@color/glass_cyan"
+        android:textSize="11sp"
+        
+        android:maxLines="1"
+        android:layout_marginTop="2dp" />
+    <TextView
+        android:id="@+id/tv_foot"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text=""
+        android:textColor="@color/glass_muted"
+        android:textSize="10sp"
+        
+        android:maxLines="1"
+        android:layout_marginTop="2dp" />
+    </LinearLayout>
+    <TextView
+        android:id="@+id/tv_action"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_widget_pill"
+        android:text="Sync"
+        android:textColor="@color/glass_text"
+        android:textSize="13sp"
+        android:textStyle="bold" />
+</LinearLayout>
