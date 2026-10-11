@@ -529,6 +529,33 @@
       if (changed) { persistAll(); refresh(); }
     } catch (e) { console.warn('[kestrelLiveMetric]', e); }
   };
+  // Per-day stress and sleep-stage values computed natively from the band's samples.
+  window.kestrelBandExtras = function(map) {
+    try {
+      const m = typeof map === 'string' ? JSON.parse(map) : map;
+      Object.keys(m || {}).forEach((key) => {
+        const e = m[key];
+        const day = state.localDayIndex[key] || (state.localDayIndex[key] = emptyDay(key));
+        if (e.stressAvg != null) { day.stressAvg = e.stressAvg; day.stressMax = e.stressMax; }
+        if (e.deepSleepMinutes != null) {
+          day.deepSleepMinutes = e.deepSleepMinutes; day.lightSleepMinutes = e.lightSleepMinutes; day.remSleepMinutes = e.remSleepMinutes;
+        }
+      });
+      persistAll(); refresh();
+    } catch (e) { console.warn('[kestrelBandExtras]', e); }
+  };
+  // Workouts recorded on the band itself (not synced as "single" ones; merged by id so re-sync never duplicates).
+  window.kestrelBandWorkouts = function(list) {
+    try {
+      const arr = typeof list === 'string' ? JSON.parse(list) : list;
+      if (!Array.isArray(arr) || !arr.length) return;
+      state.workouts = mergeWorkouts(state.workouts, arr);
+      persistAll();
+      renderWorkouts();
+      renderMuscleMap();
+      if (typeof refresh === 'function') refresh();
+    } catch (e) { console.warn('[kestrelBandWorkouts]', e); }
+  };
   window.kestrelAddSingleWorkout = function(w) {
     if (!w) return;
     state.workouts = mergeWorkouts(state.workouts, [w]);
