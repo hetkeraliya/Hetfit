@@ -65,7 +65,7 @@ object HuamiSportsSummaryParser {
         steps = steps.coerceIn(0, 200_000),
         activeSec = activeSec.coerceIn(0, 24 * 3600),
         calories = calories.takeIf { it.isFinite() && it >= 0 }?.toInt() ?: 0,
-        distanceM = distance.takeIf { it.isFinite() && it >= 0 }?.toInt() ?: 0,
+        distanceM = distance.takeIf { it.isFinite() && it >= 0 } ?: 0f,
         avgHr = hr(avgHr),
         maxHr = hr(maxHr)
       )
