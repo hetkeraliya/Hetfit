@@ -1008,23 +1008,35 @@ class MiBandManager(private val context: Context) {
   }
 
   // ---------------- Phone-started activity -> band ----------------
-  // The Huami protocol Gadgetbridge implements has no "start workout" command from phone to band (it only learns
-  // that a workout started ON the band). So when you start a run in the app, the band is put into live heart-rate
-  // mode and buzzes with a message at start, every km and at the end.
+  // Huami has no reliable phone→band "open workout screen" command (Gadgetbridge only reacts to
+  // workouts started ON the band). When a run starts in the app we:
+  //  1) switch the band into continuous heart-rate mode (live HR for pace UI),
+  //  2) buzz with a notification that includes current pace/HR at every km,
+  //  3) re-assert continuous HR periodically so firmware that times out keeps streaming.
   fun bandRunStarted(label: String) {
     mirroredRun = false
     if (!linkReady()) return
     writeHrControl(byteArrayOf(0x15, 0x01, 0x01))                    // continuous heart rate
-    if (settingFlag("runBuzz", true)) sendBandNotification("Kestrel", "$label started")
+    if (settingFlag("runBuzz", true)) {
+      // icon 1 ≈ workout / activity style alert on Mi Band 5
+      sendBandNotification("Kestrel", "$label started — live HR on", iconId = 1)
+    }
+  }
+  /** Re-assert continuous HR while a phone-side activity is running (call ~every 60–90 s). */
+  fun bandRunKeepAlive() {
+    if (!linkReady()) return
+    writeHrControl(byteArrayOf(0x15, 0x01, 0x01))
   }
   fun bandRunKm(km: Int, split: String, hr: Int) {
     if (!linkReady() || !settingFlag("runBuzz", true)) return
-    sendBandNotification("Kestrel", "$km km · $split/km" + if (hr in 30..220) " · $hr bpm" else "")
+    val body = "$km km · $split/km" + if (hr in 30..220) " · $hr bpm" else ""
+    sendBandNotification("Kestrel", body, iconId = 1)
   }
   fun bandRunFinished(summary: String) {
     if (!linkReady()) return
-    if (settingFlag("runBuzz", true)) sendBandNotification("Kestrel", summary)
-    // back to the normal interval measurement after the activity
+    if (settingFlag("runBuzz", true)) sendBandNotification("Kestrel", summary, iconId = 1)
+    // stop continuous HR and restore the user's interval / sleep-HR settings
+    writeHrControl(byteArrayOf(0x15, 0x01, 0x00))
     applyBandSettings()
   }
 
