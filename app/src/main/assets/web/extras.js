@@ -404,7 +404,7 @@
       const label = { CONNECTED: 'Connected', CONNECTING: 'Connecting…', AUTHENTICATING: 'Authenticating…', SCANNING: 'Searching…', DISCONNECTED: 'Not connected' }[st] || st;
       body.innerHTML = '<b style="font-size:16px">' + label + '</b>' + (s.battery > 0 ? ' · battery ' + s.battery + '%' : '') + (st === 'CONNECTED' && s.hr > 0 ? ' · ♥ ' + s.hr + ' bpm' : '') +
         '<br>' + (s.lastSync ? 'Last sync ' + new Date(s.lastSync).toLocaleString() : 'Not synced yet') +
-        (s.syncing ? '<br>' + (s.message || 'Syncing…') : '') + (s.ack ? '<br>Band replied: ' + s.ack : '') + (s.error ? '<br><span style="color:#c0564f">' + s.error + '</span>' : '');
+        (s.syncing ? '<br>' + (s.message || 'Syncing…') : '') + (s.ack ? '<br>Band replied: ' + s.ack : '') + (st !== 'CONNECTED' || s.limited ? (s.trace ? '<br><span style="opacity:.65;font-size:12px">Handshake: ' + s.trace + '</span>' : '') : '') + (s.error ? '<br><span style="color:#c0564f">' + s.error + '</span>' : '');
       c.classList.toggle('is-on', st === 'CONNECTED');
       prog.classList.toggle('on', !!s.syncing);
       prog.firstElementChild.style.width = (s.syncing ? Math.max(6, s.percent || 0) : 0) + '%';
