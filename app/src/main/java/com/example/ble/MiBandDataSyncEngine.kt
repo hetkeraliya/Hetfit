@@ -10,21 +10,13 @@ import java.util.Locale
 import java.util.concurrent.Executors
 
 /**
- * Sends REAL band history to the Kestrel web UI. Nothing here is generated: every number comes
- * from rows the band itself reported (see HuamiActivityFetcher / BandSampleStore).
- *
- * The web side aggregates the minute rows with the same code path it uses for Gadgetbridge
- * exports (kestrelBandSamplesBegin / Chunk / End in app.js), so charts, sleep and heart-rate
- * series are computed identically for both import routes.
+ * Sends REAL band history to the Kestrel web UI.
+ * Also pushes structured sleep sessions and workouts for the new dashboard.
  */
 object MiBandDataSyncEngine {
   private val io = Executors.newSingleThreadExecutor()
   private const val CHUNK = 2000
 
-  /**
-   * @param fullHistory true = push everything in the store (app start / after reinstall),
-   *                    false = only the last few days (after a normal sync).
-   */
   fun pushToWebView(webView: WebView?, store: BandSampleStore, state: MiBandState, fullHistory: Boolean) {
     if (webView == null) return
     io.execute {
@@ -32,16 +24,16 @@ object MiBandDataSyncEngine {
         val since = if (fullHistory) 0L else startOfDaysAgo(3) - 8 * 3600
         webView.post { webView.evaluateJavascript("window.kestrelBandSamplesBegin && window.kestrelBandSamplesBegin();", null) }
         store.forEachChunk(since, CHUNK) { rows ->
-          val sb = StringBuilder(rows.size * 28)
+          val sb = StringBuilder(rows.size * 36)
           sb.append('[')
           rows.forEachIndexed { i, r ->
             if (i > 0) sb.append(',')
-            // [timestamp, rawIntensity, steps, heartRate, rawKind] - the 5 columns the web aggregator reads.
-            // Kinds other than "sleep" are normalised to 1 (awake) so not-worn / charging minutes are never counted as sleep.
+            // Extended: [ts, intensity, steps, hr, kind, deep, rem]
             val kind = if (r.kind == 120) 120 else 1
             val hr = if (r.hr in 1..253) r.hr else 0
             sb.append('[').append(r.ts).append(',').append(r.intensity).append(',')
-              .append(r.steps).append(',').append(hr).append(',').append(kind).append(']')
+              .append(r.steps).append(',').append(hr).append(',').append(kind)
+              .append(',').append(r.deep).append(',').append(r.rem).append(']')
           }
           sb.append(']')
           val js = "window.kestrelBandSamplesChunk && window.kestrelBandSamplesChunk($sb);"
@@ -50,45 +42,18 @@ object MiBandDataSyncEngine {
         val meta = deviceMeta(state).toString()
         webView.post { webView.evaluateJavascript("window.kestrelBandSamplesEnd && window.kestrelBandSamplesEnd($meta);", null) }
 
-        // Stress averages + sleep stage minutes per day
-        val extras = JSONObject()
-        store.dayExtras(since).forEach { (day, e) ->
-          val o = JSONObject()
-          e.stressAvg?.let { o.put("stressAvg", it) }
-          e.stressMax?.let { o.put("stressMax", it) }
-          if (e.deepMin != null || e.lightMin != null || e.remMin != null) {
-            o.put("deepSleepMinutes", e.deepMin ?: 0)
-            o.put("lightSleepMinutes", e.lightMin ?: 0)
-            o.put("remSleepMinutes", e.remMin ?: 0)
-          }
-          if (o.length() > 0) extras.put(day, o)
+        // Push structured sleep + workouts
+        val sleepJson = store.sleepSummaryJson().toString()
+        webView.post {
+          webView.evaluateJavascript(
+            "window.kestrelSleepSummary && window.kestrelSleepSummary($sleepJson);", null
+          )
         }
-        if (extras.length() > 0) {
-          val js = "window.kestrelBandExtras && window.kestrelBandExtras($extras);"
-          webView.post { webView.evaluateJavascript(js, null) }
-        }
-
-        // Workouts recorded by the band
-        val arr = JSONArray()
-        store.workouts().forEach { w ->
-          arr.put(JSONObject().apply {
-            put("id", "band-${w.startSec}")
-            put("name", HuamiSportsSummaryParser.name(w.type))
-            put("start", w.startSec * 1000)
-            put("end", w.endSec * 1000)
-            put("kind", HuamiSportsSummaryParser.webKind(w.type))
-            put("deviceId", "mi-smart-band-5")
-            put("minutes", maxOf(1, ((w.endSec - w.startSec) / 60).toInt()))
-            if (w.calories > 0) put("calories", w.calories)
-            if (w.distanceM > 0) put("distanceMeters", w.distanceM)
-            if (w.steps > 0) put("steps", w.steps)
-            if (w.avgHr > 0) put("heartRateAvg", w.avgHr)
-            if (w.maxHr > 0) put("heartRateMax", w.maxHr)
-          })
-        }
-        if (arr.length() > 0) {
-          val js = "window.kestrelBandWorkouts && window.kestrelBandWorkouts($arr);"
-          webView.post { webView.evaluateJavascript(js, null) }
+        val workouts = store.getWorkouts(30).toString()
+        webView.post {
+          webView.evaluateJavascript(
+            "window.kestrelWorkouts && window.kestrelWorkouts($workouts);", null
+          )
         }
       } catch (e: Exception) {
         android.util.Log.e("BandSyncEngine", "push failed: ${e.message}")
@@ -101,6 +66,18 @@ object MiBandDataSyncEngine {
       webView.evaluateJavascript(
         "window.kestrelLiveMetric && window.kestrelLiveMetric('$type', ${value});", null
       )
+    }
+  }
+
+  fun pushSleepAndWorkouts(webView: WebView?, store: BandSampleStore) {
+    if (webView == null) return
+    io.execute {
+      val sleepJson = store.sleepSummaryJson().toString()
+      val workouts = store.getWorkouts(30).toString()
+      webView.post {
+        webView.evaluateJavascript("window.kestrelSleepSummary && window.kestrelSleepSummary($sleepJson);", null)
+        webView.evaluateJavascript("window.kestrelWorkouts && window.kestrelWorkouts($workouts);", null)
+      }
     }
   }
 
