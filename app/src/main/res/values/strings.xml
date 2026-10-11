@@ -4,4 +4,11 @@
     <string name="widget_dashboard_desc">Real-time steps, heart rate, calories, workouts and streak</string>
     <string name="widget_quick_name">Kestrel Quick Health</string>
     <string name="widget_quick_desc">Compact step counter, goal progress and heart rate</string>
+
+    <string name="widget_steps_desc">Steps progress ring with gradient glass style</string>
+    <string name="widget_heart_desc">Live heart rate on a soft gradient card</string>
+    <string name="widget_sleep_desc">Last night sleep duration and stages</string>
+    <string name="widget_stress_desc">Current stress level</string>
+    <string name="widget_workout_desc">Latest workout summary</string>
+    <string name="widget_band_desc">Band connection, battery and sync</string>
 </resources>
