@@ -97,6 +97,10 @@ class RunTrackingService : Service(), LocationListener {
   private val recent = ArrayDeque<Pair<Long, Double>>()
   private val points = ArrayList<TrackPoint>()
   private var tickCount = 0
+  /** Consecutive accepted GPS fixes before distance starts counting (kills indoor/stationary drift). */
+  private var consecutiveGoodFixes = 0
+  private var lastGpsSentToBandMs = 0L
+  private var gpsSearchingSent = false
 
   private val tick = object : Runnable {
     override fun run() {
@@ -150,6 +154,7 @@ class RunTrackingService : Service(), LocationListener {
     startMs = System.currentTimeMillis(); pausedAccumMs = 0; pauseStartMs = 0
     movingSec = 0; distanceM = 0.0; lastLoc = null; lastMoveMs = startMs; accuracy = -1f
     hrSum = 0; hrCount = 0; hrMax = 0; nextKm = 1; lastKmMoving = 0; tickCount = 0
+    consecutiveGoodFixes = 0; lastGpsSentToBandMs = 0; gpsSearchingSent = false
     recent.clear(); points.clear(); liveClear()
     stepsAtStart = MiBandManager.get(this).uiState.value.liveSteps.takeIf { it > 0 } ?: -1
 
@@ -161,8 +166,14 @@ class RunTrackingService : Service(), LocationListener {
     } catch (_: Exception) { }
     handler.post(tick)
     speak("Recording started")
-    try { MiBandManager.get(this).bandRunStarted(when (type) { 3 -> "Walk"; 4 -> "Ride"; 15 -> "Hike"; else -> "Run" }) } catch (_: Exception) { }
+    try {
+      val label = when (type) { 3 -> "Walk"; 4 -> "Ride"; 15 -> "Hike"; else -> "Run" }
+      MiBandManager.get(this).bandRunStarted(label, bandType = bandTypeFor(type))
+    } catch (_: Exception) { }
   }
+
+  /** Map app run type → Huami band workout type (1 outdoor run, 4 walk, 3 outdoor ride). */
+  private fun bandTypeFor(appType: Int): Int = when (appType) { 3 -> 0x04; 4 -> 0x03; else -> 0x01 }
 
   private fun startLocation(): Boolean {
     val granted = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
@@ -202,23 +213,66 @@ class RunTrackingService : Service(), LocationListener {
   }
 
   // ---- GPS ----
+  // Strict filters so standing still does not invent distance (common phone GPS drift).
   override fun onLocationChanged(loc: Location) {
     if (!running || paused) return
     accuracy = if (loc.hasAccuracy()) loc.accuracy else -1f
-    if (loc.hasAccuracy() && loc.accuracy > 30f) return
+    // Reject weak fixes hard (was 30 m — still let a lot of indoor drift through).
+    if (!loc.hasAccuracy() || loc.accuracy > 18f) {
+      consecutiveGoodFixes = 0
+      return
+    }
     val last = lastLoc
-    if (last == null) { lastLoc = loc; addPoint(loc); return }
+    if (last == null) {
+      lastLoc = loc
+      consecutiveGoodFixes = 1
+      addPoint(loc)
+      maybeSendGpsToBand(loc, first = true)
+      return
+    }
     val dt = (loc.time - last.time) / 1000.0
-    if (dt <= 0.0) return
+    if (dt <= 0.0 || dt > 30.0) {
+      // Large time gap — reset consecutive chain, keep last fix as anchor.
+      lastLoc = loc
+      consecutiveGoodFixes = 1
+      return
+    }
     val d = last.distanceTo(loc).toDouble()
     val v = d / dt
-    val maxV = if (type == 4) 25.0 else 9.5
-    if (v > maxV) return                     // GPS glitch
-    if (d < 2.5 && v < 0.6) return           // standing still / jitter
+    val maxV = when (type) { 4 -> 22.0; 3 -> 4.5; else -> 8.5 }
+    val minV = when (type) { 4 -> 1.2; 3 -> 0.7; else -> 0.9 }  // m/s — must actually be moving
+    val minD = when (type) { 4 -> 6.0; else -> 5.0 }             // metres between fixes
+    if (v > maxV) { consecutiveGoodFixes = 0; return }           // teleport / glitch
+    if (d < minD || v < minV) {
+      // Stationary or tiny jitter — do NOT add distance, keep lastLoc as anchor.
+      consecutiveGoodFixes = 0
+      return
+    }
+    consecutiveGoodFixes++
+    // Need a short streak of real movement before counting (stops "GPS starts when idle").
+    if (consecutiveGoodFixes < 3) {
+      lastLoc = loc
+      return
+    }
     distanceM += d
     lastLoc = loc
     lastMoveMs = System.currentTimeMillis()
     addPoint(loc)
+    maybeSendGpsToBand(loc, first = false)
+  }
+
+  private fun maybeSendGpsToBand(loc: Location, first: Boolean) {
+    val now = System.currentTimeMillis()
+    if (!first && now - lastGpsSentToBandMs < 1000) return
+    lastGpsSentToBandMs = now
+    try {
+      val mgr = MiBandManager.get(this)
+      if (!gpsSearchingSent) {
+        mgr.sendPhoneGps(status = 0x02, location = null) // SEARCHING
+        gpsSearchingSent = true
+      }
+      mgr.sendPhoneGps(status = if (first) 0x01 else null, location = loc) // ACQUIRED on first good fix
+    } catch (_: Exception) { }
   }
 
   private fun addPoint(loc: Location) {
