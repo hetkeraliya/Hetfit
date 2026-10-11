@@ -4,12 +4,14 @@ import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
+import org.json.JSONArray
+import org.json.JSONObject
 import java.util.Calendar
 
-/** One minute of band data, exactly as the Mi Band 5 reports it (see Gadgetbridge FetchActivityOperation). */
+/** One minute of band data (Gadgetbridge / Huami 8-byte sample). */
 data class BandSample(
   val ts: Long,        // epoch seconds, minute resolution
-  val kind: Int,       // raw kind: 120 = sleep, 115 = not worn, 118 = charging, others = awake
+  val kind: Int,       // 120 = sleep, 115 = not worn, 118 = charging, others = awake/activity
   val intensity: Int,
   val steps: Int,
   val hr: Int,         // 0 or 255 = no reading
@@ -18,31 +20,27 @@ data class BandSample(
   val rem: Int
 )
 
-data class TodayTotals(val steps: Int, val lastHr: Int, val sleepMinutes: Int)
+data class SleepStage(val startTs: Long, val endTs: Long, val stage: String) // deep / light / rem / awake
 
-/** A workout summary reported by the band (Gadgetbridge FetchSportsSummaryOperation). */
-data class BandWorkout(
-  val startSec: Long,
-  val endSec: Long,
-  val type: Int,
+data class SleepSession(
+  val startTs: Long,
+  val endTs: Long,
+  val totalMinutes: Int,
+  val deepMinutes: Int,
+  val lightMinutes: Int,
+  val remMinutes: Int,
+  val awakeMinutes: Int,
+  val stages: List<SleepStage>
+)
+
+data class TodayTotals(
   val steps: Int,
-  val activeSec: Int,
-  val calories: Int,
-  val distanceM: Int,
-  val avgHr: Int,
-  val maxHr: Int
+  val lastHr: Int,
+  val sleepMinutes: Int,
+  val deepMinutes: Int = 0,
+  val lightMinutes: Int = 0,
+  val remMinutes: Int = 0
 )
-
-/** Per-day values derived from stress and sleep-stage samples. Null = no data for that day. */
-data class DayExtras(
-  var stressAvg: Int? = null,
-  var stressMax: Int? = null,
-  var deepMin: Int? = null,
-  var lightMin: Int? = null,
-  var remMin: Int? = null
-)
-
-data class SmartExtras(val stressNow: Int, val stressAvg: Int, val deepMin: Int, val lightMin: Int, val remMin: Int)
 
 /** Persistent on-phone history of everything fetched from the band. Never contains generated data. */
 class BandSampleStore private constructor(context: Context) :
@@ -53,124 +51,21 @@ class BandSampleStore private constructor(context: Context) :
       "CREATE TABLE samples (ts INTEGER PRIMARY KEY, kind INTEGER NOT NULL, intensity INTEGER NOT NULL, " +
         "steps INTEGER NOT NULL, hr INTEGER NOT NULL, sleep INTEGER NOT NULL, deep INTEGER NOT NULL, rem INTEGER NOT NULL)"
     )
-  }
-
-  override fun onOpen(db: SQLiteDatabase) {
-    super.onOpen(db)
-    createExtraTables(db)
-  }
-
-  override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-    createExtraTables(db)
-  }
-
-  private fun createExtraTables(db: SQLiteDatabase) {
-    db.execSQL("CREATE TABLE IF NOT EXISTS stress (ts INTEGER PRIMARY KEY, value INTEGER NOT NULL)")
     db.execSQL(
-      "CREATE TABLE IF NOT EXISTS workouts (start_ts INTEGER PRIMARY KEY, end_ts INTEGER NOT NULL, type INTEGER NOT NULL, " +
-        "steps INTEGER NOT NULL, active_s INTEGER NOT NULL, calories INTEGER NOT NULL, distance_m INTEGER NOT NULL, " +
-        "avg_hr INTEGER NOT NULL, max_hr INTEGER NOT NULL)"
+      "CREATE TABLE workouts (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL, start_ts INTEGER NOT NULL, " +
+        "end_ts INTEGER, distance_m REAL, steps INTEGER, avg_hr INTEGER, max_hr INTEGER, calories INTEGER, " +
+        "notes TEXT, source TEXT DEFAULT 'manual')"
     )
   }
 
-  @Synchronized
-  fun insertStress(list: List<Pair<Long, Int>>) {
-    if (list.isEmpty()) return
-    val db = writableDatabase
-    db.beginTransaction()
-    try {
-      val cv = ContentValues()
-      for ((ts, v) in list) {
-        cv.clear(); cv.put("ts", ts); cv.put("value", v)
-        db.insertWithOnConflict("stress", null, cv, SQLiteDatabase.CONFLICT_REPLACE)
-      }
-      db.setTransactionSuccessful()
-    } finally { db.endTransaction() }
-  }
-
-  @Synchronized
-  fun insertWorkout(w: BandWorkout) {
-    val cv = ContentValues()
-    cv.put("start_ts", w.startSec); cv.put("end_ts", w.endSec); cv.put("type", w.type)
-    cv.put("steps", w.steps); cv.put("active_s", w.activeSec); cv.put("calories", w.calories)
-    cv.put("distance_m", w.distanceM); cv.put("avg_hr", w.avgHr); cv.put("max_hr", w.maxHr)
-    writableDatabase.insertWithOnConflict("workouts", null, cv, SQLiteDatabase.CONFLICT_REPLACE)
-  }
-
-  @Synchronized
-  fun workouts(limit: Int = 300): List<BandWorkout> {
-    val out = ArrayList<BandWorkout>()
-    readableDatabase.rawQuery(
-      "SELECT start_ts, end_ts, type, steps, active_s, calories, distance_m, avg_hr, max_hr FROM workouts ORDER BY start_ts DESC LIMIT $limit", null
-    ).use { c ->
-      while (c.moveToNext()) out.add(BandWorkout(c.getLong(0), c.getLong(1), c.getInt(2), c.getInt(3), c.getInt(4), c.getInt(5), c.getInt(6), c.getInt(7), c.getInt(8)))
+  override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+    if (oldVersion < 2) {
+      db.execSQL(
+        "CREATE TABLE IF NOT EXISTS workouts (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL, start_ts INTEGER NOT NULL, " +
+          "end_ts INTEGER, distance_m REAL, steps INTEGER, avg_hr INTEGER, max_hr INTEGER, calories INTEGER, " +
+          "notes TEXT, source TEXT DEFAULT 'manual')"
+      )
     }
-    return out
-  }
-
-  private fun dateKey(cal: Calendar, tsSec: Long, nightShift: Boolean): String {
-    cal.timeInMillis = tsSec * 1000
-    if (nightShift && cal.get(Calendar.HOUR_OF_DAY) >= 18) cal.add(Calendar.DAY_OF_YEAR, 1)
-    return "%04d-%02d-%02d".format(cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.DAY_OF_MONTH))
-  }
-
-  /** Stress average/max per day and deep/light/REM sleep minutes per night, from rows newer than [sinceTs]. */
-  @Synchronized
-  fun dayExtras(sinceTs: Long): Map<String, DayExtras> {
-    val out = HashMap<String, DayExtras>()
-    val cal = Calendar.getInstance()
-    val db = readableDatabase
-    val sum = HashMap<String, IntArray>() // [sum, count, max]
-    db.rawQuery("SELECT ts, value FROM stress WHERE ts >= ? AND value BETWEEN 1 AND 100", arrayOf(sinceTs.toString())).use { c ->
-      while (c.moveToNext()) {
-        val k = dateKey(cal, c.getLong(0), false)
-        val a = sum.getOrPut(k) { intArrayOf(0, 0, 0) }
-        val v = c.getInt(1)
-        a[0] += v; a[1]++; if (v > a[2]) a[2] = v
-      }
-    }
-    for ((k, a) in sum) {
-      val e = out.getOrPut(k) { DayExtras() }
-      e.stressAvg = Math.round(a[0].toFloat() / a[1]); e.stressMax = a[2]
-    }
-    db.rawQuery("SELECT ts, sleep, deep, rem FROM samples WHERE kind = 120 AND ts >= ?", arrayOf(sinceTs.toString())).use { c ->
-      while (c.moveToNext()) {
-        val k = dateKey(cal, c.getLong(0), true)
-        val e = out.getOrPut(k) { DayExtras() }
-        val deep = c.getInt(2) and 127
-        val rem = c.getInt(3) and 127
-        when {
-          rem > 55 -> e.remMin = (e.remMin ?: 0) + 1
-          deep > 42 -> e.deepMin = (e.deepMin ?: 0) + 1
-          else -> e.lightMin = (e.lightMin ?: 0) + 1
-        }
-      }
-    }
-    return out
-  }
-
-  /** For widgets / notification: latest stress, today's average, last night's sleep stages. */
-  @Synchronized
-  fun smartExtras(): SmartExtras {
-    val cal = Calendar.getInstance()
-    cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0)
-    val dayStart = cal.timeInMillis / 1000
-    val db = readableDatabase
-    val now = db.rawQuery("SELECT value FROM stress WHERE value BETWEEN 1 AND 100 ORDER BY ts DESC LIMIT 1", null)
-      .use { if (it.moveToFirst()) it.getInt(0) else 0 }
-    val avg = db.rawQuery("SELECT COALESCE(AVG(value),0) FROM stress WHERE value BETWEEN 1 AND 100 AND ts >= ?", arrayOf(dayStart.toString()))
-      .use { if (it.moveToFirst()) Math.round(it.getFloat(0)) else 0 }
-    var deep = 0; var light = 0; var rem = 0
-    db.rawQuery(
-      "SELECT deep, rem FROM samples WHERE kind = 120 AND ts >= ? AND ts < ?",
-      arrayOf((dayStart - 6 * 3600).toString(), (dayStart + 18 * 3600).toString())
-    ).use { c ->
-      while (c.moveToNext()) {
-        val d = c.getInt(0) and 127; val r = c.getInt(1) and 127
-        when { r > 55 -> rem++; d > 42 -> deep++; else -> light++ }
-      }
-    }
-    return SmartExtras(now, avg, deep, light, rem)
   }
 
   @Synchronized
@@ -202,10 +97,6 @@ class BandSampleStore private constructor(context: Context) :
   @Synchronized
   fun clear() { writableDatabase.delete("samples", null, null) }
 
-  /**
-   * Streams rows newer than [sinceTs] (epoch seconds) in chunks. Rows that carry no information
-   * (no steps, no heart rate, not sleeping) are skipped to keep the transfer to the web UI small.
-   */
   fun forEachChunk(sinceTs: Long, chunkSize: Int, block: (List<BandSample>) -> Unit) {
     val chunk = ArrayList<BandSample>(chunkSize)
     synchronized(this) {
@@ -226,6 +117,90 @@ class BandSampleStore private constructor(context: Context) :
   }
 
   @Synchronized
+  fun getSleepSessions(fromTs: Long, toTs: Long): List<SleepSession> {
+    val samples = mutableListOf<BandSample>()
+    readableDatabase.rawQuery(
+      "SELECT ts, kind, intensity, steps, hr, sleep, deep, rem FROM samples WHERE ts >= ? AND ts < ? ORDER BY ts",
+      arrayOf(fromTs.toString(), toTs.toString())
+    ).use { c ->
+      while (c.moveToNext()) {
+        samples.add(BandSample(c.getLong(0), c.getInt(1), c.getInt(2), c.getInt(3), c.getInt(4), c.getInt(5), c.getInt(6), c.getInt(7)))
+      }
+    }
+    if (samples.isEmpty()) return emptyList()
+
+    val sessions = mutableListOf<SleepSession>()
+    var i = 0
+    while (i < samples.size) {
+      if (samples[i].kind != 120 && samples[i].deep == 0 && samples[i].rem == 0) {
+        i++
+        continue
+      }
+      val start = samples[i].ts
+      var end = start
+      var deep = 0
+      var light = 0
+      var rem = 0
+      var awake = 0
+      val stages = mutableListOf<SleepStage>()
+      var stageStart = start
+      var currentStage = classifyStage(samples[i])
+
+      while (i < samples.size) {
+        val s = samples[i]
+        val isSleep = s.kind == 120 || s.deep > 0 || s.rem > 0
+        if (!isSleep && (s.ts - end) > 8 * 60) break
+        if (isSleep) {
+          end = s.ts
+          when (classifyStage(s)) {
+            "deep" -> deep++
+            "rem" -> rem++
+            "light" -> light++
+            else -> light++
+          }
+          val st = classifyStage(s)
+          if (st != currentStage) {
+            stages.add(SleepStage(stageStart, s.ts, currentStage))
+            stageStart = s.ts
+            currentStage = st
+          }
+        } else {
+          awake++
+        }
+        i++
+      }
+      stages.add(SleepStage(stageStart, end + 60, currentStage))
+      val total = ((end - start) / 60).toInt() + 1
+      if (total >= 20) {
+        sessions.add(
+          SleepSession(start, end + 60, total, deep, light, rem, awake, stages)
+        )
+      }
+    }
+    return sessions
+  }
+
+  private fun classifyStage(s: BandSample): String {
+    return when {
+      s.deep > 0 || (s.kind == 120 && s.intensity <= 10) -> "deep"
+      s.rem > 0 -> "rem"
+      s.kind == 120 -> "light"
+      else -> "awake"
+    }
+  }
+
+  @Synchronized
+  fun lastNightSleep(): SleepSession? {
+    val cal = Calendar.getInstance()
+    cal.set(Calendar.HOUR_OF_DAY, 18); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0)
+    val toTs = cal.timeInMillis / 1000
+    cal.add(Calendar.DAY_OF_YEAR, -1)
+    cal.set(Calendar.HOUR_OF_DAY, 18)
+    val fromTs = cal.timeInMillis / 1000
+    return getSleepSessions(fromTs, toTs).maxByOrNull { it.totalMinutes }
+  }
+
+  @Synchronized
   fun todayTotals(): TodayTotals {
     val cal = Calendar.getInstance()
     cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0)
@@ -233,14 +208,93 @@ class BandSampleStore private constructor(context: Context) :
     val db = readableDatabase
     val steps = db.rawQuery("SELECT COALESCE(SUM(steps),0) FROM samples WHERE ts >= ?", arrayOf(dayStart.toString()))
       .use { if (it.moveToFirst()) it.getInt(0) else 0 }
-    val hr = db.rawQuery("SELECT hr FROM samples WHERE hr BETWEEN 30 AND 220 AND ts >= ? ORDER BY ts DESC LIMIT 1", arrayOf((dayStart - 3600).toString()))
-      .use { if (it.moveToFirst()) it.getInt(0) else 0 }
-    // Last night = yesterday 18:00 .. today 18:00
-    val sleepFrom = dayStart - 6 * 3600
-    val sleepTo = dayStart + 18 * 3600
-    val sleep = db.rawQuery("SELECT COUNT(*) FROM samples WHERE kind = 120 AND ts >= ? AND ts < ?", arrayOf(sleepFrom.toString(), sleepTo.toString()))
-      .use { if (it.moveToFirst()) it.getInt(0) else 0 }
-    return TodayTotals(steps, hr, sleep)
+    val hr = db.rawQuery(
+      "SELECT hr FROM samples WHERE hr BETWEEN 30 AND 220 AND ts >= ? ORDER BY ts DESC LIMIT 1",
+      arrayOf((dayStart - 3600).toString())
+    ).use { if (it.moveToFirst()) it.getInt(0) else 0 }
+
+    val session = lastNightSleep()
+    return if (session != null) {
+      TodayTotals(steps, hr, session.totalMinutes, session.deepMinutes, session.lightMinutes, session.remMinutes)
+    } else {
+      val sleepFrom = dayStart - 6 * 3600
+      val sleepTo = dayStart + 18 * 3600
+      val sleep = db.rawQuery(
+        "SELECT COUNT(*) FROM samples WHERE kind = 120 AND ts >= ? AND ts < ?",
+        arrayOf(sleepFrom.toString(), sleepTo.toString())
+      ).use { if (it.moveToFirst()) it.getInt(0) else 0 }
+      TodayTotals(steps, hr, sleep)
+    }
+  }
+
+  @Synchronized
+  fun insertWorkout(
+    type: String, startTs: Long, endTs: Long? = null,
+    distanceM: Double? = null, steps: Int? = null,
+    avgHr: Int? = null, maxHr: Int? = null, calories: Int? = null,
+    notes: String? = null, source: String = "manual"
+  ): Long {
+    val cv = ContentValues().apply {
+      put("type", type); put("start_ts", startTs); put("end_ts", endTs)
+      put("distance_m", distanceM); put("steps", steps); put("avg_hr", avgHr)
+      put("max_hr", maxHr); put("calories", calories); put("notes", notes); put("source", source)
+    }
+    return writableDatabase.insert("workouts", null, cv)
+  }
+
+  @Synchronized
+  fun updateWorkoutEnd(id: Long, endTs: Long, distanceM: Double?, steps: Int?, avgHr: Int?, maxHr: Int?, calories: Int?) {
+    val cv = ContentValues().apply {
+      put("end_ts", endTs); put("distance_m", distanceM); put("steps", steps)
+      put("avg_hr", avgHr); put("max_hr", maxHr); put("calories", calories)
+    }
+    writableDatabase.update("workouts", cv, "id = ?", arrayOf(id.toString()))
+  }
+
+  @Synchronized
+  fun getWorkouts(limit: Int = 50): JSONArray {
+    val arr = JSONArray()
+    readableDatabase.rawQuery(
+      "SELECT id, type, start_ts, end_ts, distance_m, steps, avg_hr, max_hr, calories, notes, source FROM workouts ORDER BY start_ts DESC LIMIT ?",
+      arrayOf(limit.toString())
+    ).use { c ->
+      while (c.moveToNext()) {
+        arr.put(JSONObject().apply {
+          put("id", c.getLong(0)); put("type", c.getString(1)); put("startTs", c.getLong(2))
+          if (!c.isNull(3)) put("endTs", c.getLong(3))
+          if (!c.isNull(4)) put("distanceM", c.getDouble(4))
+          if (!c.isNull(5)) put("steps", c.getInt(5))
+          if (!c.isNull(6)) put("avgHr", c.getInt(6))
+          if (!c.isNull(7)) put("maxHr", c.getInt(7))
+          if (!c.isNull(8)) put("calories", c.getInt(8))
+          if (!c.isNull(9)) put("notes", c.getString(9))
+          put("source", c.getString(10))
+        })
+      }
+    }
+    return arr
+  }
+
+  fun sleepSummaryJson(): JSONObject {
+    val session = lastNightSleep()
+    return JSONObject().apply {
+      if (session != null) {
+        put("hasData", true)
+        put("startTs", session.startTs); put("endTs", session.endTs)
+        put("totalMinutes", session.totalMinutes)
+        put("deepMinutes", session.deepMinutes); put("lightMinutes", session.lightMinutes)
+        put("remMinutes", session.remMinutes); put("awakeMinutes", session.awakeMinutes)
+        val stages = JSONArray()
+        session.stages.forEach { st ->
+          stages.put(JSONObject().apply {
+            put("start", st.startTs); put("end", st.endTs); put("stage", st.stage)
+          })
+        }
+        put("stages", stages)
+      } else {
+        put("hasData", false)
+      }
+    }
   }
 
   companion object {
