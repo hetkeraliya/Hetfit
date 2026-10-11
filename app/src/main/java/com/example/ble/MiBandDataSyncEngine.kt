@@ -49,6 +49,47 @@ object MiBandDataSyncEngine {
         }
         val meta = deviceMeta(state).toString()
         webView.post { webView.evaluateJavascript("window.kestrelBandSamplesEnd && window.kestrelBandSamplesEnd($meta);", null) }
+
+        // Stress averages + sleep stage minutes per day
+        val extras = JSONObject()
+        store.dayExtras(since).forEach { (day, e) ->
+          val o = JSONObject()
+          e.stressAvg?.let { o.put("stressAvg", it) }
+          e.stressMax?.let { o.put("stressMax", it) }
+          if (e.deepMin != null || e.lightMin != null || e.remMin != null) {
+            o.put("deepSleepMinutes", e.deepMin ?: 0)
+            o.put("lightSleepMinutes", e.lightMin ?: 0)
+            o.put("remSleepMinutes", e.remMin ?: 0)
+          }
+          if (o.length() > 0) extras.put(day, o)
+        }
+        if (extras.length() > 0) {
+          val js = "window.kestrelBandExtras && window.kestrelBandExtras($extras);"
+          webView.post { webView.evaluateJavascript(js, null) }
+        }
+
+        // Workouts recorded by the band
+        val arr = JSONArray()
+        store.workouts().forEach { w ->
+          arr.put(JSONObject().apply {
+            put("id", "band-${w.startSec}")
+            put("name", HuamiSportsSummaryParser.name(w.type))
+            put("start", w.startSec * 1000)
+            put("end", w.endSec * 1000)
+            put("kind", HuamiSportsSummaryParser.webKind(w.type))
+            put("deviceId", "mi-smart-band-5")
+            put("minutes", maxOf(1, ((w.endSec - w.startSec) / 60).toInt()))
+            if (w.calories > 0) put("calories", w.calories)
+            if (w.distanceM > 0) put("distanceMeters", w.distanceM)
+            if (w.steps > 0) put("steps", w.steps)
+            if (w.avgHr > 0) put("heartRateAvg", w.avgHr)
+            if (w.maxHr > 0) put("heartRateMax", w.maxHr)
+          })
+        }
+        if (arr.length() > 0) {
+          val js = "window.kestrelBandWorkouts && window.kestrelBandWorkouts($arr);"
+          webView.post { webView.evaluateJavascript(js, null) }
+        }
       } catch (e: Exception) {
         android.util.Log.e("BandSyncEngine", "push failed: ${e.message}")
       }
