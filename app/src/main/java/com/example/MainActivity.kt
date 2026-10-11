@@ -830,6 +830,55 @@ class KestrelAndroidBridge(
   fun sendTestNotification(): Boolean =
     MiBandManager.get(context).sendBandNotification("Kestrel", "Test notification from your phone", 11)
 
+  @JavascriptInterface fun findBand(): String = runOnBle { MiBandManager.get(context).findBand(true) }
+  @JavascriptInterface fun stopFindBand(): String = runOnBle { MiBandManager.get(context).stopFindBand() }
+  @JavascriptInterface fun syncTimeToBand(): String = runOnBle { MiBandManager.get(context).syncTimeToBand() }
+  @JavascriptInterface fun setStepGoal(steps: Int): String = runOnBle { MiBandManager.get(context).setStepGoal(steps) }
+  @JavascriptInterface fun sendWeather(city: String, tempC: Int, condition: Int): String =
+    runOnBle { MiBandManager.get(context).sendWeather(city, tempC, condition) }
+  @JavascriptInterface fun sendCallAlert(name: String, ringing: Boolean): Boolean =
+    MiBandManager.get(context).sendCallAlert(name, ringing)
+  @JavascriptInterface fun sendReminder(slot: Int, enabled: Boolean, text: String, atMs: Double, repeat: String): String =
+    runOnBle { MiBandManager.get(context).sendReminder(slot, enabled, text, atMs.toLong(), repeat) }
+  @JavascriptInterface fun sendMusicInfo(artist: String, album: String, track: String, playing: Boolean, positionSec: Int, durationSec: Int): String =
+    runOnBle { MiBandManager.get(context).sendMusicInfo(artist, album, track, playing, positionSec, durationSec) }
+  @JavascriptInterface fun sendMusicVolume(vol: Int): String =
+    runOnBle { MiBandManager.get(context).sendMusicVolume(vol) }
+  @JavascriptInterface fun factoryResetDisplay(): String =
+    runOnBle { MiBandManager.get(context).factoryResetDisplay() }
+  @JavascriptInterface fun pushNowPlayingToBand(): String {
+    return try {
+      val am = context.getSystemService(Context.MEDIA_SESSION_SERVICE) as android.media.session.MediaSessionManager
+      val controllers = am.getActiveSessions(
+        android.content.ComponentName(context, com.example.ble.BandNotificationListener::class.java)
+      )
+      if (controllers.isEmpty()) return "No media session — play music and grant notification access"
+      val c = controllers.first()
+      val meta = c.metadata
+      val st = c.playbackState
+      val artist = meta?.getString(android.media.MediaMetadata.METADATA_KEY_ARTIST).orEmpty()
+      val album = meta?.getString(android.media.MediaMetadata.METADATA_KEY_ALBUM).orEmpty()
+      val track = meta?.getString(android.media.MediaMetadata.METADATA_KEY_TITLE).orEmpty()
+      val dur = ((meta?.getLong(android.media.MediaMetadata.METADATA_KEY_DURATION) ?: 0L) / 1000L).toInt()
+      val pos = ((st?.position ?: 0L) / 1000L).toInt()
+      val playing = st?.state == android.media.session.PlaybackState.STATE_PLAYING
+      runOnBle { MiBandManager.get(context).sendMusicInfo(artist, album, track, playing, pos, dur) }
+    } catch (e: Exception) {
+      "Need notification access for media: ${e.message}"
+    }
+  }
+
+  private fun runOnBle(block: () -> String): String {
+    var result = "Failed"
+    val latch = java.util.concurrent.CountDownLatch(1)
+    android.os.Handler(android.os.Looper.getMainLooper()).post {
+      result = try { block() } catch (e: Exception) { e.message ?: "Error" }
+      latch.countDown()
+    }
+    try { latch.await(4, java.util.concurrent.TimeUnit.SECONDS) } catch (_: Exception) {}
+    return result
+  }
+
   // ---------------- Band data diagnostics / repair ----------------
   @JavascriptInterface fun getStoreStats(): String = BandSampleStore.get(context).diagnostics()
   @JavascriptInterface fun syncBandNow() { android.os.Handler(android.os.Looper.getMainLooper()).post { MiBandManager.get(context).syncNow() } }
