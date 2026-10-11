@@ -3,62 +3,49 @@
     android:id="@+id/glass_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/bg_widget_card"
-    android:orientation="vertical">
+    android:background="@drawable/bg_grad_stress"
+    android:orientation="vertical"
+    android:padding="16dp">
     <TextView
         android:id="@+id/tv_label"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="STRESS"
-        android:textColor="@color/glass_sky"
-        android:textSize="10sp"
+        android:textColor="#FFFFFFCC"
+        android:textSize="11sp"
         android:textStyle="bold"
-        android:maxLines="1"
-        android:letterSpacing="0.12" />
+        android:letterSpacing="0.14" />
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
         android:gravity="center_vertical"
         android:orientation="vertical">
-    <TextView
-        android:id="@+id/tv_value"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="--"
-        android:textColor="@color/glass_text"
-        android:textSize="34sp"
-        android:textStyle="bold"
-        android:maxLines="1"
-         />
-    <TextView
-        android:id="@+id/tv_sub"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="No reading yet"
-        android:textColor="@color/glass_violet"
-        android:textSize="11sp"
-        android:textStyle="bold"
-        android:maxLines="1"
-         />
-        <ProgressBar
-            android:id="@+id/pb_bar"
-            style="?android:attr/progressBarStyleHorizontal"
-            android:layout_width="match_parent"
-            android:layout_height="5dp"
-            android:layout_marginTop="6dp"
-            android:max="100"
-            android:progress="0"
-            android:progressDrawable="@drawable/progress_drawable_kestrel" />
+        <TextView
+            android:id="@+id/tv_value"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="--"
+            android:textColor="#FFFFFF"
+            android:textSize="32sp"
+            android:textStyle="bold"
+            android:maxLines="1" />
+        <TextView
+            android:id="@+id/tv_sub"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="level"
+            android:textColor="#FFFFFFB3"
+            android:textSize="12sp"
+            android:maxLines="1" />
     </LinearLayout>
     <TextView
         android:id="@+id/tv_foot"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text=""
-        android:textColor="@color/glass_muted"
+        android:textColor="#FFFFFF99"
         android:textSize="10sp"
-        
-        android:maxLines="1"
-         />
+        android:maxLines="1" />
 </LinearLayout>
