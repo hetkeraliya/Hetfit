@@ -9,7 +9,7 @@ import java.util.Calendar
 /** One minute of band data, exactly as the Mi Band 5 reports it (see Gadgetbridge FetchActivityOperation). */
 data class BandSample(
   val ts: Long,        // epoch seconds, minute resolution
-  val kind: Int,       // raw kind: 120 = sleep, 115 = not worn, 118 = charging, others = awake
+  val kind: Int,       // 120 light, 121 deep, 122 REM (Mi5); 9 light, 11 deep (older); 115 not worn, 118 charging
   val intensity: Int,
   val steps: Int,
   val hr: Int,         // 0 or 255 = no reading
@@ -17,6 +17,10 @@ data class BandSample(
   val deep: Int,
   val rem: Int
 )
+
+/** True for any Huami sleep-stage kind (light / deep / REM). */
+fun isSleepKind(kind: Int): Boolean =
+  kind == 120 || kind == 121 || kind == 122 || kind == 9 || kind == 11
 
 data class TodayTotals(val steps: Int, val lastHr: Int, val sleepMinutes: Int)
 
@@ -167,10 +171,16 @@ class BandSampleStore private constructor(context: Context) :
         e.paiToday = c.getFloat(1); e.paiTotal = c.getFloat(2)   // later rows of the same day win
       }
     }
-    db.rawQuery("SELECT ts, sleep, deep, rem FROM samples WHERE kind = 120 AND ts >= ?", arrayOf(sinceTs.toString())).use { c ->
+    // Include all sleep kinds: 120/9 light, 121/11 deep, 122 REM. Stage fields (deep/rem bytes)
+    // are used when present; otherwise the kind itself decides the stage.
+    db.rawQuery(
+      "SELECT ts, kind, deep, rem FROM samples WHERE kind IN (120,121,122,9,11) AND ts >= ?",
+      arrayOf(sinceTs.toString())
+    ).use { c ->
       while (c.moveToNext()) {
         val k = dateKey(cal, c.getLong(0), true)
         val e = out.getOrPut(k) { DayExtras() }
+        val kind = c.getInt(1)
         val deep = c.getInt(2) and 127
         val rem = c.getInt(3) and 127
         val t = c.getLong(0)
@@ -178,8 +188,8 @@ class BandSampleStore private constructor(context: Context) :
         if (e.sleepStartTs == null || t < e.sleepStartTs!!) e.sleepStartTs = t
         if (e.sleepEndTs == null || t + 60 > e.sleepEndTs!!) e.sleepEndTs = t + 60
         when {
-          rem > 55 -> e.remMin = (e.remMin ?: 0) + 1
-          deep > 42 -> e.deepMin = (e.deepMin ?: 0) + 1
+          kind == 122 || rem > 55 -> e.remMin = (e.remMin ?: 0) + 1
+          kind == 121 || kind == 11 || deep > 42 -> e.deepMin = (e.deepMin ?: 0) + 1
           else -> e.lightMin = (e.lightMin ?: 0) + 1
         }
       }
@@ -247,10 +257,10 @@ class BandSampleStore private constructor(context: Context) :
     val db = readableDatabase
     fun one(sql: String): Long = db.rawQuery(sql, null).use { if (it.moveToFirst()) it.getLong(0) else 0L }
     val total = one("SELECT COUNT(*) FROM samples")
-    val sleepRows = one("SELECT COUNT(*) FROM samples WHERE kind = 120")
+    val sleepRows = one("SELECT COUNT(*) FROM samples WHERE kind IN (120,121,122,9,11)")
     val first = one("SELECT COALESCE(MIN(ts),0) FROM samples")
     val last = one("SELECT COALESCE(MAX(ts),0) FROM samples")
-    val lastSleep = one("SELECT COALESCE(MAX(ts),0) FROM samples WHERE kind = 120")
+    val lastSleep = one("SELECT COALESCE(MAX(ts),0) FROM samples WHERE kind IN (120,121,122,9,11)")
     val stressRows = one("SELECT COUNT(*) FROM stress")
     val workouts = one("SELECT COUNT(*) FROM workouts")
     return "{\"samples\":$total,\"sleepRows\":$sleepRows,\"first\":$first,\"last\":$last,\"lastSleep\":$lastSleep," +
@@ -262,13 +272,19 @@ class BandSampleStore private constructor(context: Context) :
   fun sleepSegments(fromTs: Long, toTs: Long): List<LongArray> {
     val out = ArrayList<LongArray>()
     readableDatabase.rawQuery(
-      "SELECT ts, deep, rem FROM samples WHERE kind = 120 AND ts >= ? AND ts < ? ORDER BY ts", arrayOf(fromTs.toString(), toTs.toString())
+      "SELECT ts, kind, deep, rem FROM samples WHERE kind IN (120,121,122,9,11) AND ts >= ? AND ts < ? ORDER BY ts",
+      arrayOf(fromTs.toString(), toTs.toString())
     ).use { c ->
       var cur: LongArray? = null
       while (c.moveToNext()) {
         val t = c.getLong(0)
-        val d = c.getInt(1) and 127; val r = c.getInt(2) and 127
-        val stage = when { r > 55 -> 2L; d > 42 -> 1L; else -> 0L }
+        val kind = c.getInt(1)
+        val d = c.getInt(2) and 127; val r = c.getInt(3) and 127
+        val stage = when {
+          kind == 122 || r > 55 -> 2L
+          kind == 121 || kind == 11 || d > 42 -> 1L
+          else -> 0L
+        }
         val seg = cur
         if (seg != null && seg[2] == stage && t - seg[1] <= 60) { seg[1] = t + 60 }
         else { val n = longArrayOf(t, t + 60, stage); out.add(n); cur = n }
@@ -290,12 +306,17 @@ class BandSampleStore private constructor(context: Context) :
       .use { if (it.moveToFirst()) Math.round(it.getFloat(0)) else 0 }
     var deep = 0; var light = 0; var rem = 0
     db.rawQuery(
-      "SELECT deep, rem FROM samples WHERE kind = 120 AND ts >= ? AND ts < ?",
+      "SELECT kind, deep, rem FROM samples WHERE kind IN (120,121,122,9,11) AND ts >= ? AND ts < ?",
       arrayOf((dayStart - 6 * 3600).toString(), (dayStart + 18 * 3600).toString())
     ).use { c ->
       while (c.moveToNext()) {
-        val d = c.getInt(0) and 127; val r = c.getInt(1) and 127
-        when { r > 55 -> rem++; d > 42 -> deep++; else -> light++ }
+        val kind = c.getInt(0)
+        val d = c.getInt(1) and 127; val r = c.getInt(2) and 127
+        when {
+          kind == 122 || r > 55 -> rem++
+          kind == 121 || kind == 11 || d > 42 -> deep++
+          else -> light++
+        }
       }
     }
     return SmartExtras(now, avg, deep, light, rem)
@@ -344,7 +365,8 @@ class BandSampleStore private constructor(context: Context) :
         while (c.moveToNext()) {
           val s = BandSample(c.getLong(0), c.getInt(1), c.getInt(2), c.getInt(3), c.getInt(4), c.getInt(5), c.getInt(6), c.getInt(7))
           val hasHr = s.hr in 1..253
-          if (s.kind != 120 && s.steps == 0 && !hasHr) continue
+          // Always keep sleep-stage minutes (120/121/122/9/11) even when steps/HR are zero.
+          if (!isSleepKind(s.kind) && s.steps == 0 && !hasHr) continue
           chunk.add(s)
           if (chunk.size >= chunkSize) { block(ArrayList(chunk)); chunk.clear() }
         }
@@ -366,8 +388,10 @@ class BandSampleStore private constructor(context: Context) :
     // Last night = yesterday 18:00 .. today 18:00
     val sleepFrom = dayStart - 6 * 3600
     val sleepTo = dayStart + 18 * 3600
-    val sleep = db.rawQuery("SELECT COUNT(*) FROM samples WHERE kind = 120 AND ts >= ? AND ts < ?", arrayOf(sleepFrom.toString(), sleepTo.toString()))
-      .use { if (it.moveToFirst()) it.getInt(0) else 0 }
+    val sleep = db.rawQuery(
+      "SELECT COUNT(*) FROM samples WHERE kind IN (120,121,122,9,11) AND ts >= ? AND ts < ?",
+      arrayOf(sleepFrom.toString(), sleepTo.toString())
+    ).use { if (it.moveToFirst()) it.getInt(0) else 0 }
     return TodayTotals(steps, hr, sleep)
   }
 
