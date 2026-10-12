@@ -101,7 +101,7 @@
   function applyTheme(theme) {
     document.documentElement.setAttribute('data-theme', 'light');
     const m = document.querySelector('meta[name="theme-color"]');
-    if (m) m.setAttribute('content', '#AA98A9');
+    if (m) m.setAttribute('content', '#D9DCE5');
   }
 
   function looksLikeSqlite(bytes) {
@@ -1290,9 +1290,9 @@
 
     const restInt = hr ? Math.max(0.15, 1 - (hr - 55) / 80) : 0.25;
     const workInt = zoneTotal ? Math.min(1, (zones.high + zones.moderate) / 80) : Math.min(1, pct / 100);
-    drawBubbles($('bubble-rest'), 2.1, '#AA98A9', restInt);
-    drawBubbles($('bubble-work'), 5.4, '#7A6879', workInt);
-    drawBubbles($('bubble-avg'), 8.2, '#d8c8d6', (restInt + workInt) / 2);
+    drawBubbles($('bubble-rest'), 2.1, '#A7B0C4', restInt);
+    drawBubbles($('bubble-work'), 5.4, '#454B5C', workInt);
+    drawBubbles($('bubble-avg'), 8.2, '#C5CCD9', (restInt + workInt) / 2);
 
     const cardio = zoneTotal ? zones.high / zoneTotal : Math.min(0.55, pct / 180);
     const strength = zoneTotal ? zones.moderate / zoneTotal : Math.min(0.28, pct / 280);
