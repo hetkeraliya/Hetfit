@@ -272,6 +272,17 @@ class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
+    // Match system bars to Moonlight theme (remove peach/cream strips)
+    window.statusBarColor = android.graphics.Color.parseColor("#D9DCE5")
+    window.navigationBarColor = android.graphics.Color.parseColor("#D9DCE5")
+    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+      var flags = window.decorView.systemUiVisibility
+      flags = flags or android.view.View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+      if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+        flags = flags or android.view.View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
+      }
+      window.decorView.systemUiVisibility = flags
+    }
 
     miBandManager = MiBandManager.get(applicationContext)
     miBandManager.onNoKeySync = { importZeppIfPermitted() }
@@ -560,7 +571,7 @@ fun KestrelMainScreen(
               if (c is MainActivity) { c.liveWebView = this; break }
               c = c.baseContext
             }
-            setBackgroundColor(android.graphics.Color.parseColor("#FFEED7"))
+            setBackgroundColor(android.graphics.Color.parseColor("#D9DCE5"))
 
             settings.apply {
               javaScriptEnabled = true
