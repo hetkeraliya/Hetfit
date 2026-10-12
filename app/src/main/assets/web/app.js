@@ -494,7 +494,7 @@
         }
         if (inc.heartRateAvg != null) {
           day.heartRateAvg = inc.heartRateAvg; day.heartRateMin = inc.heartRateMin; day.heartRateMax = inc.heartRateMax;
-          day.hourlyHr = inc.hourlyHr; day.hrSeries = inc.hrSeries; day.hrZoneMinutes = inc.hrZoneMinutes;
+          day.hourlyHr = inc.hourlyHr; day.hrSeries = inc.hrSeries; delete day.hrCounts; day.hrZoneMinutes = inc.hrZoneMinutes;
         }
         if (inc.sleepMinutes > 0 && (!prev || inc.sleepMinutes >= (prev.sleepMinutes || 0))) {
           day.sleepMinutes = inc.sleepMinutes; day.sleepStart = inc.sleepStart; day.sleepEnd = inc.sleepEnd;
@@ -510,6 +510,34 @@
   };
   // Live values while connected. Steps/battery go into today's record; heart rate only updates the readout
   // (history comes from the band's own samples, so live pings never skew averages).
+  // Live readings are written into the same per-day arrays the charts use (steps per hour, heart rate per 20 min),
+  // so the graphs grow with real data while the band is connected even before any history is synced.
+  let liveTimer = null, liveDirty = false;
+  function scheduleLiveSave() {
+    liveDirty = true;
+    if (liveTimer) return;
+    liveTimer = setTimeout(() => { liveTimer = null; if (liveDirty) { liveDirty = false; persistAll(); refresh(); } }, 8000);
+  }
+  function recordLiveHr(v) {
+    const now = new Date();
+    const key = fmt(now);
+    const day = state.localDayIndex[key] || (state.localDayIndex[key] = emptyDay(key));
+    if (!Array.isArray(day.hrSeries) || day.hrSeries.length !== 72) day.hrSeries = Array(72).fill(null);
+    if (!Array.isArray(day.hrCounts) || day.hrCounts.length !== 72) day.hrCounts = day.hrSeries.map((x) => (x != null ? 1 : 0));
+    const b = Math.min(71, Math.floor((now.getHours() * 60 + now.getMinutes()) / 20));
+    const c = day.hrCounts[b] || 0, cur = day.hrSeries[b];
+    day.hrSeries[b] = cur == null ? v : Math.round((cur * c + v) / (c + 1));
+    day.hrCounts[b] = c + 1;
+    if (!Array.isArray(day.hourlyHr) || day.hourlyHr.length !== 24) day.hourlyHr = Array(24).fill(null);
+    const hr = now.getHours();
+    day.hourlyHr[hr] = day.hourlyHr[hr] == null ? v : Math.round((day.hourlyHr[hr] + v) / 2);
+    day.heartRateMin = day.heartRateMin == null ? v : Math.min(day.heartRateMin, v);
+    day.heartRateMax = day.heartRateMax == null ? v : Math.max(day.heartRateMax, v);
+    let sum = 0, n = 0;
+    day.hrSeries.forEach((x, i) => { if (x != null) { const w = day.hrCounts[i] || 1; sum += x * w; n += w; } });
+    if (n) day.heartRateAvg = Math.round(sum / n);
+    scheduleLiveSave();
+  }
   window.kestrelLiveMetric = function(type, val) {
     try {
       const v = Number(val);
@@ -519,12 +547,20 @@
         if (v > 30 && v < 220) {
           const el = $('home-hr'); if (el) el.textContent = String(Math.round(v));
           const pill = $('home-hr-status'); if (pill) pill.textContent = v < 60 ? 'Resting' : v < 100 ? 'Normal' : v < 140 ? 'Active' : 'High';
+          recordLiveHr(Math.round(v));
         }
         return;
       }
       const day = state.localDayIndex[key] || (state.localDayIndex[key] = emptyDay(key));
       let changed = false;
       if (type === 'steps' && v >= 0 && v <= 150000 && v > (day.steps || 0)) {
+        const delta = Math.round(v) - (day.steps || 0);
+        if (!Array.isArray(day.hourlySteps) || day.hourlySteps.length !== 24) day.hourlySteps = Array(24).fill(0);
+        const tracked = day.hourlySteps.reduce((a, b2) => a + (b2 || 0), 0);
+        // Add the new steps to the current hour only when we were already tracking this day (never invent a spike).
+        const firstSight = (day.steps || 0) === 0 && delta > 150;
+        if (!firstSight && (tracked >= (day.steps || 0) - 5 || day.liveTracking)) day.hourlySteps[new Date().getHours()] += delta;
+        day.liveTracking = true;
         day.steps = Math.round(v);
         day.distanceMeters = Math.round(v * strideMeters(state.heightCm));
         day.calories = Math.round(v * 0.04);
@@ -533,7 +569,7 @@
       } else if (type === 'battery' && v >= 0 && v <= 100 && day.batteryLast !== v) {
         day.batteryLast = v; changed = true;
       }
-      if (changed) { persistAll(); refresh(); }
+      if (changed) scheduleLiveSave();
     } catch (e) { console.warn('[kestrelLiveMetric]', e); }
   };
   // Per-day stress and sleep-stage values computed natively from the band's samples.
@@ -1126,8 +1162,23 @@
     if ($('flame-count')) $('flame-count').textContent = String(streak || 0);
     if ($('on-track-label')) $('on-track-label').textContent = pct >= 55 ? 'On Track' : (today.steps ? 'Keep Going' : 'Start Moving');
 
-    const hours = today.hourlySteps || Array(24).fill(0);
-    const cum = cumulative(hours);
+    const hours = (today.hourlySteps || Array(24).fill(0)).slice();
+    const isToday = today.date === fmt(new Date());
+    const nowHour = new Date().getHours();
+    // If the hourly record is behind the day total (e.g. only the total is known), spread the missing steps over
+    // the waking hours so far instead of drawing a dead-flat line.
+    const known = hours.reduce((a, b2) => a + (b2 || 0), 0);
+    if ((today.steps || 0) - known > 10) {
+      const from = known > 0 ? Math.max(0, hours.findIndex((x) => x > 0)) : 7;
+      const to = isToday ? Math.max(from, nowHour) : Math.max(from, 20);
+      const per = ((today.steps || 0) - known) / (to - from + 1);
+      for (let hh = from; hh <= to; hh++) hours[hh] = (hours[hh] || 0) + per;
+    }
+    let lastHour = 23;
+    if (isToday) lastHour = nowHour;
+    else { lastHour = 0; hours.forEach((x, i) => { if (x > 0) lastHour = i; }); lastHour = Math.min(23, lastHour + 1); }
+    const cumAll = cumulative(hours);
+    const cum = cumAll.slice(0, Math.max(2, lastHour + 1));
     const max = Math.max.apply(null, cum.concat([1]));
     const pts = cum.map((v, i) => {
       const x = (i / 23) * 320;
@@ -1161,7 +1212,15 @@
       series.forEach((v, i) => { if (v != null) known.push({ i, v }); });
       const barsN = 36;
       const display = [];
-      if (known.length) {
+      if (known.length && series.length >= 24) {
+        // Every bar is the average of its own slice of the day; slices without data stay empty.
+        for (let k = 0; k < barsN; k++) {
+          const from = Math.floor(k * series.length / barsN);
+          const to = Math.max(from + 1, Math.floor((k + 1) * series.length / barsN));
+          const vals = series.slice(from, to).filter((x) => x != null);
+          display.push(vals.length ? vals.reduce((a, b2) => a + b2, 0) / vals.length : null);
+        }
+      } else if (known.length) {
         const lastIdx = Math.max(1, series.length - 1);
         for (let k = 0; k < barsN; k++) {
           const t = k / (barsN - 1) * lastIdx;
@@ -1182,13 +1241,14 @@
         note.textContent = 'No heart-rate samples for this day';
         spark.appendChild(note);
       } else {
-        const min = Math.min.apply(null, display);
-        const maxHr = Math.max.apply(null, display);
+        const present = display.filter((x) => x != null);
+        const min = Math.min.apply(null, present);
+        const maxHr = Math.max.apply(null, present);
         const span = Math.max(8, maxHr - min);
         const mid = min + span * 0.62;
         const slot = 320 / barsN;
         display.forEach((v, i) => {
-          const h = 10 + ((v - min) / span) * 40;
+          const h = v == null ? 4 : 10 + ((v - min) / span) * 40;
           const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
           rect.setAttribute('x', String(i * slot + slot * 0.32));
           rect.setAttribute('y', String(56 - h));
@@ -1198,6 +1258,7 @@
           let cls = 'hr-bar';
           if (i > barsN * 0.78) cls = 'hr-bar soft';
           else if (v >= mid || v >= 110) cls = 'hr-bar warn';
+          if (v == null) cls = 'hr-bar soft';
           rect.setAttribute('class', cls);
           spark.appendChild(rect);
         });
