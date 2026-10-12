@@ -158,9 +158,12 @@ class HuamiActivityFetcher(
     arm()
   }
 
+  /** True when there is no auth key: try once, give up fast and never show an error. */
+  @Volatile var quiet = false
+
   private fun arm() {
     handler.removeCallbacks(watchdog)
-    handler.postDelayed(watchdog, 30_000)
+    handler.postDelayed(watchdog, if (quiet) 8_000 else 30_000)
   }
 
   /** Called for every notification on 0x0004. */
@@ -320,7 +323,7 @@ class HuamiActivityFetcher(
     } catch (e: Exception) {
       Log.w(TAG, "notify off failed: ${e.message}")
     }
-    listener.onFinished(success, total, message)
+    listener.onFinished(success, total, if (quiet && !success) "" else message)
   }
 
   private fun u32(v: ByteArray, o: Int): Int =
