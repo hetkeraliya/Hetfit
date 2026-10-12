@@ -241,9 +241,9 @@ fun BandOnboardingScreen(
             Row(verticalAlignment = Alignment.CenterVertically) {
               val statusColor = when (uiState.status) {
                 ConnectionStatus.CONNECTED -> KestrelGreen
-                ConnectionStatus.CONNECTING, ConnectionStatus.AUTHENTICATING -> Color(0xFFF59E0B)
+                ConnectionStatus.CONNECTING, ConnectionStatus.AUTHENTICATING -> Color(0xFFA7B0C4)
                 ConnectionStatus.SCANNING -> KestrelMauve
-                ConnectionStatus.DISCONNECTED -> Color(0xFF94A3B8)
+                ConnectionStatus.DISCONNECTED -> Color(0xFFA7B0C4)
               }
 
               Box(
@@ -323,7 +323,7 @@ fun BandOnboardingScreen(
                     Icon(
                       imageVector = Icons.Default.Favorite,
                       contentDescription = null,
-                      tint = Color(0xFFF43F5E),
+                      tint = Color(0xFF454B5C),
                       modifier = Modifier.size(14.dp)
                     )
                   }
@@ -354,7 +354,7 @@ fun BandOnboardingScreen(
                     Icon(
                       imageVector = Icons.Default.DirectionsWalk,
                       contentDescription = null,
-                      tint = Color(0xFF0284C7),
+                      tint = Color(0xFF454B5C),
                       modifier = Modifier.size(14.dp)
                     )
                   }
@@ -388,8 +388,8 @@ fun BandOnboardingScreen(
             .fillMaxWidth()
             .padding(bottom = 14.dp),
           shape = RoundedCornerShape(16.dp),
-          colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
-          border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFB74D))
+          colors = CardDefaults.cardColors(containerColor = Color(0xFFE8EBF2)),
+          border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFA7B0C4))
         ) {
           Row(
             modifier = Modifier
@@ -402,14 +402,14 @@ fun BandOnboardingScreen(
               Icon(
                 Icons.Default.Security,
                 contentDescription = null,
-                tint = Color(0xFFEA580C),
+                tint = Color(0xFF454B5C),
                 modifier = Modifier.size(22.dp)
               )
               Spacer(modifier = Modifier.width(10.dp))
               Column {
                 Text(
                   "Bluetooth Permission Needed",
-                  color = Color(0xFF7C2D12),
+                  color = Color(0xFF454B5C),
                   fontWeight = FontWeight.Bold,
                   fontSize = 13.sp
                 )
@@ -422,7 +422,7 @@ fun BandOnboardingScreen(
             }
             Button(
               onClick = onRequestPermissions,
-              colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEA580C)),
+              colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF454B5C)),
               shape = RoundedCornerShape(12.dp)
             ) {
               Text("Grant", fontSize = 11.sp, fontWeight = FontWeight.Bold)
