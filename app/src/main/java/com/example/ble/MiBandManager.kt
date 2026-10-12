@@ -136,6 +136,9 @@ class MiBandManager(private val context: Context) {
   /** Fired on the main thread after a history fetch finished and new rows are in the store. */
   var onHistorySynced: ((newSamples: Int) -> Unit)? = null
 
+  /** Fired when a sync is requested but there is no auth key: the UI imports Zepp data from Health Connect instead. */
+  var onNoKeySync: (() -> Unit)? = null
+
   private val store = BandSampleStore.get(context)
   private var userDisconnected = prefs.getBoolean("user_disconnected", false)
   private var reconnectAttempts = 0
@@ -205,7 +208,7 @@ class MiBandManager(private val context: Context) {
           syncPercent = 100,
           syncMessage = message,
           lastSyncMillis = if (success) System.currentTimeMillis() else _uiState.value.lastSyncMillis,
-          errorMessage = if (success || message == "Sync cancelled") null else message
+          errorMessage = if (success || message.isBlank() || message == "Sync cancelled") null else message
         )
         if (success) prefs.edit().putLong("last_history_sync_wall", System.currentTimeMillis()).apply()
         Log.i(TAG, "History sync finished success=$success new=$newSamples ($message) lastSample=$last")
@@ -230,16 +233,15 @@ class MiBandManager(private val context: Context) {
       _uiState.value = _uiState.value.copy(errorMessage = "Connect your band first.")
       return
     }
-    if (!hasValidAuthKey()) {
-      _uiState.value = _uiState.value.copy(
-        errorMessage = "Auth key missing or invalid. Paste the 32-character key from Zepp / Gadgetbridge, then reconnect.",
-        syncing = false,
-        syncMessage = null
-      )
-      return
-    }
+    val keyOk = hasValidAuthKey()
+    // Without a key we do not nag: grab whatever Bluetooth gives, then let Zepp (Health Connect) fill the rest.
+    if (!keyOk) handler.post { onNoKeySync?.invoke() }
     if (fetcher.running) return
-    _uiState.value = _uiState.value.copy(syncing = true, syncPercent = 0, syncMessage = "Syncing history…", errorMessage = null)
+    fetcher.quiet = !keyOk
+    _uiState.value = _uiState.value.copy(
+      syncing = true, syncPercent = 0, errorMessage = null,
+      syncMessage = if (keyOk) "Syncing history…" else "Live mode — checking what the band shares…"
+    )
     if (!fetcher.start()) {
       _uiState.value = _uiState.value.copy(syncing = false)
     }
@@ -625,10 +627,8 @@ class MiBandManager(private val context: Context) {
         Log.w(TAG, "No valid 32-hex auth key — connecting without Huami auth (history sync disabled)")
         _uiState.value = _uiState.value.copy(
           status = ConnectionStatus.CONNECTED,
-          errorMessage = if (key.isNotEmpty())
-            "Auth key looks wrong (${key.length} chars). Need 32 hex digits for full sync."
-          else
-            "Connected without auth key — live HR/steps only. Add Zepp key for sleep & history sync."
+          errorMessage = null,
+          syncMessage = "Connected over Bluetooth. Live heart rate, steps and battery come from the band; history comes from Zepp."
         )
         subscribeToSensors(gatt)
       }
