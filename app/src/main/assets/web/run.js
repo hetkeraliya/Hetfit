@@ -407,10 +407,24 @@
   let finishing = false;
 
   function startActivity() {
-    if (!A || !A.startRun) { toast('Recording is available in the Android app.'); return; }
     if (lastState && lastState.active) { openLive(); return; }
     const type = codeType(TYPES.find((t) => t.key === prefs.type).code);
-    const go = () => { finishing = false; livePts = []; A.startRun(type.code, !!prefs.voice); openLive(true); };
+    const go = () => {
+      finishing = false; livePts = [];
+      if (A && A.startRun) {
+        try { A.startRun(type.code, !!prefs.voice); }
+        catch (e) { console.warn('[startRun]', e); }
+      }
+      openLive(true);
+      // Seed a visible running clock even if native tick is delayed
+      if (!lastState || !lastState.active) {
+        lastState = { active: true, paused: false, type: type.code, elapsedSec: 0, distanceM: 0, paceSec: 0, hr: 0, avgPaceSec: 0 };
+        try {
+          const el = $('rn-l-type'); if (el) el.textContent = type.label || 'Run';
+          const t = $('rn-l-time'); if (t) t.textContent = '0:00';
+        } catch (e) {}
+      }
+    };
     if (!prefs.countdown) { go(); return; }
     let cd = $('rn-cd');
     if (!cd) { cd = h('div', 'rn-cd'); cd.id = 'rn-cd'; document.body.appendChild(cd); }
