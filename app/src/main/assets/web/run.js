@@ -165,7 +165,7 @@
     if (!track || track.length < 2) return '';
     const pr = projectTrack(track, W, H, pad);
     let paths = '';
-    const stroke = opts.stroke || '#D9DCE5', sw = opts.sw || 5;
+    const stroke = opts.stroke || '#454B5C', sw = opts.sw || 5;
     if (opts.pace) {
       const seg = Math.max(1, Math.floor(pr.length / 90));
       const speeds = [];
@@ -189,8 +189,8 @@
       paths = '<path d="' + d + '" stroke="' + stroke + '" stroke-width="' + sw + '" fill="none" stroke-linecap="round" stroke-linejoin="round"/>';
     }
     const a = pr[0], b = pr[pr.length - 1];
-    const dots = '<circle cx="' + a[0] + '" cy="' + a[1] + '" r="' + (sw + 2) + '" fill="#7ee0a8" stroke="#fff" stroke-width="2"/>' +
-      '<circle cx="' + b[0] + '" cy="' + b[1] + '" r="' + (sw + 2) + '" fill="#e9a8b8" stroke="#fff" stroke-width="2"/>';
+    const dots = '<circle cx="' + a[0] + '" cy="' + a[1] + '" r="' + (sw + 2) + '" fill="#4E9F83" stroke="#fff" stroke-width="2"/>' +
+      '<circle cx="' + b[0] + '" cy="' + b[1] + '" r="' + (sw + 2) + '" fill="#454B5C" stroke="#fff" stroke-width="2"/>';
     return '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">' + paths + dots + '</svg>';
   }
   function sparkSvg(vals, color) {
@@ -317,7 +317,7 @@
       box.appendChild(it);
       if (a.track) {
         setTimeout(() => {
-          const svg = routeSvg(getTrack(a.startSec), { W: 100, H: 100, pad: 12, sw: 3.5, stroke: '#D9DCE5' });
+          const svg = routeSvg(getTrack(a.startSec), { W: 100, H: 100, pad: 12, sw: 3.5, stroke: '#454B5C' });
           if (svg) thumb.innerHTML = svg;
         }, 0);
       }
@@ -325,7 +325,81 @@
     return box;
   }
 
+
+  // ---------- GPX import ----------
+  function parseGpx(text) {
+    const doc = new DOMParser().parseFromString(text, 'application/xml');
+    if (doc.getElementsByTagName('parsererror').length) throw new Error('That file is not a valid GPX');
+    const nodes = Array.from(doc.getElementsByTagName('trkpt'));
+    if (!nodes.length) throw new Error('No track points found (route-only GPX files have no times)');
+    let pts = [];
+    nodes.forEach((n) => {
+      const lat = parseFloat(n.getAttribute('lat')), lon = parseFloat(n.getAttribute('lon'));
+      if (!isFinite(lat) || !isFinite(lon)) return;
+      let t = NaN, ele = 0, hr = 0;
+      Array.from(n.children).forEach((c) => {
+        const nm = c.localName;
+        if (nm === 'time') t = Date.parse((c.textContent || '').trim());
+        else if (nm === 'ele') ele = parseFloat(c.textContent) || 0;
+        else if (nm === 'extensions') {
+          Array.from(c.getElementsByTagName('*')).forEach((e) => {
+            if (e.localName === 'hr' || e.localName === 'heartrate') hr = parseInt(e.textContent, 10) || hr;
+          });
+        }
+      });
+      pts.push([isFinite(t) ? Math.round(t / 1000) : 0, lat, lon, Math.round(ele * 10) / 10, hr]);
+    });
+    if (pts.length < 2) throw new Error('The GPX has fewer than 2 points');
+    if (pts.some((p) => !p[0])) throw new Error('The GPX has no timestamps, so pace and duration cannot be worked out');
+    pts.sort((a, b) => a[0] - b[0]);
+    pts = pts.filter((p, i) => i === 0 || p[0] > pts[i - 1][0]);
+    const typeTxt = ((doc.getElementsByTagName('type')[0] || {}).textContent || '').toLowerCase();
+    let dist = 0, moving = 0;
+    const maxV = /cycl|bik|ride/.test(typeTxt) ? 25 : 12;   // ignore GPS glitches
+    for (let i = 1; i < pts.length; i++) {
+      const d = hav(pts[i - 1], pts[i]), dt = pts[i][0] - pts[i - 1][0];
+      if (dt <= 0 || d / dt > maxV) continue;
+      dist += d;
+      if (dt <= 60 && d / dt >= 0.5) moving += dt;
+    }
+    const elapsed = pts[pts.length - 1][0] - pts[0][0];
+    if (dist < 50) throw new Error('That GPX covers less than 50 m');
+    let type = 1;
+    if (/walk/.test(typeTxt)) type = 3; else if (/cycl|bik|ride/.test(typeTxt)) type = 4; else if (/hik/.test(typeTxt)) type = 15;
+    else if (!typeTxt) { const sp = dist / Math.max(1, moving || elapsed); type = sp > 7 ? 4 : sp < 2.2 ? 3 : 1; }
+    const hrs = pts.map((p) => p[4]).filter((x) => x > 30);
+    if (pts.length > 6000) { const step = Math.ceil(pts.length / 6000); const k = pts.filter((p, i) => i % step === 0); if (k[k.length - 1] !== pts[pts.length - 1]) k.push(pts[pts.length - 1]); pts = k; }
+    return {
+      startSec: pts[0][0], endSec: pts[pts.length - 1][0], type: type, distanceM: Math.round(dist),
+      movingSec: Math.round(moving || elapsed), avgHr: hrs.length ? Math.round(hrs.reduce((s, x) => s + x, 0) / hrs.length) : 0,
+      maxHr: hrs.length ? Math.max.apply(null, hrs) : 0, points: pts
+    };
+  }
+
+  function importRow() {
+    const row = h('div', 'rn-import');
+    row.style.cssText = 'display:flex;justify-content:flex-end;margin:0 0 12px';
+    row.innerHTML = '<button class="rn-btn" type="button">Import GPX</button>';
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = '.gpx,application/gpx+xml,text/xml,application/xml,application/octet-stream'; inp.style.display = 'none';
+    row.appendChild(inp);
+    row.firstChild.onclick = () => inp.click();
+    inp.onchange = async () => {
+      const f = inp.files && inp.files[0]; if (!f) return;
+      try {
+        if (!A || !A.importGpxRun) throw new Error('GPX import needs the Android app');
+        const payload = parseGpx(await f.text());
+        const res = String(A.importGpxRun(JSON.stringify(payload)));
+        if (res.indexOf('ok:') === 0) { delete trackCache[payload.startSec]; toast('Imported ' + (payload.distanceM / 1000).toFixed(2) + ' km'); }
+        else toast(res);
+      } catch (e) { toast(e.message || 'Could not import that file'); }
+      inp.value = '';
+    };
+    return row;
+  }
+
   function renderList(stack) {
+    stack.appendChild(importRow());
     const acts = activities();
     if (!acts.length) { stack.appendChild(listEl([])); return; }
     let month = '', box = null, mkm = 0, header = null, group = [];
@@ -407,24 +481,10 @@
   let finishing = false;
 
   function startActivity() {
+    if (!A || !A.startRun) { toast('Recording is available in the Android app.'); return; }
     if (lastState && lastState.active) { openLive(); return; }
     const type = codeType(TYPES.find((t) => t.key === prefs.type).code);
-    const go = () => {
-      finishing = false; livePts = [];
-      if (A && A.startRun) {
-        try { A.startRun(type.code, !!prefs.voice); }
-        catch (e) { console.warn('[startRun]', e); }
-      }
-      openLive(true);
-      // Seed a visible running clock even if native tick is delayed
-      if (!lastState || !lastState.active) {
-        lastState = { active: true, paused: false, type: type.code, elapsedSec: 0, distanceM: 0, paceSec: 0, hr: 0, avgPaceSec: 0 };
-        try {
-          const el = $('rn-l-type'); if (el) el.textContent = type.label || 'Run';
-          const t = $('rn-l-time'); if (t) t.textContent = '0:00';
-        } catch (e) {}
-      }
-    };
+    const go = () => { finishing = false; livePts = []; A.startRun(type.code, !!prefs.voice); openLive(true); };
     if (!prefs.countdown) { go(); return; }
     let cd = $('rn-cd');
     if (!cd) { cd = h('div', 'rn-cd'); cd.id = 'rn-cd'; document.body.appendChild(cd); }
@@ -549,10 +609,10 @@
       o.appendChild(card);
     }
     if (hasRoute) {
-      const e = h('div', 'rn-card'); e.innerHTML = '<h4>Elevation (m)</h4>' + sparkSvg(an.alt, '#454B5C'); o.appendChild(e);
+      const e = h('div', 'rn-card'); e.innerHTML = '<h4>Elevation (m)</h4>' + sparkSvg(an.alt, '#A7B0C4'); o.appendChild(e);
     }
     const hrs = track.map((p) => p[4]).filter((x) => x > 30);
-    if (hrs.length > 5) { const e = h('div', 'rn-card'); e.innerHTML = '<h4>Heart rate (bpm)</h4>' + sparkSvg(hrs, '#e9a8b8'); o.appendChild(e); }
+    if (hrs.length > 5) { const e = h('div', 'rn-card'); e.innerHTML = '<h4>Heart rate (bpm)</h4>' + sparkSvg(hrs, '#454B5C'); o.appendChild(e); }
 
     const act = h('div', 'rn-actions');
     if (a.track && A) {
@@ -632,7 +692,7 @@
   function drawCard(ctx, W, H, tpl, d) {
     ctx.clearRect(0, 0, W, H);
     const dark = tpl !== 'cream';
-    const ink = tpl === 'cream' ? '#454B5C' : '#D9DCE5';
+    const ink = tpl === 'cream' ? '#2F3442' : '#D9DCE5';
     const soft = tpl === 'cream' ? 'rgba(61,51,64,.6)' : 'rgba(255,238,215,.65)';
     if (tpl === 'glass' || tpl === 'splits') {
       const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#4a3f4d'); g.addColorStop(.5, '#2a232b'); g.addColorStop(1, '#1c181e');
@@ -655,7 +715,7 @@
     };
     const M = 80, tall = H > 1500;
     // header
-    txt('KESTREL', M, 130, 30, 800, tpl === 'cream' ? '#A7B0C4' : '#A7B0C4', 'left', 7);
+    txt('KESTREL', M, 130, 30, 800, tpl === 'cream' ? '#7A6879' : '#c4b3c2', 'left', 7);
     txt(d.title, M, 215, 74, 800, tpl === 'route' ? '#fff' : ink, 'left');
     txt(d.date, M, 268, 32, 600, tpl === 'route' ? 'rgba(255,255,255,.85)' : soft, 'left');
     // route area
@@ -666,11 +726,11 @@
       ctx.lineCap = 'round'; ctx.lineJoin = 'round';
       if (tpl !== 'cream') { ctx.strokeStyle = 'rgba(255,238,215,.30)'; ctx.lineWidth = 34; ctx.shadowColor = 'rgba(255,238,215,.55)'; ctx.shadowBlur = 40; path(); ctx.stroke(); ctx.shadowBlur = 0; }
       const g = ctx.createLinearGradient(M, rTop, W - M, rTop + rH);
-      if (tpl === 'cream') { g.addColorStop(0, '#454B5C'); g.addColorStop(1, '#353A48'); } else if (tpl === 'route') { g.addColorStop(0, '#ffffff'); g.addColorStop(1, '#D9DCE5'); } else { g.addColorStop(0, '#D9DCE5'); g.addColorStop(1, '#e9a8b8'); }
+      if (tpl === 'cream') { g.addColorStop(0, '#A7B0C4'); g.addColorStop(1, '#454B5C'); } else if (tpl === 'route') { g.addColorStop(0, '#ffffff'); g.addColorStop(1, '#D9DCE5'); } else { g.addColorStop(0, '#D9DCE5'); g.addColorStop(1, '#454B5C'); }
       ctx.strokeStyle = g; ctx.lineWidth = 14; if (tpl === 'route') { ctx.shadowColor = 'rgba(0,0,0,.5)'; ctx.shadowBlur = 18; }
       path(); ctx.stroke(); ctx.shadowBlur = 0;
       const a = pr[0], b = pr[pr.length - 1];
-      [[a, '#7ee0a8'], [b, '#e9a8b8']].forEach(([p, c]) => { ctx.beginPath(); ctx.arc(M + p[0], rTop + p[1], 17, 0, 7); ctx.fillStyle = c; ctx.fill(); ctx.lineWidth = 6; ctx.strokeStyle = '#fff'; ctx.stroke(); });
+      [[a, '#4E9F83'], [b, '#454B5C']].forEach(([p, c]) => { ctx.beginPath(); ctx.arc(M + p[0], rTop + p[1], 17, 0, 7); ctx.fillStyle = c; ctx.fill(); ctx.lineWidth = 6; ctx.strokeStyle = '#fff'; ctx.stroke(); });
     } else if (tpl === 'splits' && d.splits.length) {
       const sp = d.splits.map((s) => s.sec / (s.dist / 1000)); const fast = Math.min.apply(null, sp), slow = Math.max.apply(null, sp);
       const n = Math.min(d.splits.length, 14), rowH = Math.min(58, (rH + 40) / n);
@@ -678,7 +738,7 @@
         const y = rTop + i * rowH + 40, w = (W - 2 * M - 230) * (slow === fast ? 1 : 0.35 + 0.65 * (1 - (sp[i] - fast) / (slow - fast)));
         txt(String(s.partial ? s.km - 1 + '+' : s.km), M, y + 28, 30, 700, soft);
         ctx.fillStyle = 'rgba(255,238,215,.12)'; rr(ctx, M + 70, y, W - 2 * M - 230, 36, 18); ctx.fill();
-        ctx.fillStyle = '#e9a8b8'; rr(ctx, M + 70, y, Math.max(24, w), 36, 18); ctx.fill();
+        ctx.fillStyle = '#454B5C'; rr(ctx, M + 70, y, Math.max(24, w), 36, 18); ctx.fill();
         txt(fmtPace(sp[i]), W - M, y + 28, 30, 800, ink, 'right');
       });
     } else {
