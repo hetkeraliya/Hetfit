@@ -78,19 +78,19 @@ import com.example.ble.DiscoveredBand
 import com.example.ble.MiBandState
 
 // Kestrel Web App Theme Colors & Frosted Glass Tokens (matching web app aura theme)
-private val KestrelHeroTop = Color(0xFFC4B3C2)
-private val KestrelHeroMid = Color(0xFFAA98A9)
-private val KestrelHeroBot = Color(0xFF8F7C8E)
-private val KestrelCream = Color(0xFFFFEED7)
-private val KestrelText = Color(0xFF3D3340)
-private val KestrelMauveDark = Color(0xFF7A6879)
-private val KestrelMuted = Color(0x993D3340)
+private val KestrelHeroTop = Color(0xFFE8EBF2)
+private val KestrelHeroMid = Color(0xFFD9DCE5)
+private val KestrelHeroBot = Color(0xFFC5CCD9)
+private val KestrelCream = Color(0xFFD9DCE5)
+private val KestrelText = Color(0xFF454B5C)
+private val KestrelMauveDark = Color(0xFF353A48)
+private val KestrelMuted = Color(0x99454B5C)
 
 // Frosted glass layers
-private val GlassBackground = Color(0xF2FFEED7) // 95% translucent warm cream frosted overlay
+private val GlassBackground = Color(0xF2D9DCE5) // 95% translucent warm cream frosted overlay
 private val GlassCardBg = Color(0xCCFFFFFF) // 80% translucent crisp white
 private val GlassCardInner = Color(0x99FFFFFF) // 60% translucent soft inner pill
-private val GlassBorder = Color(0x55AA98A9) // Luminous mauve-white border
+private val GlassBorder = Color(0x55454B5C) // Luminous mauve-white border
 private val GlassBorderLight = Color(0x99FFFFFF) // Highlights along frosted edges
 
 @Composable
@@ -142,9 +142,9 @@ fun MiFitDeviceMenuDialog(
           .background(
             brush = Brush.verticalGradient(
               colors = listOf(
-                Color(0xFAFFEED7),
-                Color(0xF2F5E5DC),
-                Color(0xEEECDEDF)
+                Color(0xFAD9DCE5),
+                Color(0xF2E8EBF2),
+                Color(0xEEC5CCD9)
               )
             ),
             shape = RoundedCornerShape(32.dp)
@@ -154,7 +154,7 @@ fun MiFitDeviceMenuDialog(
             brush = Brush.linearGradient(
               colors = listOf(
                 Color(0xD9FFFFFF),
-                Color(0x55AA98A9),
+                Color(0x55454B5C),
                 Color(0x88FFFFFF)
               )
             ),
@@ -213,7 +213,7 @@ fun MiFitDeviceMenuDialog(
               onClick = onDismiss,
               modifier = Modifier
                 .size(36.dp)
-                .background(Color(0x22AA98A9), CircleShape)
+                .background(Color(0x22454B5C), CircleShape)
                 .testTag("close_dialog_button")
             ) {
               Icon(
@@ -290,7 +290,7 @@ fun MiFitDeviceMenuDialog(
                   verticalAlignment = Alignment.CenterVertically,
                   modifier = Modifier
                     .background(GlassCardInner, RoundedCornerShape(12.dp))
-                    .border(1.dp, Color(0x33AA98A9), RoundedCornerShape(12.dp))
+                    .border(1.dp, Color(0x33454B5C), RoundedCornerShape(12.dp))
                     .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
                   Icon(
