@@ -770,18 +770,27 @@ fun BandOnboardingScreen(
             OutlinedTextField(
               value = inputAuthKey,
               onValueChange = {
-                inputAuthKey = it
-                onSaveAuthKey(it)
+                // Strip 0x / spaces / colons so the field always shows the clean 32-hex key
+                val clean = it.trim()
+                  .replace("0x", "", ignoreCase = true)
+                  .replace(" ", "").replace(":", "").replace("-", "")
+                  .lowercase()
+                inputAuthKey = clean
+                onSaveAuthKey(clean)
               },
-              placeholder = { Text("32 hex chars (Optional)", color = KestrelMuted, fontSize = 11.sp) },
+              placeholder = { Text("32 hex chars (0x prefix OK)", color = KestrelMuted, fontSize = 11.sp) },
               trailingIcon = {
                 IconButton(
                   onClick = {
                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
                     val clip = clipboard?.primaryClip?.getItemAt(0)?.text?.toString() ?: ""
                     if (clip.isNotEmpty()) {
-                      inputAuthKey = clip.trim()
-                      onSaveAuthKey(clip.trim())
+                      val clean = clip.trim()
+                        .replace("0x", "", ignoreCase = true)
+                        .replace(" ", "").replace(":", "").replace("-", "")
+                        .lowercase()
+                      inputAuthKey = clean
+                      onSaveAuthKey(clean)
                     }
                   }
                 ) {
