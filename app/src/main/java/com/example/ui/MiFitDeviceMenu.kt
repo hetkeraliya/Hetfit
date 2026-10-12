@@ -245,9 +245,9 @@ fun MiFitDeviceMenuDialog(
               Row(verticalAlignment = Alignment.CenterVertically) {
                 val statusColor = when (uiState.status) {
                   ConnectionStatus.CONNECTED -> Color(0xFF10B981)
-                  ConnectionStatus.CONNECTING, ConnectionStatus.AUTHENTICATING -> Color(0xFFF59E0B)
+                  ConnectionStatus.CONNECTING, ConnectionStatus.AUTHENTICATING -> Color(0xFFA7B0C4)
                   ConnectionStatus.SCANNING -> KestrelHeroMid
-                  ConnectionStatus.DISCONNECTED -> Color(0xFF94A3B8)
+                  ConnectionStatus.DISCONNECTED -> Color(0xFFA7B0C4)
                 }
 
                 Box(
