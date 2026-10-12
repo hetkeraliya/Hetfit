@@ -4,51 +4,45 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@drawable/bg_widget_card"
-    android:orientation="horizontal"
+    android:orientation="vertical"
     android:gravity="center_vertical">
-    <LinearLayout
-        android:layout_width="0dp"
+    <TextView
+        android:id="@+id/tv_label"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_weight="1"
-        android:orientation="vertical">
+        android:text="BAND"
+        android:textColor="@color/widget_muted"
+        android:textSize="10sp"
+        android:textStyle="bold"
+        android:letterSpacing="0.06"
+        android:maxLines="1" />
     <TextView
         android:id="@+id/tv_value"
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Mi Smart Band 5"
-        android:textColor="@color/glass_text"
-        android:textSize="14sp"
-        android:textStyle="bold"
+        android:ellipsize="end"
         android:maxLines="1"
-         />
+        android:text="—"
+        android:textColor="@color/widget_ink"
+        android:textSize="22sp"
+        android:textStyle="bold" />
     <TextView
         android:id="@+id/tv_sub"
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Disconnected"
-        android:textColor="@color/glass_cyan"
-        android:textSize="11sp"
-        
-        android:maxLines="1"
-        android:layout_marginTop="2dp" />
+        android:ellipsize="end"
+        android:maxLines="2"
+        android:text=""
+        android:textColor="@color/widget_muted"
+        android:textSize="11sp" />
     <TextView
         android:id="@+id/tv_foot"
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text=""
-        android:textColor="@color/glass_muted"
-        android:textSize="10sp"
-        
+        android:layout_marginTop="4dp"
+        android:ellipsize="end"
         android:maxLines="1"
-        android:layout_marginTop="2dp" />
-    </LinearLayout>
-    <TextView
-        android:id="@+id/tv_action"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:background="@drawable/bg_widget_pill"
-        android:text="Sync"
-        android:textColor="@color/glass_text"
-        android:textSize="13sp"
-        android:textStyle="bold" />
+        android:text=""
+        android:textColor="@color/widget_muted"
+        android:textSize="10sp" />
 </LinearLayout>
