@@ -9,9 +9,9 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,30 +22,21 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.Bluetooth
-import androidx.compose.material.icons.filled.BluetoothConnected
 import androidx.compose.material.icons.filled.BluetoothSearching
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentPaste
-import androidx.compose.material.icons.filled.DirectionsWalk
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Key
-import androidx.compose.material.icons.filled.LocalFireDepartment
-import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Watch
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
@@ -53,6 +44,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -66,7 +58,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -76,22 +67,20 @@ import androidx.compose.ui.window.DialogProperties
 import com.example.ble.ConnectionStatus
 import com.example.ble.DiscoveredBand
 import com.example.ble.MiBandState
+import java.text.DateFormat
+import java.util.Date
 
-// Kestrel Web App Theme Colors & Frosted Glass Tokens (matching web app aura theme)
-private val KestrelHeroTop = Color(0xFFE8EBF2)
-private val KestrelHeroMid = Color(0xFFD9DCE5)
-private val KestrelHeroBot = Color(0xFFC5CCD9)
-private val KestrelCream = Color(0xFFD9DCE5)
-private val KestrelText = Color(0xFF454B5C)
-private val KestrelMauveDark = Color(0xFF353A48)
-private val KestrelMuted = Color(0x99454B5C)
-
-// Frosted glass layers
-private val GlassBackground = Color(0xF2D9DCE5) // 95% translucent warm cream frosted overlay
-private val GlassCardBg = Color(0xCCFFFFFF) // 80% translucent crisp white
-private val GlassCardInner = Color(0x99FFFFFF) // 60% translucent soft inner pill
-private val GlassBorder = Color(0x55454B5C) // Luminous mauve-white border
-private val GlassBorderLight = Color(0x99FFFFFF) // Highlights along frosted edges
+// Palette: Moonlight #D9DCE5 / Silver Blue #A7B0C4 / Midnight Slate #454B5C
+private val Moonlight = Color(0xFFD9DCE5)
+private val MoonlightLight = Color(0xFFE8EAF0)
+private val SilverBlue = Color(0xFFA7B0C4)
+private val MidnightSlate = Color(0xFF454B5C)
+private val SlateMuted = Color(0x99454B5C)
+private val PaneColor = Color(0xB3FFFFFF)
+private val Hairline = Color(0x26454B5C)
+private val StatusOk = Color(0xFF4E9F83)
+private val StatusWarn = Color(0xFFC99A3B)
+private val StatusBad = Color(0xFFB8554F)
 
 @Composable
 fun MiFitDeviceMenuDialog(
@@ -109,14 +98,17 @@ fun MiFitDeviceMenuDialog(
 ) {
   val context = LocalContext.current
   var inputAuthKey by remember(uiState.authKey) { mutableStateOf(uiState.authKey) }
-  var showKeyHelp by remember { mutableStateOf(false) }
+  var showKey by remember { mutableStateOf(false) }
 
-  val infiniteTransition = rememberInfiniteTransition(label = "pulse")
-  val pulseScale by infiniteTransition.animateFloat(
-    initialValue = 0.95f,
-    targetValue = 1.08f,
+  val connected = uiState.status == ConnectionStatus.CONNECTED
+  val scanning = uiState.status == ConnectionStatus.SCANNING
+  val working = scanning || uiState.status == ConnectionStatus.CONNECTING || uiState.status == ConnectionStatus.AUTHENTICATING
+
+  val pulse by rememberInfiniteTransition(label = "pulse").animateFloat(
+    initialValue = 0.85f,
+    targetValue = 1.2f,
     animationSpec = infiniteRepeatable(
-      animation = tween(800, easing = FastOutSlowInEasing),
+      animation = tween(900, easing = FastOutSlowInEasing),
       repeatMode = RepeatMode.Reverse
     ),
     label = "pulse_scale"
@@ -131,42 +123,27 @@ fun MiFitDeviceMenuDialog(
         .fillMaxWidth(0.94f)
         .padding(vertical = 16.dp)
         .testTag("mi_fit_device_dialog"),
-      shape = RoundedCornerShape(32.dp),
+      shape = RoundedCornerShape(28.dp),
       color = Color.Transparent,
       tonalElevation = 0.dp,
-      shadowElevation = 24.dp
+      shadowElevation = 0.dp
     ) {
       Box(
         modifier = Modifier
           .fillMaxWidth()
           .background(
-            brush = Brush.verticalGradient(
-              colors = listOf(
-                Color(0xFAD9DCE5),
-                Color(0xF2E8EBF2),
-                Color(0xEEC5CCD9)
-              )
-            ),
-            shape = RoundedCornerShape(32.dp)
+            brush = Brush.verticalGradient(listOf(MoonlightLight, Moonlight)),
+            shape = RoundedCornerShape(28.dp)
           )
-          .border(
-            width = 1.5.dp,
-            brush = Brush.linearGradient(
-              colors = listOf(
-                Color(0xD9FFFFFF),
-                Color(0x55454B5C),
-                Color(0x88FFFFFF)
-              )
-            ),
-            shape = RoundedCornerShape(32.dp)
-          )
+          .border(1.dp, Color(0x80FFFFFF), RoundedCornerShape(28.dp))
       ) {
         Column(
           modifier = Modifier
             .fillMaxWidth()
-            .padding(22.dp)
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp, vertical = 20.dp)
         ) {
-          // --- Frosted Header Themed Exactly Like Kestrel Aura Header ---
+          // ---------- Header ----------
           Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -175,581 +152,350 @@ fun MiFitDeviceMenuDialog(
             Row(verticalAlignment = Alignment.CenterVertically) {
               Box(
                 modifier = Modifier
-                  .size(46.dp)
-                  .background(
-                    brush = Brush.linearGradient(
-                      listOf(KestrelHeroTop, KestrelMauveDark)
-                    ),
-                    shape = CircleShape
-                  )
-                  .border(1.dp, Color(0x66FFFFFF), CircleShape),
+                  .size(40.dp)
+                  .background(MidnightSlate, CircleShape),
                 contentAlignment = Alignment.Center
               ) {
-                Icon(
-                  imageVector = Icons.Default.Watch,
-                  contentDescription = "Mi Band",
-                  tint = Color.White,
-                  modifier = Modifier.size(24.dp)
-                )
+                Icon(Icons.Default.Watch, contentDescription = null, tint = Moonlight, modifier = Modifier.size(20.dp))
               }
-              Spacer(modifier = Modifier.width(12.dp))
+              Spacer(Modifier.width(12.dp))
               Column {
+                Text("Band", color = MidnightSlate, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
                 Text(
-                  text = "Mi Smart Band 5",
-                  color = KestrelText,
-                  fontSize = 18.sp,
-                  fontWeight = FontWeight.ExtraBold
-                )
-                Text(
-                  text = "Realtime BLE Communication",
-                  color = KestrelMauveDark,
-                  fontSize = 12.sp,
-                  fontWeight = FontWeight.Medium
+                  text = if (uiState.deviceName.isNotEmpty()) uiState.deviceName else "Mi Smart Band 5",
+                  color = SlateMuted,
+                  fontSize = 12.sp
                 )
               }
             }
-
             IconButton(
               onClick = onDismiss,
               modifier = Modifier
                 .size(36.dp)
-                .background(Color(0x22454B5C), CircleShape)
+                .background(PaneColor, CircleShape)
                 .testTag("close_dialog_button")
             ) {
-              Icon(
-                imageVector = Icons.Default.Close,
-                contentDescription = "Close",
-                tint = KestrelText,
-                modifier = Modifier.size(18.dp)
-              )
+              Icon(Icons.Default.Close, contentDescription = "Close", tint = MidnightSlate, modifier = Modifier.size(18.dp))
             }
           }
 
-          Spacer(modifier = Modifier.height(16.dp))
+          Spacer(Modifier.height(18.dp))
 
-          // --- Active Device Frosted Status Card ---
-          Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(22.dp),
-            colors = CardDefaults.cardColors(containerColor = GlassCardBg),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-            border = androidx.compose.foundation.BorderStroke(1.dp, GlassBorder)
-          ) {
-            Row(
-              modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-              verticalAlignment = Alignment.CenterVertically,
-              horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-              Row(verticalAlignment = Alignment.CenterVertically) {
-                val statusColor = when (uiState.status) {
-                  ConnectionStatus.CONNECTED -> Color(0xFF10B981)
-                  ConnectionStatus.CONNECTING, ConnectionStatus.AUTHENTICATING -> Color(0xFFA7B0C4)
-                  ConnectionStatus.SCANNING -> KestrelHeroMid
-                  ConnectionStatus.DISCONNECTED -> Color(0xFFA7B0C4)
-                }
-
-                Box(
-                  modifier = Modifier
-                    .size(12.dp)
-                    .background(statusColor, CircleShape)
-                    .then(
-                      if (uiState.status == ConnectionStatus.CONNECTING || uiState.status == ConnectionStatus.SCANNING) {
-                        Modifier.scale(pulseScale)
-                      } else Modifier
-                    )
-                )
-                Spacer(modifier = Modifier.width(10.dp))
-                Column {
+          // ---------- Status ----------
+          GlassPane(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp)) {
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+              ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                  val dot = when (uiState.status) {
+                    ConnectionStatus.CONNECTED -> StatusOk
+                    ConnectionStatus.CONNECTING, ConnectionStatus.AUTHENTICATING -> StatusWarn
+                    ConnectionStatus.SCANNING -> SilverBlue
+                    ConnectionStatus.DISCONNECTED -> SilverBlue
+                  }
+                  Box(
+                    modifier = Modifier
+                      .size(10.dp)
+                      .then(if (working) Modifier.scale(pulse) else Modifier)
+                      .background(dot, CircleShape)
+                  )
+                  Spacer(Modifier.width(10.dp))
                   Text(
                     text = when (uiState.status) {
                       ConnectionStatus.CONNECTED -> "Connected"
-                      ConnectionStatus.CONNECTING -> "Connecting..."
-                      ConnectionStatus.AUTHENTICATING -> "Authenticating Band..."
-                      ConnectionStatus.SCANNING -> "Scanning Nearby..."
-                      ConnectionStatus.DISCONNECTED -> "Not Connected"
+                      ConnectionStatus.CONNECTING -> "Connecting"
+                      ConnectionStatus.AUTHENTICATING -> "Authenticating"
+                      ConnectionStatus.SCANNING -> "Searching nearby"
+                      ConnectionStatus.DISCONNECTED -> "Not connected"
                     },
-                    color = KestrelText,
+                    color = MidnightSlate,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp
+                    fontSize = 16.sp
                   )
-                  if (uiState.deviceName.isNotEmpty()) {
-                    Text(
-                      text = uiState.deviceName,
-                      color = KestrelMauveDark,
-                      fontSize = 12.sp
-                    )
-                  }
                 }
-              }
-
-              // Battery Level Badge
-              if (uiState.batteryPercent >= 0) {
-                Row(
-                  verticalAlignment = Alignment.CenterVertically,
-                  modifier = Modifier
-                    .background(GlassCardInner, RoundedCornerShape(12.dp))
-                    .border(1.dp, Color(0x33454B5C), RoundedCornerShape(12.dp))
-                    .padding(horizontal = 8.dp, vertical = 4.dp)
-                ) {
-                  Icon(
-                    imageVector = Icons.Default.BatteryChargingFull,
-                    contentDescription = "Battery",
-                    tint = if (uiState.batteryPercent > 20) Color(0xFF10B981) else Color(0xFFEF4444),
-                    modifier = Modifier.size(16.dp)
-                  )
-                  Spacer(modifier = Modifier.width(4.dp))
+                if (uiState.batteryPercent >= 0) {
                   Text(
                     text = "${uiState.batteryPercent}%",
-                    color = KestrelText,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold
-                  )
-                }
-              }
-            }
-          }
-
-          // --- Live Health Metrics Grid (Realtime Band Telemetry) ---
-          if (uiState.liveHeartRate > 0 || uiState.liveSteps > 0) {
-            Spacer(modifier = Modifier.height(14.dp))
-            Row(
-              modifier = Modifier.fillMaxWidth(),
-              horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-              // Live Heart Rate Tile with frosted styling
-              Card(
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = GlassCardBg),
-                border = androidx.compose.foundation.BorderStroke(1.dp, GlassBorder)
-              ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                  Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier.fillMaxWidth()
-                  ) {
-                    Text("Live Heart Rate", color = KestrelMauveDark, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    Icon(
-                      imageVector = Icons.Default.Favorite,
-                      contentDescription = null,
-                      tint = Color(0xFFF43F5E),
-                      modifier = Modifier
-                        .size(16.dp)
-                        .scale(pulseScale)
-                    )
-                  }
-                  Spacer(modifier = Modifier.height(6.dp))
-                  Row(verticalAlignment = Alignment.Bottom) {
-                    Text(
-                      text = if (uiState.liveHeartRate > 0) "${uiState.liveHeartRate}" else "–",
-                      color = KestrelText,
-                      fontSize = 24.sp,
-                      fontWeight = FontWeight.ExtraBold
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("BPM", color = KestrelMuted, fontSize = 11.sp, modifier = Modifier.padding(bottom = 3.dp))
-                  }
-                }
-              }
-
-              // Live Steps Tile with frosted styling
-              Card(
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = GlassCardBg),
-                border = androidx.compose.foundation.BorderStroke(1.dp, GlassBorder)
-              ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                  Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier.fillMaxWidth()
-                  ) {
-                    Text("Live Steps", color = KestrelMauveDark, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    Icon(
-                      imageVector = Icons.Default.DirectionsWalk,
-                      contentDescription = null,
-                      tint = Color(0xFF0284C7),
-                      modifier = Modifier.size(16.dp)
-                    )
-                  }
-                  Spacer(modifier = Modifier.height(6.dp))
-                  Text(
-                    text = "%,d".format(uiState.liveSteps),
-                    color = KestrelText,
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.ExtraBold
-                  )
-                }
-              }
-            }
-          }
-
-          Spacer(modifier = Modifier.height(14.dp))
-
-          // --- 16-byte Auth Key (Zepp Token) Section ---
-          Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(22.dp),
-            colors = CardDefaults.cardColors(containerColor = GlassCardBg),
-            border = androidx.compose.foundation.BorderStroke(1.dp, GlassBorder)
-          ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-              Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-              ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                  Icon(
-                    imageVector = Icons.Default.Key,
-                    contentDescription = null,
-                    tint = KestrelMauveDark,
-                    modifier = Modifier.size(16.dp)
-                  )
-                  Spacer(modifier = Modifier.width(8.dp))
-                  Text(
-                    text = "Zepp Auth Key (Optional)",
-                    color = KestrelText,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold
-                  )
-                }
-
-                IconButton(
-                  onClick = { showKeyHelp = !showKeyHelp },
-                  modifier = Modifier.size(24.dp)
-                ) {
-                  Icon(
-                    imageVector = Icons.Default.Info,
-                    contentDescription = "Help",
-                    tint = KestrelMauveDark,
-                    modifier = Modifier.size(16.dp)
+                    color = if (uiState.batteryPercent > 20) MidnightSlate else StatusBad,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp
                   )
                 }
               }
 
-              AnimatedVisibility(visible = showKeyHelp) {
-                Text(
-                  text = "If you extracted your 32-hex Auth Key from Zepp Life / Mi Fit, paste it here. If not, you can pair directly via Standard BLE Pairing below.",
-                  color = KestrelMuted,
-                  fontSize = 11.sp,
-                  lineHeight = 16.sp,
-                  modifier = Modifier.padding(vertical = 6.dp)
-                )
+              if (connected) {
+                Spacer(Modifier.height(14.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                  Metric("Heart rate", if (uiState.liveHeartRate > 0) "${uiState.liveHeartRate}" else "–", "bpm", Modifier.weight(1f))
+                  Metric("Steps", if (uiState.liveSteps > 0) "%,d".format(uiState.liveSteps) else "–", "", Modifier.weight(1f))
+                }
               }
 
-              Spacer(modifier = Modifier.height(8.dp))
-
-              OutlinedTextField(
-                value = inputAuthKey,
-                onValueChange = {
-                  val clean = it.trim()
-                    .replace("0x", "", ignoreCase = true)
-                    .replace(" ", "").replace(":", "").replace("-", "")
-                    .lowercase()
-                  inputAuthKey = clean
-                  onSaveAuthKey(clean)
-                },
-                placeholder = {
-                  Text(
-                    text = "32 hex chars (0x prefix OK)",
-                    color = KestrelMuted,
-                    fontSize = 12.sp
-                  )
-                },
-                trailingIcon = {
-                  IconButton(
-                    onClick = {
-                      val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                      val clip = clipboard?.primaryClip?.getItemAt(0)?.text?.toString() ?: ""
-                      if (clip.isNotEmpty()) {
-                        val clean = clip.trim()
-                          .replace("0x", "", ignoreCase = true)
-                          .replace(" ", "").replace(":", "").replace("-", "")
-                          .lowercase()
-                        inputAuthKey = clean
-                        onSaveAuthKey(clean)
-                      }
-                    }
-                  ) {
-                    Icon(
-                      imageVector = Icons.Default.ContentPaste,
-                      contentDescription = "Paste",
-                      tint = KestrelMauveDark
-                    )
-                  }
-                },
-                singleLine = true,
-                modifier = Modifier
-                  .fillMaxWidth()
-                  .testTag("auth_key_text_field"),
-                colors = OutlinedTextFieldDefaults.colors(
-                  focusedTextColor = KestrelText,
-                  unfocusedTextColor = KestrelText,
-                  focusedBorderColor = KestrelMauveDark,
-                  unfocusedBorderColor = GlassBorder,
-                  focusedContainerColor = GlassCardInner,
-                  unfocusedContainerColor = GlassCardInner
-                ),
-                shape = RoundedCornerShape(14.dp)
-              )
-            }
-          }
-
-          Spacer(modifier = Modifier.height(14.dp))
-
-          // --- Discovered Bands / Scanner Section ---
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-          ) {
-            Text(
-              text = "Nearby Devices",
-              color = KestrelText,
-              fontSize = 14.sp,
-              fontWeight = FontWeight.ExtraBold
-            )
-
-            if (uiState.status == ConnectionStatus.SCANNING) {
-              OutlinedButton(
-                onClick = onStopScanClick,
-                shape = RoundedCornerShape(20.dp),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFD97706)),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFD97706))
-              ) {
-                CircularProgressIndicator(
-                  modifier = Modifier.size(12.dp),
-                  color = Color(0xFFD97706),
-                  strokeWidth = 2.dp
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("Stop", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-              }
-            } else {
-              Button(
-                onClick = onScanClick,
-                shape = RoundedCornerShape(20.dp),
-                colors = ButtonDefaults.buttonColors(
-                  containerColor = KestrelMauveDark,
-                  contentColor = Color.White
-                ),
-                modifier = Modifier.testTag("scan_bands_button")
-              ) {
-                Icon(
-                  imageVector = Icons.Default.Refresh,
-                  contentDescription = null,
-                  modifier = Modifier.size(14.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("Search Band", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-              }
-            }
-          }
-
-          Spacer(modifier = Modifier.height(8.dp))
-
-          // Device List
-          if (discoveredDevices.isEmpty()) {
-            Box(
-              modifier = Modifier
-                .fillMaxWidth()
-                .height(110.dp)
-                .background(GlassCardBg, RoundedCornerShape(18.dp))
-                .border(1.dp, GlassBorder, RoundedCornerShape(18.dp)),
-              contentAlignment = Alignment.Center
-            ) {
-              Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(16.dp)) {
-                Icon(
-                  imageVector = if (uiState.status == ConnectionStatus.SCANNING) Icons.Default.BluetoothSearching else Icons.Default.Bluetooth,
-                  contentDescription = null,
-                  tint = KestrelMauveDark,
-                  modifier = Modifier.size(24.dp)
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                  text = if (uiState.status == ConnectionStatus.SCANNING) "Searching for Mi Band 5..." else "Tap 'Search Band' with phone Bluetooth & GPS ON",
-                  color = KestrelMuted,
-                  fontSize = 12.sp,
-                  textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                )
-              }
-            }
-          } else {
-            LazyColumn(
-              modifier = Modifier
-                .fillMaxWidth()
-                .height(160.dp),
-              verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-              items(discoveredDevices) { band ->
-                Card(
-                  modifier = Modifier
+              if (uiState.syncing) {
+                Spacer(Modifier.height(14.dp))
+                Text(uiState.syncMessage ?: "Syncing…", color = SlateMuted, fontSize = 12.sp)
+                Spacer(Modifier.height(6.dp))
+                val frac = (uiState.syncPercent.coerceIn(0, 100) / 100f).coerceAtLeast(0.04f)
+                Box(
+                  Modifier
                     .fillMaxWidth()
-                    .testTag("discovered_device_${band.address}"),
-                  shape = RoundedCornerShape(18.dp),
-                  colors = CardDefaults.cardColors(
-                    containerColor = if (band.isMiBand) Color(0xF2FFFFFF) else GlassCardBg
-                  ),
-                  border = androidx.compose.foundation.BorderStroke(
-                    1.dp,
-                    if (band.isMiBand) KestrelHeroMid else GlassBorder
-                  )
+                    .height(6.dp)
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(Hairline)
                 ) {
-                  Row(
-                    modifier = Modifier
-                      .fillMaxWidth()
-                      .padding(horizontal = 14.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                  ) {
-                    Row(
-                      verticalAlignment = Alignment.CenterVertically,
-                      modifier = Modifier.weight(1f)
-                    ) {
-                      Icon(
-                        imageVector = if (band.isMiBand) Icons.Default.Watch else Icons.Default.Bluetooth,
-                        contentDescription = null,
-                        tint = if (band.isMiBand) KestrelMauveDark else KestrelHeroMid,
-                        modifier = Modifier.size(20.dp)
-                      )
-                      Spacer(modifier = Modifier.width(10.dp))
-                      Column {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                          Text(
-                            text = band.name,
-                            color = KestrelText,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                          )
-                          if (band.isMiBand) {
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Box(
-                              modifier = Modifier
-                                .background(Color(0xFF10B981).copy(alpha = 0.2f), RoundedCornerShape(6.dp))
-                                .padding(horizontal = 5.dp, vertical = 2.dp)
-                            ) {
-                              Text("Mi Band", color = Color(0xFF10B981), fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                            }
-                          }
-                        }
-                        Text(
-                          text = "${band.address}  •  ${band.rssi} dBm",
-                          color = KestrelMuted,
-                          fontSize = 11.sp
-                        )
-                      }
-                    }
-
-                    // Pair / Connect Button
-                    Button(
-                      onClick = { onConnectClick(band, inputAuthKey) },
-                      shape = RoundedCornerShape(16.dp),
-                      colors = ButtonDefaults.buttonColors(
-                        containerColor = if (band.isMiBand) KestrelMauveDark else KestrelHeroMid,
-                        contentColor = Color.White
-                      ),
-                      modifier = Modifier.testTag("pair_device_button")
-                    ) {
-                      Text("Pair", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                    }
-                  }
+                  Box(
+                    Modifier
+                      .fillMaxWidth(frac)
+                      .height(6.dp)
+                      .background(MidnightSlate, RoundedCornerShape(3.dp))
+                  )
                 }
+              } else if (connected && uiState.lastSyncMillis > 0L) {
+                Spacer(Modifier.height(10.dp))
+                Text(
+                  text = "Last sync " + DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(uiState.lastSyncMillis)),
+                  color = SlateMuted,
+                  fontSize = 12.sp
+                )
               }
             }
           }
 
-          // Error message banner if any
           if (uiState.errorMessage != null) {
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(Modifier.height(10.dp))
             Text(
               text = uiState.errorMessage,
-              color = Color(0xFFDC2626),
+              color = StatusBad,
               fontSize = 12.sp,
-              lineHeight = 16.sp
-            )
-          }
-
-          // Sync All Data & Re-run Setup Buttons
-          Spacer(modifier = Modifier.height(14.dp))
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-          ) {
-            Button(
-              onClick = {
-                onSyncAllDataClick()
-                onDismiss()
-              },
-              modifier = Modifier.weight(1f),
-              shape = RoundedCornerShape(16.dp),
-              colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFF10B981),
-                contentColor = Color.White
-              )
-            ) {
-              Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
-              Spacer(modifier = Modifier.width(4.dp))
-              Text("Sync All Data", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-            }
-
-            OutlinedButton(
-              onClick = {
-                onDismiss()
-                onReopenOnboarding()
-              },
-              modifier = Modifier.weight(1f),
-              shape = RoundedCornerShape(16.dp),
-              colors = ButtonDefaults.outlinedButtonColors(contentColor = KestrelMauveDark),
-              border = androidx.compose.foundation.BorderStroke(1.dp, KestrelMauveDark)
-            ) {
-              Text("Setup Wizard", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-            }
-          }
-
-          // Import Gadgetbridge Export / Workouts
-          Spacer(modifier = Modifier.height(10.dp))
-          Button(
-            onClick = {
-              onDismiss()
-              onImportGadgetbridgeClick()
-            },
-            modifier = Modifier
-              .fillMaxWidth()
-              .testTag("import_gadgetbridge_button"),
-            shape = RoundedCornerShape(16.dp),
-            colors = ButtonDefaults.buttonColors(
-              containerColor = KestrelMauveDark,
-              contentColor = Color.White
-            )
-          ) {
-            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-            Spacer(modifier = Modifier.width(6.dp))
-            Text("Import Gadgetbridge Zip (Workouts & History)", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-          }
-
-          // Disconnect Button if connected
-          if (uiState.status == ConnectionStatus.CONNECTED) {
-            Spacer(modifier = Modifier.height(10.dp))
-            OutlinedButton(
-              onClick = onDisconnectClick,
-              shape = RoundedCornerShape(16.dp),
+              lineHeight = 17.sp,
               modifier = Modifier
                 .fillMaxWidth()
-                .testTag("disconnect_band_button"),
-              colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFEF4444)),
-              border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFEF4444))
+                .background(Color(0x1AB8554F), RoundedCornerShape(14.dp))
+                .padding(12.dp)
+            )
+          }
+
+          Spacer(Modifier.height(16.dp))
+
+          // ---------- Main action ----------
+          if (connected) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+              Button(
+                onClick = onSyncAllDataClick,
+                modifier = Modifier
+                  .weight(1f)
+                  .height(48.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MidnightSlate, contentColor = Moonlight)
+              ) { Text("Sync now", fontWeight = FontWeight.Bold, fontSize = 14.sp) }
+              OutlinedButton(
+                onClick = onDisconnectClick,
+                modifier = Modifier
+                  .weight(1f)
+                  .height(48.dp),
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(1.dp, SilverBlue),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MidnightSlate)
+              ) { Text("Disconnect", fontWeight = FontWeight.Bold, fontSize = 14.sp) }
+            }
+          } else {
+            Button(
+              onClick = if (scanning) onStopScanClick else onScanClick,
+              modifier = Modifier
+                .fillMaxWidth()
+                .height(50.dp),
+              shape = RoundedCornerShape(16.dp),
+              colors = ButtonDefaults.buttonColors(containerColor = MidnightSlate, contentColor = Moonlight)
             ) {
-              Text("Disconnect Mi Band", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+              Icon(
+                imageVector = if (scanning) Icons.Default.BluetoothSearching else Icons.Default.Bluetooth,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp)
+              )
+              Spacer(Modifier.width(8.dp))
+              Text(if (scanning) "Stop searching" else "Search for band", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            }
+
+            // ---------- Devices ----------
+            Spacer(Modifier.height(14.dp))
+            if (discoveredDevices.isEmpty()) {
+              Text(
+                text = if (scanning) "Looking for your band…" else "Turn on Bluetooth and location, wake the band, then search.",
+                color = SlateMuted,
+                fontSize = 12.sp,
+                lineHeight = 17.sp,
+                modifier = Modifier.padding(horizontal = 4.dp)
+              )
+            } else {
+              Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                discoveredDevices.take(8).forEach { band ->
+                  GlassPane(Modifier.fillMaxWidth()) {
+                    Row(
+                      modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                      verticalAlignment = Alignment.CenterVertically,
+                      horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                      Column(Modifier.weight(1f)) {
+                        Text(
+                          text = band.name.ifEmpty { "Unknown device" },
+                          color = MidnightSlate,
+                          fontWeight = FontWeight.Bold,
+                          fontSize = 14.sp,
+                          maxLines = 1,
+                          overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                          text = "${band.address} · ${band.rssi} dBm" + if (band.isMiBand) " · Mi Band" else "",
+                          color = SlateMuted,
+                          fontSize = 11.sp,
+                          maxLines = 1,
+                          overflow = TextOverflow.Ellipsis
+                        )
+                      }
+                      Spacer(Modifier.width(10.dp))
+                      Button(
+                        onClick = { onConnectClick(band, inputAuthKey) },
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                          containerColor = if (band.isMiBand) MidnightSlate else SilverBlue,
+                          contentColor = if (band.isMiBand) Moonlight else MidnightSlate
+                        )
+                      ) { Text("Pair", fontWeight = FontWeight.Bold, fontSize = 13.sp) }
+                    }
+                  }
+                }
+              }
+            }
+          }
+
+          Spacer(Modifier.height(16.dp))
+
+          // ---------- Auth key (collapsed) ----------
+          GlassPane(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+              Row(
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .height(44.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+              ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                  Icon(Icons.Default.Key, contentDescription = null, tint = MidnightSlate, modifier = Modifier.size(16.dp))
+                  Spacer(Modifier.width(8.dp))
+                  Text(
+                    text = if (inputAuthKey.isBlank()) "Auth key" else "Auth key saved",
+                    color = MidnightSlate,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp
+                  )
+                }
+                IconButton(onClick = { showKey = !showKey }, modifier = Modifier.size(32.dp)) {
+                  Icon(
+                    imageVector = if (showKey) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = "Toggle auth key",
+                    tint = MidnightSlate
+                  )
+                }
+              }
+              AnimatedVisibility(visible = showKey) {
+                Column(Modifier.padding(bottom = 12.dp)) {
+                  Text(
+                    text = "Paste the 32-character key from your Zepp account. It is only needed once; the app remembers it.",
+                    color = SlateMuted,
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp
+                  )
+                  Spacer(Modifier.height(10.dp))
+                  OutlinedTextField(
+                    value = inputAuthKey,
+                    onValueChange = {
+                      inputAuthKey = it
+                      onSaveAuthKey(it)
+                    },
+                    placeholder = { Text("32 hex characters", color = SlateMuted, fontSize = 13.sp) },
+                    trailingIcon = {
+                      IconButton(
+                        onClick = {
+                          val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                          val clip = clipboard?.primaryClip?.getItemAt(0)?.text?.toString() ?: ""
+                          if (clip.isNotEmpty()) {
+                            inputAuthKey = clip.trim()
+                            onSaveAuthKey(clip.trim())
+                          }
+                        }
+                      ) { Icon(Icons.Default.ContentPaste, contentDescription = "Paste", tint = MidnightSlate) }
+                    },
+                    singleLine = true,
+                    modifier = Modifier
+                      .fillMaxWidth()
+                      .testTag("auth_key_text_field"),
+                    colors = OutlinedTextFieldDefaults.colors(
+                      focusedTextColor = MidnightSlate,
+                      unfocusedTextColor = MidnightSlate,
+                      focusedBorderColor = MidnightSlate,
+                      unfocusedBorderColor = Hairline,
+                      focusedContainerColor = Color(0x66FFFFFF),
+                      unfocusedContainerColor = Color(0x66FFFFFF),
+                      cursorColor = MidnightSlate
+                    ),
+                    shape = RoundedCornerShape(14.dp)
+                  )
+                }
+              }
+            }
+          }
+
+          Spacer(Modifier.height(8.dp))
+
+          // ---------- Low-emphasis extras ----------
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+          ) {
+            TextButton(onClick = {
+              onReopenOnboarding()
+              onDismiss()
+            }) { Text("Setup guide", color = MidnightSlate, fontSize = 13.sp, fontWeight = FontWeight.SemiBold) }
+            TextButton(onClick = onImportGadgetbridgeClick) {
+              Text("Import Gadgetbridge zip", color = MidnightSlate, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             }
           }
         }
+      }
+    }
+  }
+}
+
+/** A soft white pane used for every grouped block in the dialog. */
+@Composable
+private fun GlassPane(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+  Box(
+    modifier = modifier
+      .background(PaneColor, RoundedCornerShape(20.dp))
+      .border(1.dp, Hairline, RoundedCornerShape(20.dp))
+  ) { content() }
+}
+
+@Composable
+private fun Metric(label: String, value: String, unit: String, modifier: Modifier = Modifier) {
+  Column(
+    modifier = modifier
+      .background(Moonlight.copy(alpha = 0.7f), RoundedCornerShape(14.dp))
+      .padding(12.dp)
+  ) {
+    Text(label, color = SlateMuted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+    Spacer(Modifier.height(4.dp))
+    Row(verticalAlignment = Alignment.Bottom) {
+      Text(value, color = MidnightSlate, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
+      if (unit.isNotEmpty()) {
+        Spacer(Modifier.width(4.dp))
+        Text(unit, color = SlateMuted, fontSize = 11.sp, modifier = Modifier.padding(bottom = 4.dp))
       }
     }
   }
