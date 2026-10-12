@@ -103,3 +103,64 @@
 .rn-band-offer-actions .rn-btn{flex:1;padding:14px 12px;font-size:15px;border-radius:16px}
 
 @keyframes card-rise{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:none}}
+
+/* ===== Strava-style live run overlay (matches run.js markup) ===== */
+.rn-overlay{
+  position:fixed;inset:0;z-index:200;
+  display:none;flex-direction:column;
+  background:#2A2E38;color:#E8EBF2;
+  padding:max(16px,env(safe-area-inset-top)) 18px max(20px,env(safe-area-inset-bottom));
+  box-sizing:border-box;
+  overflow:auto;
+}
+.rn-overlay.open,
+.rn-live.open{display:flex !important;}
+.rn-live .top{
+  display:flex;justify-content:space-between;align-items:center;
+  font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  opacity:.85;margin-bottom:8px;
+}
+.rn-time{
+  font-size:56px;font-weight:800;letter-spacing:-.03em;line-height:1.05;
+  text-align:center;margin:8px 0 18px;
+}
+.rn-lgrid{
+  display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;
+}
+.rn-lgrid .big{font-size:28px;font-weight:800;letter-spacing:-.02em}
+.rn-lgrid .lbl{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;opacity:.6;margin-top:2px}
+.rn-live .rn-route{
+  flex:1;min-height:140px;border-radius:18px;background:#1E222B;margin-bottom:14px;
+  position:relative;overflow:hidden;
+}
+.rn-ctrl{
+  display:flex;gap:16px;justify-content:center;padding:8px 0 4px;
+}
+.rn-ctrl button{
+  min-width:120px;height:52px;border-radius:999px;border:0;
+  font-size:15px;font-weight:750;cursor:pointer;padding:0 22px;
+}
+.rn-ctrl .a{background:#D9DCE5;color:#2A2E38}
+.rn-ctrl .b{background:rgba(255,255,255,.12);color:#E8EBF2}
+.rn-cd{
+  position:fixed;inset:0;z-index:300;
+  background:rgba(30,34,43,.96);color:#E8EBF2;
+  display:none;align-items:center;justify-content:center;
+  font-size:120px;font-weight:800;
+}
+.rn-cd.open{display:flex !important;}
+.rn-modal{
+  position:fixed;inset:0;z-index:260;
+  background:rgba(30,34,43,.55);
+  display:none;align-items:flex-end;justify-content:center;
+  padding:18px;box-sizing:border-box;
+}
+.rn-modal.open{display:flex !important;}
+.rn-sheet{
+  width:min(400px,100%);background:#fff;color:#454B5C;
+  border-radius:24px;padding:24px 20px 20px;
+  display:flex;flex-direction:column;gap:10px;
+  box-shadow:0 -8px 32px rgba(0,0,0,.2);
+}
+.rn-sheet .rn-btn{width:100%;text-align:center}
+.rn-sheet .rn-btn.danger{background:#FEE2E2;color:#B91C1C;border:none}
