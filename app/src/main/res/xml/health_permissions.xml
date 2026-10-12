@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Declare Health Connect read permissions for Android 13/14+ -->
+<health-permissions>
+    <permission name="android.permission.health.READ_STEPS" />
+    <permission name="android.permission.health.READ_HEART_RATE" />
+    <permission name="android.permission.health.READ_SLEEP" />
+    <permission name="android.permission.health.READ_DISTANCE" />
+    <permission name="android.permission.health.READ_TOTAL_CALORIES_BURNED" />
+    <permission name="android.permission.health.READ_EXERCISE" />
+</health-permissions>
