@@ -1,12 +1,9 @@
 /* =====================================================================
-   Moonlight Theme — clean, soft, high-contrast
+   Moonlight Theme — 60% frosted glass, slow gradients, butter-smooth
    Palette: Moonlight #D9DCE5 · Silver Blue #A7B0C4 · Midnight Slate #454B5C
-   Animated soft gradients + decluttered surfaces + redesigned pairing card
-   Load AFTER styles.css and run.css
    ===================================================================== */
 
 :root {
-  /* Core palette */
   --moon: #D9DCE5;
   --moon-rgb: 217, 220, 229;
   --silver: #A7B0C4;
@@ -14,7 +11,6 @@
   --slate: #454B5C;
   --slate-rgb: 69, 75, 92;
 
-  /* Semantic tokens */
   --accent: #454B5C;
   --accent-rgb: 69, 75, 92;
   --accent-deep: #353A48;
@@ -25,10 +21,10 @@
   --ink: #454B5C;
   --ink-rgb: 69, 75, 92;
   --muted: rgba(69, 75, 92, 0.58);
-  --banner: rgba(255, 255, 255, 0.72);
+  --banner: rgba(255, 255, 255, 0.62);
   --banner-ink: #454B5C;
   --line: rgba(69, 75, 92, 0.12);
-  --card-soft: rgba(255, 255, 255, 0.78);
+  --card-soft: rgba(255, 255, 255, 0.60);
   --page-bg: #D9DCE5;
   --teal: #454B5C;
   --teal-deep: #353A48;
@@ -37,14 +33,13 @@
   --hero-top: #E8EBF2;
   --hero-mid: #D9DCE5;
   --hero-bot: #C5CCD9;
-  --glass-bg: rgba(255, 255, 255, 0.72);
-  --glass-blur: blur(18px);
+  /* 60% frosted glass */
+  --glass-bg: rgba(255, 255, 255, 0.60);
+  --glass-blur: blur(14px);
   --glass-border: rgba(69, 75, 92, 0.10);
-  --glass-shadow: 0 1px 0 rgba(255,255,255,0.85) inset, 0 8px 28px rgba(69, 75, 92, 0.08);
+  --glass-shadow: 0 1px 0 rgba(255,255,255,0.7) inset, 0 6px 20px rgba(69, 75, 92, 0.07);
   --page-grad: linear-gradient(165deg, #E8EBF2 0%, #D9DCE5 45%, #C5CCD9 100%);
   --ease: cubic-bezier(.22, 1, .36, 1);
-
-  /* Extra for charts / rings */
   --chart-line: #454B5C;
   --chart-fill: rgba(167, 176, 196, 0.35);
   --chart-grid: rgba(69, 75, 92, 0.08);
@@ -65,16 +60,16 @@ html[data-theme="dark"] {
   --banner: rgba(255, 255, 255, 0.08);
   --banner-ink: #D9DCE5;
   --line: rgba(255, 255, 255, 0.10);
-  --card-soft: rgba(255, 255, 255, 0.06);
+  --card-soft: rgba(255, 255, 255, 0.08);
   --page-bg: #2A2E38;
   --blue: #A7B0C4;
   --blue-deep: #D9DCE5;
   --hero-top: #3A3F4C;
   --hero-mid: #2A2E38;
   --hero-bot: #1E222B;
-  --glass-bg: rgba(255, 255, 255, 0.06);
+  --glass-bg: rgba(255, 255, 255, 0.08);
   --glass-border: rgba(255, 255, 255, 0.10);
-  --glass-shadow: 0 1px 0 rgba(255,255,255,0.05) inset, 0 8px 28px rgba(0, 0, 0, 0.35);
+  --glass-shadow: 0 1px 0 rgba(255,255,255,0.04) inset, 0 6px 20px rgba(0, 0, 0, 0.3);
   --page-grad: linear-gradient(165deg, #3A3F4C 0%, #2A2E38 50%, #1E222B 100%);
   --chart-line: #D9DCE5;
   --chart-fill: rgba(167, 176, 196, 0.25);
@@ -83,63 +78,55 @@ html[data-theme="dark"] {
   --ring-fill: #A7B0C4;
 }
 
-/* ========== Animated moving gradient background ========== */
+/* ---- Slow moving gradient background (feralui-style, GPU friendly) ---- */
 html, body {
   background: #D9DCE5;
   color: var(--ink);
+  /* promote to own layer for smooth scroll */
+  -webkit-overflow-scrolling: touch;
 }
-.app-shell {
-  background: transparent;
-  position: relative;
-}
+.app-shell { background: transparent; position: relative; }
 
-/* Full-viewport animated gradient layer */
 body::before {
   content: "";
   position: fixed;
   inset: 0;
   z-index: -2;
   background:
-    radial-gradient(ellipse 80% 60% at 15% 20%, rgba(217, 220, 229, 0.95) 0%, transparent 55%),
-    radial-gradient(ellipse 70% 50% at 85% 15%, rgba(167, 176, 196, 0.55) 0%, transparent 50%),
-    radial-gradient(ellipse 60% 70% at 50% 90%, rgba(69, 75, 92, 0.18) 0%, transparent 55%),
-    linear-gradient(160deg, #E8EBF2 0%, #D9DCE5 40%, #C5CCD9 100%);
-  background-size: 140% 140%, 160% 160%, 120% 120%, 100% 100%;
-  animation: moonDrift 22s ease-in-out infinite alternate;
+    radial-gradient(ellipse 90% 70% at 12% 18%, rgba(217,220,229,0.95) 0%, transparent 58%),
+    radial-gradient(ellipse 75% 55% at 88% 12%, rgba(167,176,196,0.50) 0%, transparent 52%),
+    radial-gradient(ellipse 65% 75% at 48% 92%, rgba(69,75,92,0.14) 0%, transparent 58%),
+    linear-gradient(160deg, #E8EBF2 0%, #D9DCE5 42%, #C5CCD9 100%);
+  background-size: 160% 160%, 180% 180%, 140% 140%, 100% 100%;
+  animation: moonDrift 36s ease-in-out infinite alternate;
   will-change: background-position;
+  transform: translateZ(0);
+  pointer-events: none;
 }
 
 html[data-theme="dark"] body::before {
   background:
-    radial-gradient(ellipse 80% 60% at 20% 15%, rgba(69, 75, 92, 0.7) 0%, transparent 55%),
-    radial-gradient(ellipse 70% 50% at 80% 25%, rgba(167, 176, 196, 0.22) 0%, transparent 50%),
-    radial-gradient(ellipse 60% 70% at 40% 85%, rgba(45, 50, 62, 0.6) 0%, transparent 55%),
+    radial-gradient(ellipse 90% 70% at 18% 14%, rgba(69,75,92,0.65) 0%, transparent 55%),
+    radial-gradient(ellipse 75% 55% at 82% 22%, rgba(167,176,196,0.18) 0%, transparent 50%),
+    radial-gradient(ellipse 65% 75% at 42% 88%, rgba(45,50,62,0.55) 0%, transparent 55%),
     linear-gradient(165deg, #2A2E38 0%, #1E222B 100%);
-  background-size: 140% 140%, 160% 160%, 120% 120%, 100% 100%;
+  background-size: 160% 160%, 180% 180%, 140% 140%, 100% 100%;
 }
 
 @keyframes moonDrift {
-  0%   { background-position: 0% 20%, 100% 0%, 50% 100%, 0% 0%; }
-  50%  { background-position: 40% 60%, 60% 40%, 30% 70%, 0% 0%; }
-  100% { background-position: 80% 30%, 20% 70%, 70% 20%, 0% 0%; }
+  0%   { background-position: 0% 18%, 100% 0%, 48% 100%, 0% 0%; }
+  100% { background-position: 70% 40%, 25% 65%, 60% 25%, 0% 0%; }
 }
 
-/* Soft grain (very subtle) */
-.grain-overlay {
-  opacity: 0.06;
-  mix-blend-mode: soft-light;
-}
-html[data-theme="dark"] .grain-overlay {
-  opacity: 0.10;
-}
+.grain-overlay { opacity: 0.05; mix-blend-mode: soft-light; pointer-events: none; }
+html[data-theme="dark"] .grain-overlay { opacity: 0.08; }
 
-/* Dashboard background becomes transparent so the animated layer shows */
 #dashboard-view.aura-dash {
   background: transparent !important;
   padding: 14px 16px 120px;
 }
 
-/* ========== Clean surfaces ========== */
+/* ---- 60% frosted surfaces (blur only on key elements to stay smooth) ---- */
 .sheet-stack,
 .metric-card,
 .today-card,
@@ -147,375 +134,156 @@ html[data-theme="dark"] .grain-overlay {
 .glass-card,
 .health-block,
 .check-table,
-.mo-card {
+.mo-card,
+.login-card {
   background: var(--glass-bg) !important;
+  border: 1px solid var(--glass-border) !important;
+  box-shadow: var(--glass-shadow) !important;
+  border-radius: 22px !important;
+}
+
+/* Blur only on tab bar + login + connection card (expensive otherwise) */
+.tab-strip,
+.login-card,
+.fx-conn,
+.rn-band-offer-card {
   -webkit-backdrop-filter: var(--glass-blur);
   backdrop-filter: var(--glass-blur);
-  border: 1px solid var(--glass-border) !important;
-  box-shadow: var(--glass-shadow) !important;
-  border-radius: 20px !important;
 }
 
-/* Remove heavy old purple / cream gradients from cards */
-.grad-pink, .grad-blue, .grad-orange, .grad-teal, .grad-purple,
-.chart-card {
+.grad-pink, .grad-blue, .grad-orange, .grad-teal, .grad-purple, .chart-card {
   background: var(--glass-bg) !important;
   border: 1px solid var(--glass-border) !important;
   box-shadow: var(--glass-shadow) !important;
   color: var(--ink) !important;
 }
 
-/* ========== Text & contrast fixes ========== */
-.today-steps,
-.today-kicker,
-.today-sub,
-.home-axis,
-.home-axis span,
-.rn-label,
-.rn-sub,
-.rn-kicker,
-.pill-label,
-.pill-unit,
-.mo-note,
-.manual-hint,
-.login-sub,
-.login-note {
-  color: var(--muted) !important;
-}
+/* ---- Text contrast ---- */
+.today-steps, h1, h2, h3, h4, .top-title, .rn-value, .score-value { color: var(--ink) !important; }
+.today-kicker, .today-sub, .home-axis, .home-axis span, .rn-label, .rn-sub, .rn-kicker,
+.pill-label, .pill-unit, .mo-note, .manual-hint, .login-sub, .login-note { color: var(--muted) !important; }
 
-.today-steps,
-h1, h2, h3, h4,
-.top-title,
-.rn-value,
-.score-value {
-  color: var(--ink) !important;
-}
-
-/* Force graph / chart lines & text to be visible */
-svg text,
-.home-line,
-.chart-line,
-path[stroke],
-line[stroke],
-.donut-track {
-  stroke: var(--chart-line) !important;
-  fill: none;
-}
+svg text, .home-line, .chart-line, path[stroke], line[stroke] { stroke: var(--chart-line) !important; fill: none; }
 .donut-track { stroke: var(--ring-track) !important; }
-.donut-cardio,
-.donut-str,
-#goal-ring {
-  stroke: var(--ring-fill) !important;
-}
+.donut-cardio, .donut-str, #goal-ring { stroke: var(--ring-fill) !important; }
 
-/* Status pills & chips */
-.status-pill,
-.on-track-pill,
-.streak-chip,
-.rn-chip,
-.pill {
+.status-pill, .on-track-pill, .streak-chip, .rn-chip, .pill {
   background: var(--glass-bg) !important;
   border: 1px solid var(--glass-border) !important;
   color: var(--ink) !important;
   box-shadow: none !important;
 }
-.rn-chip.active,
-.sub-tab-btn.active,
-.range-btn.active,
-.tab.active {
-  background: var(--slate) !important;
-  color: #fff !important;
-  border-color: transparent !important;
+.rn-chip.active, .sub-tab-btn.active, .range-btn.active, .tab.active {
+  background: var(--slate) !important; color: #fff !important; border-color: transparent !important;
 }
 
-/* ========== Tab bar – clean floating ========== */
+/* ---- Tab bar ---- */
 .tab-strip {
-  background: rgba(255, 255, 255, 0.82) !important;
-  -webkit-backdrop-filter: blur(20px);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(69, 75, 92, 0.08);
-  box-shadow: 0 12px 36px rgba(69, 75, 92, 0.12) !important;
+  background: rgba(255,255,255,0.72) !important;
+  border: 1px solid rgba(69,75,92,0.08);
+  box-shadow: 0 12px 32px rgba(69,75,92,0.10) !important;
   border-radius: 24px !important;
 }
-html[data-theme="dark"] .tab-strip {
-  background: rgba(42, 46, 56, 0.88) !important;
-  border-color: rgba(255,255,255,0.08);
+html[data-theme="dark"] .tab-strip { background: rgba(42,46,56,0.82) !important; border-color: rgba(255,255,255,0.08); }
+.tab-strip-btn { color: var(--silver) !important; font-weight: 600; }
+.tab-strip-btn.active { background: var(--slate) !important; color: #fff !important; border-radius: 16px; }
+.tab-indicator { background: var(--slate) !important; border-radius: 16px; }
+
+/* ---- Buttons ---- */
+.primary, .mo-btns button.primary, .rn-start, #gb-load-btn, button.primary {
+  background: var(--slate) !important; color: #fff !important; border: none !important;
+  border-radius: 14px !important; font-weight: 650;
+  box-shadow: 0 6px 16px rgba(69,75,92,0.20) !important;
 }
-.tab-strip-btn {
-  color: var(--silver) !important;
-  font-weight: 600;
+.mo-btns button:not(.primary), .range-btn, .sub-tab-btn, .rn-btn {
+  background: var(--glass-bg) !important; color: var(--ink) !important;
+  border: 1px solid var(--glass-border) !important; border-radius: 12px !important;
 }
-.tab-strip-btn.active {
-  background: var(--slate) !important;
-  color: #fff !important;
-  border-radius: 16px;
-}
-.tab-strip-btn svg {
-  stroke: currentColor;
+.date-nav-btn, .round-icon-btn {
+  background: var(--glass-bg) !important; border: 1px solid var(--glass-border) !important;
+  color: var(--ink) !important; border-radius: 12px;
 }
 
-/* ========== Buttons ========== */
-.primary,
-.mo-btns button.primary,
-.rn-start,
-#gb-load-btn,
-button.primary {
-  background: var(--slate) !important;
-  color: #fff !important;
-  border: none !important;
-  border-radius: 14px !important;
-  font-weight: 650;
-  box-shadow: 0 6px 18px rgba(69, 75, 92, 0.22) !important;
-}
-.mo-btns button:not(.primary),
-.range-btn,
-.sub-tab-btn,
-.rn-btn {
-  background: var(--glass-bg) !important;
-  color: var(--ink) !important;
-  border: 1px solid var(--glass-border) !important;
-  border-radius: 12px !important;
-}
-
-/* Date nav */
-.date-nav-btn {
-  background: var(--glass-bg) !important;
-  border: 1px solid var(--glass-border) !important;
-  color: var(--ink) !important;
-  border-radius: 12px;
-}
-
-/* Round icon buttons (header) */
-.round-icon-btn {
-  background: var(--glass-bg) !important;
-  border: 1px solid var(--glass-border) !important;
-  color: var(--ink) !important;
-  box-shadow: var(--glass-shadow);
-}
-
-/* ========== Login / upload card ========== */
-.login-card {
-  background: rgba(255, 255, 255, 0.78) !important;
-  -webkit-backdrop-filter: blur(20px);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(69, 75, 92, 0.10) !important;
-  box-shadow: 0 16px 48px rgba(69, 75, 92, 0.12) !important;
-  color: var(--ink) !important;
-}
-.login-title { color: var(--slate) !important; }
+/* ---- Login ---- */
+.login-card { color: var(--ink) !important; }
+.login-title { color: var(--slate) !important; display: flex; align-items: center; justify-content: center; gap: 2px; font-weight: 750; }
 .dropzone {
   border: 1.5px dashed var(--silver) !important;
-  background: rgba(217, 220, 229, 0.4) !important;
-  color: var(--ink) !important;
+  background: rgba(217,220,229,0.45) !important; color: var(--ink) !important;
 }
 .dropzone span { color: var(--muted) !important; }
 
-/* ========== Completely redesigned Band Connection card ========== */
+/* ---- Band connection card ---- */
 .fx-conn {
-  position: relative;
-  overflow: hidden;
-  padding: 22px 20px !important;
-  background: linear-gradient(155deg, rgba(255,255,255,0.85) 0%, rgba(217,220,229,0.65) 100%) !important;
-  border: 1px solid rgba(69, 75, 92, 0.10) !important;
+  position: relative; overflow: hidden; padding: 22px 20px !important;
+  background: rgba(255,255,255,0.62) !important;
+  border: 1px solid rgba(69,75,92,0.10) !important;
   border-radius: 24px !important;
-  box-shadow: 0 12px 36px rgba(69, 75, 92, 0.10) !important;
+  box-shadow: 0 12px 32px rgba(69,75,92,0.09) !important;
 }
-html[data-theme="dark"] .fx-conn {
-  background: linear-gradient(155deg, rgba(58,63,76,0.7) 0%, rgba(42,46,56,0.85) 100%) !important;
-}
-
+html[data-theme="dark"] .fx-conn { background: rgba(58,63,76,0.55) !important; }
 .fx-conn h4 {
-  font-size: 13px !important;
-  font-weight: 700 !important;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--muted) !important;
-  margin: 0 0 14px !important;
+  font-size: 12px !important; font-weight: 700 !important; letter-spacing: 0.05em;
+  text-transform: uppercase; color: var(--muted) !important; margin: 0 0 14px !important;
 }
-
-.fx-conn #cn-body {
-  font-size: 15px !important;
-  line-height: 1.45 !important;
-  color: var(--ink) !important;
-  margin-bottom: 18px !important;
-}
-.fx-conn #cn-body b {
-  font-size: 20px !important;
-  font-weight: 750 !important;
-  color: var(--slate) !important;
-  display: block;
-  margin-bottom: 4px;
-}
-html[data-theme="dark"] .fx-conn #cn-body b {
-  color: var(--moon) !important;
-}
-
-/* Connection status indicator dot */
+.fx-conn #cn-body { font-size: 15px !important; line-height: 1.45 !important; color: var(--ink) !important; margin-bottom: 18px !important; }
+.fx-conn #cn-body b { font-size: 20px !important; font-weight: 750 !important; color: var(--slate) !important; display: block; margin-bottom: 4px; }
+html[data-theme="dark"] .fx-conn #cn-body b { color: var(--moon) !important; }
 .fx-conn.is-on #cn-body b::before {
-  content: "";
-  display: inline-block;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: #5BBF7A;
-  box-shadow: 0 0 0 3px rgba(91, 191, 122, 0.25);
-  margin-right: 8px;
-  vertical-align: middle;
-  position: relative;
-  top: -1px;
+  content: ""; display: inline-block; width: 9px; height: 9px; border-radius: 50%;
+  background: #5BBF7A; box-shadow: 0 0 0 3px rgba(91,191,122,0.25);
+  margin-right: 8px; vertical-align: middle; position: relative; top: -1px;
 }
+.fx-conn .mo-btns { display: grid !important; grid-template-columns: 1fr 1fr; gap: 10px !important; margin-top: 4px; }
+.fx-conn .mo-btns button { padding: 12px 10px !important; font-size: 13px !important; font-weight: 650 !important; border-radius: 14px !important; min-height: 44px; }
+.fx-conn .mo-btns button.primary { grid-column: 1 / -1; background: var(--slate) !important; color: #fff !important; }
+html[data-theme="dark"] .fx-conn .mo-btns button.primary { background: var(--silver) !important; color: var(--slate) !important; }
+.fx-prog { height: 4px !important; background: rgba(167,176,196,0.3) !important; border-radius: 99px !important; margin-top: 16px !important; overflow: hidden; }
+.fx-prog i { display: block; height: 100%; background: linear-gradient(90deg, var(--silver), var(--slate)) !important; border-radius: 99px; transition: width 0.4s var(--ease); }
+.fx-prog.on i { animation: progPulse 1.6s ease-in-out infinite; }
+@keyframes progPulse { 0%,100%{opacity:1} 50%{opacity:.65} }
 
-.fx-conn .mo-btns {
-  display: grid !important;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px !important;
-  margin-top: 4px;
+/* ---- Health / body measurements blocks ---- */
+.health-block, .health-sheet .health-block {
+  background: var(--glass-bg) !important;
+  border: 1px solid var(--glass-border) !important;
+  border-radius: 20px !important;
+  padding: 16px !important;
 }
-.fx-conn .mo-btns button {
-  padding: 12px 10px !important;
-  font-size: 13px !important;
-  font-weight: 650 !important;
-  border-radius: 14px !important;
-  min-height: 44px;
-}
-.fx-conn .mo-btns button.primary {
-  grid-column: 1 / -1;
-  background: var(--slate) !important;
-  color: #fff !important;
-  box-shadow: 0 8px 20px rgba(69, 75, 92, 0.25) !important;
-}
-html[data-theme="dark"] .fx-conn .mo-btns button.primary {
-  background: var(--silver) !important;
-  color: var(--slate) !important;
-}
-
-/* Progress bar – refined */
-.fx-prog {
-  height: 4px !important;
-  background: rgba(167, 176, 196, 0.3) !important;
-  border-radius: 99px !important;
-  margin-top: 16px !important;
-  overflow: hidden;
-}
-.fx-prog i {
-  display: block;
-  height: 100%;
-  background: linear-gradient(90deg, var(--silver), var(--slate)) !important;
-  border-radius: 99px;
-  transition: width 0.4s var(--ease);
-}
-.fx-prog.on i {
-  animation: progPulse 1.4s ease-in-out infinite;
-}
-@keyframes progPulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.7; }
-}
-
-/* ========== Misc clean-ups ========== */
-.stale-banner {
-  background: rgba(69, 75, 92, 0.08) !important;
+.health-block h3, .health-block h4, .health-block label { color: var(--ink) !important; }
+.health-block input, .health-block select {
+  background: rgba(255,255,255,0.7) !important;
+  border: 1px solid var(--glass-border) !important;
   color: var(--ink) !important;
-  border: 1px solid var(--glass-border);
-  border-radius: 12px;
+  border-radius: 12px !important;
 }
 
-/* Reduce visual noise on lists */
-.check-list li {
-  border-bottom-color: var(--line) !important;
+.stale-banner {
+  background: rgba(69,75,92,0.08) !important; color: var(--ink) !important;
+  border: 1px solid var(--glass-border); border-radius: 12px;
 }
-.check-list input[type="checkbox"] {
-  accent-color: var(--slate);
-}
+.check-list li { border-bottom-color: var(--line) !important; }
+.check-list input[type="checkbox"] { accent-color: var(--slate); }
+.ex-icon .sf-head, .ex-icon line, .food-icon { stroke: var(--slate) !important; }
 
-/* Hero metrics area breathing room */
-.hero-metrics {
-  margin-bottom: 8px;
-}
+/* ---- Moon mark ---- */
+.moon-mark { display: inline-block; vertical-align: -0.2em; margin-right: 8px; color: var(--slate); flex-shrink: 0; }
+.moon-mark-sm { margin-right: 6px; vertical-align: -0.15em; opacity: 0.9; }
+.top-title { display: inline-flex; align-items: center; font-weight: 700; letter-spacing: -0.02em; }
+html[data-theme="dark"] .moon-mark { color: var(--moon); }
 
-/* Soften any remaining hard purple leftovers from styles.css */
-:root {
-  --hero-top: #E8EBF2 !important;
-  --hero-mid: #D9DCE5 !important;
-  --hero-bot: #C5CCD9 !important;
-}
+/* ---- Transitions (transform/opacity only = smooth) ---- */
+.tab-pages.dir-fwd .tab-page.active  { animation: pg-fwd  .24s var(--ease) both; }
+.tab-pages.dir-back .tab-page.active { animation: pg-back .24s var(--ease) both; }
+@keyframes pg-fwd  { from { opacity: 0; transform: translate3d(12px, 0, 0); } to { opacity: 1; transform: none; } }
+@keyframes pg-back { from { opacity: 0; transform: translate3d(-12px, 0, 0); } to { opacity: 1; transform: none; } }
+.tab-strip-btn, .mo-btns button, .range-btn, .tab, .rn-chip { transition: background-color .18s ease, color .18s ease, transform .12s ease; }
+button:active { transform: scale(.97); }
 
-/* Chart containers */
-.hr-chart-wrap,
-.chart-wrap,
-canvas {
-  color: var(--ink);
-}
-
-/* Ensure SVG fills for icons use currentColor or palette */
-.ex-icon .sf-head,
-.ex-icon line,
-.food-icon {
-  stroke: var(--slate) !important;
-}
-
-/* Page transitions stay smooth */
-.tab-pages.dir-fwd .tab-page.active  { animation: pg-fwd  .26s var(--ease) both; }
-.tab-pages.dir-back .tab-page.active { animation: pg-back .26s var(--ease) both; }
-@keyframes pg-fwd  { from { opacity: 0; transform: translate3d(14px, 0, 0); }  to { opacity: 1; transform: none; } }
-@keyframes pg-back { from { opacity: 0; transform: translate3d(-14px, 0, 0); } to { opacity: 1; transform: none; } }
-
-/* Active tab indicator */
-.tab-indicator {
-  background: var(--slate) !important;
-  border-radius: 16px;
-}
-
-/* Slightly reduce card density */
-.sheet-stack > * + * {
-  margin-top: 14px;
-}
-
-/* Make sure dark mode text never goes invisible */
 html[data-theme="dark"] .today-steps,
-html[data-theme="dark"] h1,
-html[data-theme="dark"] h2,
-html[data-theme="dark"] h3,
-html[data-theme="dark"] h4,
-html[data-theme="dark"] .top-title {
-  color: #E8EBF2 !important;
-}
-html[data-theme="dark"] .muted,
-html[data-theme="dark"] .mo-note,
-html[data-theme="dark"] .today-sub {
-  color: rgba(232, 235, 242, 0.6) !important;
-}
-
-/* ========== Sleek minimal moon mark ========== */
-.moon-mark {
-  display: inline-block;
-  vertical-align: -0.2em;
-  margin-right: 8px;
-  color: var(--slate);
-  flex-shrink: 0;
-}
-.moon-mark-sm {
-  margin-right: 6px;
-  vertical-align: -0.15em;
-  opacity: 0.9;
-}
-.login-title {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  font-weight: 750;
-  letter-spacing: -0.03em;
-}
-.login-title .moon-mark {
-  color: var(--slate);
-}
-.top-title {
-  display: inline-flex;
-  align-items: center;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-}
-html[data-theme="dark"] .moon-mark {
-  color: var(--moon);
+html[data-theme="dark"] h1, html[data-theme="dark"] h2,
+html[data-theme="dark"] h3, html[data-theme="dark"] h4,
+html[data-theme="dark"] .top-title { color: #E8EBF2 !important; }
+html[data-theme="dark"] .muted, html[data-theme="dark"] .mo-note, html[data-theme="dark"] .today-sub {
+  color: rgba(232,235,242,0.6) !important;
 }
