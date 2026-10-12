@@ -4,12 +4,14 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- soft circle backdrop -->
-    <path
-        android:fillColor="#D9DCE5"
-        android:pathData="M54,54m-36,0a36,36 0,1 1,72 0a36,36 0,1 1,-72 0"/>
-    <!-- minimal crescent moon -->
+    <!-- minimal crescent, centered in safe zone -->
     <path
         android:fillColor="#454B5C"
-        android:pathData="M58,30.5c-12.4,0-22.5,10.1-22.5,22.5s10.1,22.5 22.5,22.5c3.4,0 6.6,-0.8 9.5,-2.1c-7.8,-3.4 -13.3,-11.1 -13.3,-20.4c0,-9.3 5.5,-17 13.3,-20.4c-2.9,-1.4 -6.1,-2.1 -9.5,-2.1z"/>
+        android:pathData="M62,30
+            c-14.4,0 -26,11.6 -26,26
+            s11.6,26 26,26
+            c4.2,0 8.1,-1 11.5,-2.8
+            C64.2,74.5 56,65.2 56,54
+            s8.2,-20.5 17.5,-25.2
+            C70.1,31 66.2,30 62,30z"/>
 </vector>
