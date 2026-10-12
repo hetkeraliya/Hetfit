@@ -245,17 +245,18 @@ class HuamiActivityFetcher(
       samples.add(
         BandSample(
           ts = chunkStartTs + i * 60L,
-          kind = bytes[o].toInt() and 0xFF,
+          // Sleep is taken from Health Connect only: Bluetooth sleep flags are treated as plain awake minutes.
+          kind = (bytes[o].toInt() and 0xFF).let { if (it in 120..122) 1 else it },
           intensity = bytes[o + 1].toInt() and 0xFF,
           steps = bytes[o + 2].toInt() and 0xFF,
           hr = bytes[o + 3].toInt() and 0xFF,
-          sleep = bytes[o + 5].toInt() and 0xFF,
-          deep = bytes[o + 6].toInt() and 0xFF,
-          rem = bytes[o + 7].toInt() and 0xFF
+          sleep = 0,
+          deep = 0,
+          rem = 0
         )
       )
     }
-    store.insertAll(samples)
+    store.insertBle(samples)
     total += n
     return (chunkStartTs + n * 60L) * 1000L
   }
