@@ -165,7 +165,7 @@
     if (!track || track.length < 2) return '';
     const pr = projectTrack(track, W, H, pad);
     let paths = '';
-    const stroke = opts.stroke || '#FFEED7', sw = opts.sw || 5;
+    const stroke = opts.stroke || '#D9DCE5', sw = opts.sw || 5;
     if (opts.pace) {
       const seg = Math.max(1, Math.floor(pr.length / 90));
       const speeds = [];
@@ -317,7 +317,7 @@
       box.appendChild(it);
       if (a.track) {
         setTimeout(() => {
-          const svg = routeSvg(getTrack(a.startSec), { W: 100, H: 100, pad: 12, sw: 3.5, stroke: '#FFEED7' });
+          const svg = routeSvg(getTrack(a.startSec), { W: 100, H: 100, pad: 12, sw: 3.5, stroke: '#D9DCE5' });
           if (svg) thumb.innerHTML = svg;
         }, 0);
       }
@@ -535,7 +535,7 @@
       o.appendChild(card);
     }
     if (hasRoute) {
-      const e = h('div', 'rn-card'); e.innerHTML = '<h4>Elevation (m)</h4>' + sparkSvg(an.alt, '#AA98A9'); o.appendChild(e);
+      const e = h('div', 'rn-card'); e.innerHTML = '<h4>Elevation (m)</h4>' + sparkSvg(an.alt, '#454B5C'); o.appendChild(e);
     }
     const hrs = track.map((p) => p[4]).filter((x) => x > 30);
     if (hrs.length > 5) { const e = h('div', 'rn-card'); e.innerHTML = '<h4>Heart rate (bpm)</h4>' + sparkSvg(hrs, '#e9a8b8'); o.appendChild(e); }
@@ -618,7 +618,7 @@
   function drawCard(ctx, W, H, tpl, d) {
     ctx.clearRect(0, 0, W, H);
     const dark = tpl !== 'cream';
-    const ink = tpl === 'cream' ? '#3d3340' : '#FFEED7';
+    const ink = tpl === 'cream' ? '#454B5C' : '#D9DCE5';
     const soft = tpl === 'cream' ? 'rgba(61,51,64,.6)' : 'rgba(255,238,215,.65)';
     if (tpl === 'glass' || tpl === 'splits') {
       const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#4a3f4d'); g.addColorStop(.5, '#2a232b'); g.addColorStop(1, '#1c181e');
@@ -628,7 +628,7 @@
       rg = ctx.createRadialGradient(W * .95, H * .45, 10, W * .95, H * .45, W * .8); rg.addColorStop(0, 'rgba(170,152,169,.35)'); rg.addColorStop(1, 'rgba(170,152,169,0)');
       ctx.fillStyle = rg; ctx.fillRect(0, 0, W, H);
     } else if (tpl === 'cream') {
-      ctx.fillStyle = '#FFEED7'; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = '#D9DCE5'; ctx.fillRect(0, 0, W, H);
       const rg = ctx.createRadialGradient(W * .9, H * .1, 10, W * .9, H * .1, W); rg.addColorStop(0, 'rgba(170,152,169,.35)'); rg.addColorStop(1, 'rgba(170,152,169,0)');
       ctx.fillStyle = rg; ctx.fillRect(0, 0, W, H);
     }
@@ -641,7 +641,7 @@
     };
     const M = 80, tall = H > 1500;
     // header
-    txt('KESTREL', M, 130, 30, 800, tpl === 'cream' ? '#7A6879' : '#c4b3c2', 'left', 7);
+    txt('KESTREL', M, 130, 30, 800, tpl === 'cream' ? '#A7B0C4' : '#A7B0C4', 'left', 7);
     txt(d.title, M, 215, 74, 800, tpl === 'route' ? '#fff' : ink, 'left');
     txt(d.date, M, 268, 32, 600, tpl === 'route' ? 'rgba(255,255,255,.85)' : soft, 'left');
     // route area
@@ -652,7 +652,7 @@
       ctx.lineCap = 'round'; ctx.lineJoin = 'round';
       if (tpl !== 'cream') { ctx.strokeStyle = 'rgba(255,238,215,.30)'; ctx.lineWidth = 34; ctx.shadowColor = 'rgba(255,238,215,.55)'; ctx.shadowBlur = 40; path(); ctx.stroke(); ctx.shadowBlur = 0; }
       const g = ctx.createLinearGradient(M, rTop, W - M, rTop + rH);
-      if (tpl === 'cream') { g.addColorStop(0, '#AA98A9'); g.addColorStop(1, '#5d4c5c'); } else if (tpl === 'route') { g.addColorStop(0, '#ffffff'); g.addColorStop(1, '#FFEED7'); } else { g.addColorStop(0, '#FFEED7'); g.addColorStop(1, '#e9a8b8'); }
+      if (tpl === 'cream') { g.addColorStop(0, '#454B5C'); g.addColorStop(1, '#353A48'); } else if (tpl === 'route') { g.addColorStop(0, '#ffffff'); g.addColorStop(1, '#D9DCE5'); } else { g.addColorStop(0, '#D9DCE5'); g.addColorStop(1, '#e9a8b8'); }
       ctx.strokeStyle = g; ctx.lineWidth = 14; if (tpl === 'route') { ctx.shadowColor = 'rgba(0,0,0,.5)'; ctx.shadowBlur = 18; }
       path(); ctx.stroke(); ctx.shadowBlur = 0;
       const a = pr[0], b = pr[pr.length - 1];
