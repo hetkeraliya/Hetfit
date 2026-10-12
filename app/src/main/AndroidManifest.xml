@@ -209,6 +209,18 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_glass_band_info" />
         </receiver>
+        <!-- Lets Android 14+ Health Connect list this app and open its permission-usage screen -->
+        <activity-alias
+            android:name=".ViewPermissionUsageActivity"
+            android:exported="true"
+            android:permission="android.permission.START_VIEW_PERMISSION_USAGE"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />
+                <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
+            </intent-filter>
+        </activity-alias>
+
         <receiver
             android:name=".ble.BandCallReceiver"
             android:exported="true">
