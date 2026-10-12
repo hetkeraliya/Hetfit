@@ -1,243 +1,521 @@
 /* =====================================================================
-   Frost theme v2 — minimal, light-weight.
-   Neutral stone + graphite with ONE warm accent. Frosted look comes from
-   translucent panes + hairline borders (real blur only on the tab bar),
-   so scrolling stays smooth. Colours + motion only; layout is untouched.
-   Load AFTER styles.css and run.css.
+   Moonlight Theme — clean, soft, high-contrast
+   Palette: Moonlight #D9DCE5 · Silver Blue #A7B0C4 · Midnight Slate #454B5C
+   Animated soft gradients + decluttered surfaces + redesigned pairing card
+   Load AFTER styles.css and run.css
    ===================================================================== */
+
 :root {
-  --accent: #D14B2A;            /* vermilion, used sparingly: lines, rings, icons */
-  --accent-rgb: 209, 75, 42;
-  --accent-deep: #A63A1E;
-  --accent-deep-rgb: 166, 58, 30;
-  --accent-grad: #18181B;       /* primary buttons / active tab: graphite */
+  /* Core palette */
+  --moon: #D9DCE5;
+  --moon-rgb: 217, 220, 229;
+  --silver: #A7B0C4;
+  --silver-rgb: 167, 176, 196;
+  --slate: #454B5C;
+  --slate-rgb: 69, 75, 92;
+
+  /* Semantic tokens */
+  --accent: #454B5C;
+  --accent-rgb: 69, 75, 92;
+  --accent-deep: #353A48;
+  --accent-deep-rgb: 53, 58, 72;
+  --accent-grad: #454B5C;
   --cream: #FFFFFF;
   --cream-rgb: 255, 255, 255;
-  --ink: #17171A;
-  --ink-rgb: 23, 23, 26;
-  --muted: rgba(23, 23, 26, 0.56);
-  --banner: rgba(255, 255, 255, 0.62);
-  --banner-ink: #3A3A40;
-  --line: rgba(23, 23, 26, 0.08);
-  --card-soft: rgba(255, 255, 255, 0.66);
-  --page-bg: #ECEBE7;
-  --teal: var(--accent); --teal-deep: var(--accent-deep);
-  --blue: #8A8F98; --blue-deep: #3A3A40;
-  --hero-top: #F3F2EF; --hero-mid: #EAE9E5; --hero-bot: #DFDEDA;
-  --glass-bg: rgba(255, 255, 255, 0.66);
-  --glass-blur: none;
-  --glass-border: rgba(23, 23, 26, 0.07);
-  --glass-shadow: 0 1px 0 rgba(255,255,255,0.9) inset, 0 6px 18px rgba(20, 20, 26, 0.06);
-  --page-grad: linear-gradient(180deg, #F3F2EF 0%, #E9E8E4 100%);
+  --ink: #454B5C;
+  --ink-rgb: 69, 75, 92;
+  --muted: rgba(69, 75, 92, 0.58);
+  --banner: rgba(255, 255, 255, 0.72);
+  --banner-ink: #454B5C;
+  --line: rgba(69, 75, 92, 0.12);
+  --card-soft: rgba(255, 255, 255, 0.78);
+  --page-bg: #D9DCE5;
+  --teal: #454B5C;
+  --teal-deep: #353A48;
+  --blue: #A7B0C4;
+  --blue-deep: #454B5C;
+  --hero-top: #E8EBF2;
+  --hero-mid: #D9DCE5;
+  --hero-bot: #C5CCD9;
+  --glass-bg: rgba(255, 255, 255, 0.72);
+  --glass-blur: blur(18px);
+  --glass-border: rgba(69, 75, 92, 0.10);
+  --glass-shadow: 0 1px 0 rgba(255,255,255,0.85) inset, 0 8px 28px rgba(69, 75, 92, 0.08);
+  --page-grad: linear-gradient(165deg, #E8EBF2 0%, #D9DCE5 45%, #C5CCD9 100%);
   --ease: cubic-bezier(.22, 1, .36, 1);
+
+  /* Extra for charts / rings */
+  --chart-line: #454B5C;
+  --chart-fill: rgba(167, 176, 196, 0.35);
+  --chart-grid: rgba(69, 75, 92, 0.08);
+  --ring-track: rgba(167, 176, 196, 0.35);
+  --ring-fill: #454B5C;
 }
+
 html[data-theme="dark"] {
-  --accent: #FF7A4D;
-  --accent-rgb: 255, 122, 77;
-  --accent-deep: #E8653A;
-  --accent-deep-rgb: 232, 101, 58;
-  --accent-grad: #E8653A;
+  --accent: #A7B0C4;
+  --accent-rgb: 167, 176, 196;
+  --accent-deep: #D9DCE5;
+  --accent-deep-rgb: 217, 220, 229;
+  --accent-grad: #A7B0C4;
   --cream: #FFFFFF;
-  --ink: #F2F2F0;
-  --ink-rgb: 242, 242, 240;
-  --muted: rgba(242, 242, 240, 0.58);
-  --banner: rgba(255, 255, 255, 0.07);
-  --banner-ink: #D6D6D2;
-  --line: rgba(255, 255, 255, 0.09);
-  --card-soft: rgba(255, 255, 255, 0.055);
-  --page-bg: #0D0D0F;
-  --blue: #8A8F98; --blue-deep: #D6D6D2;
-  --hero-top: #1A1A1D; --hero-mid: #121214; --hero-bot: #0B0B0C;
-  --glass-bg: rgba(255, 255, 255, 0.055);
-  --glass-border: rgba(255, 255, 255, 0.09);
-  --glass-shadow: 0 1px 0 rgba(255,255,255,0.06) inset, 0 6px 18px rgba(0, 0, 0, 0.35);
-  --page-grad: linear-gradient(180deg, #131315 0%, #0A0A0B 100%);
-}
-/* ---- recolored from styles.css ---- */
-html, body { background: var(--accent-grad); }
-.app-shell { background: var(--accent-grad); }
-#dashboard-view.aura-dash { background: radial-gradient(120% 70% at 10% -10%, rgba(var(--cream-rgb), 0.45) 0%, transparent 55%),
-    radial-gradient(90% 50% at 100% 8%, rgba(var(--accent-rgb), 0.35) 0%, transparent 50%),
-    linear-gradient(180deg, var(--hero-top) 0%, var(--hero-mid) 42%, var(--hero-bot) 100%); }
-html[data-theme="dark"] #dashboard-view.aura-dash { background: radial-gradient(120% 70% at 10% -10%, rgba(var(--cream-rgb), 0.18) 0%, transparent 55%),
-    linear-gradient(180deg, var(--ink) 0%, #2a232b 40%, #1c181e 100%); }
-.tab-strip { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: 0 10px 30px rgba(var(--ink-rgb),0.16); }
-.tab-strip-btn { color: var(--accent-deep); }
-.tab-strip-btn.active { background: var(--accent-grad); color: var(--cream); }
-.sub-tab-btn.active { background: var(--accent-grad); color: var(--cream); }
-.check-list input[type="checkbox"] { accent-color: var(--accent); }
-.ex-icon .sf-head { stroke: var(--accent); }
-.ex-icon line { stroke: var(--accent); }
-.food-icon { stroke: var(--accent); }
-.login-card { background: radial-gradient(120% 100% at 15% 0%, var(--cream) 0%, transparent 55%),
-    radial-gradient(120% 100% at 90% 10%, var(--accent) 0%, transparent 50%),
-    linear-gradient(160deg, var(--banner-ink) 0%, var(--accent) 55%, var(--hero-bot) 100%); }
-.copyright, .dash-copy { color: rgba(var(--ink-rgb),0.55); }
-.dash-copy { color: rgba(var(--cream-rgb),0.7); }
-#gb-load-btn { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); color: var(--ink); }
-.sheet-stack { box-shadow: 0 10px 32px rgba(var(--ink-rgb),0.10); }
-.metric-card { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: 0 10px 28px rgba(var(--ink-rgb),0.09); }
-.hr-chart-wrap .status-pill { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: 0 4px 14px rgba(var(--ink-rgb),0.10); }
-.status-pill { border: 1px solid rgba(var(--accent-rgb),0.22); }
-html[data-theme="dark"] .status-pill { color: var(--cream); }
-.today-card { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
-.streak-chip { background: rgba(var(--accent-rgb),0.16); }
-.range-btn.active, .tab.active { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
-.chart-card { background: radial-gradient(140% 90% at 100% 0%, var(--cream) 0%, transparent 45%),
-    radial-gradient(120% 100% at 0% 100%, var(--accent) 0%, transparent 45%),
-    linear-gradient(165deg, var(--banner-ink) 0%, var(--accent) 45%, var(--hero-bot) 100%); }
-.day-pill.selected { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); color: var(--ink); border-color: var(--cream); }
-.grad-pink { background: linear-gradient(150deg, var(--cream) 0%, var(--accent) 55%, var(--accent-deep) 100%); }
-.grad-blue { background: linear-gradient(150deg, #e8d4e0 0%, var(--accent) 45%, var(--banner-ink) 100%); }
-.grad-orange { background: linear-gradient(150deg, var(--cream) 0%, #e8c9a8 40%, var(--accent) 100%); }
-.grad-teal { background: linear-gradient(150deg, #d8c8d6 0%, var(--accent) 55%, var(--banner-ink) 100%); }
-.grad-purple { background: linear-gradient(150deg, var(--cream) 0%, var(--accent) 55%, var(--hero-mid) 100%); }
-.pill-add { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
-.health-block { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: 0 8px 24px rgba(var(--ink-rgb),0.08); }
-.check-table { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: 0 8px 24px rgba(var(--ink-rgb),0.08); }
-.donut-track { stroke: var(--cream); }
-.donut-cardio { stroke: var(--accent); }
-.donut-str { stroke: var(--accent-deep); }
-.donut-flex { stroke: var(--cream); }
-.swatch.cardio { background: var(--accent-grad); }
-.swatch.strength { background: var(--accent-deep); }
-.swatch.flex { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); border: 1px solid rgba(var(--accent-rgb),0.45); }
-.check-row { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
-.score-bar-fill { background: linear-gradient(90deg, var(--accent), var(--accent-deep)); }
-.tag-btn { background: rgba(var(--accent-rgb),0.18); }
-.muscle-chip { background: rgba(var(--accent-rgb),0.16); }
-.muscle-coach-note { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
-.log-workout-box { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
-.log-workout-row button, .modal-actions button { color: var(--cream); }
-.modal-actions .demo-watch-btn { color: var(--cream); }
-.modal-inner { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: 0 20px 50px rgba(var(--ink-rgb),0.28); }
-.exercise-row { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
-.exercise-sets, .exercise-reps { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
-.workout-card { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
-.badge.earned { background: linear-gradient(160deg, rgba(var(--accent-rgb),0.22), rgba(var(--cream-rgb),0.35)); }
-.correlation-row { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
-.coach-msg-user { color: var(--cream); }
-.coach-msg-ai { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
-.coach-input-row button, .coach-plan-btn { color: var(--cream); }
-.coach-plan-btn { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
-.tab-strip-btn.active { color: var(--cream) !important; }
-.tab-indicator { background: var(--accent-grad); box-shadow: 0 6px 16px rgba(var(--accent-deep-rgb),.38); }
-.group-chips .chip { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
-.group-chips .chip.active { background: var(--accent-grad); color: var(--cream); box-shadow: 0 4px 14px rgba(var(--accent-deep-rgb),.35); }
-.fx-prog { background: rgba(var(--accent-rgb),.2); }
-.fx-prog i { background: linear-gradient(90deg, var(--accent), #e9a8b8, var(--accent)); }
-/* ---- recolored from run.css ---- */
-.rn-hero { color: var(--cream); }
-.rn-start { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); color: var(--hero-mid); box-shadow: 0 10px 26px rgba(0,0,0,.25),0 0 0 7px rgba(var(--cream-rgb),.18); }
-.rn-chip { border: 1px solid rgba(var(--cream-rgb),.35); color: var(--cream); }
-.rn-chip.active { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); color: var(--hero-mid); }
-.rn-opts input { accent-color: var(--cream); }
-.rn-day.today i { color: var(--cream); }
-.rn-item:active { background: rgba(var(--accent-rgb),.12); }
-.rn-thumb { color: var(--cream); }
-.rn-btn.primary { color: var(--cream); }
-.rn-route .none { color: var(--cream); }
-.rn-split .bar { background: rgba(var(--accent-rgb),.18); }
-.rn-live { background: linear-gradient(180deg,var(--ink) 0%,#2a232b 45%,#1c181e 100%); color: var(--cream); }
-.rn-ctrl .a { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); color: var(--ink); }
-.rn-ctrl .b { color: var(--cream); }
-.rn-cd { color: var(--cream); }
-.rn-share-prev { background: repeating-conic-gradient(rgba(var(--accent-rgb),.25) 0 25%,transparent 0 50%) 0 0/20px 20px; }
-.rn-pills button.active { color: var(--cream); }
-.mo-btns button.primary { color: var(--cream); }
-.mo-mood button.active { background: rgba(var(--accent-rgb),.15); }
-.mo-tags button.active { color: var(--cream); }
-.mo-stage { background: rgba(var(--accent-rgb),.2); }
-.rn-band-offer-card { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: 0 -8px 40px rgba(var(--ink-rgb),.2); }
-.rn-band-offer-card h3 { color: var(--ink); }
-.rn-band-offer-card p { color: var(--accent-deep); }
-
-/* ---------------- performance: remove everything that forces per-frame GPU work ---------------- */
-.grain-overlay { display: none !important; }                       /* full-screen blend-mode noise was the biggest cost */
-*, *::before, *::after { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; will-change: auto !important; }
-.tab-strip { -webkit-backdrop-filter: blur(16px) saturate(140%) !important; backdrop-filter: blur(16px) saturate(140%) !important; }
-.fx-prog i, .fx-conn.is-on #cn-body b::before { animation: none !important; }
-.fx-prog i { background: var(--accent) !important; }
-
-/* ---------------- surfaces ---------------- */
-html, body { background: var(--page-bg); }
-.app-shell { background: transparent; }
-#dashboard-view.aura-dash, html[data-theme="dark"] #dashboard-view.aura-dash { background: var(--page-grad); }
-
-.glass-card, .rn-card, .health-block, .metric-card, .today-card, .insight-card, .score-card, .sheet-stack {
-  background: var(--glass-bg); border: 1px solid var(--glass-border); box-shadow: var(--glass-shadow); color: var(--ink);
-}
-.sheet-stack { background: transparent; border: 0; box-shadow: none; }        /* no double panel: cards carry the glass */
-.sheet-stack .glass-card, .sheet-stack .rn-card, .sheet-stack .health-block, .sheet-stack .metric-card, .sheet-stack .today-card {
-  background: var(--glass-bg); box-shadow: var(--glass-shadow);
+  --ink: #E8EBF2;
+  --ink-rgb: 232, 235, 242;
+  --muted: rgba(232, 235, 242, 0.58);
+  --banner: rgba(255, 255, 255, 0.08);
+  --banner-ink: #D9DCE5;
+  --line: rgba(255, 255, 255, 0.10);
+  --card-soft: rgba(255, 255, 255, 0.06);
+  --page-bg: #2A2E38;
+  --blue: #A7B0C4;
+  --blue-deep: #D9DCE5;
+  --hero-top: #3A3F4C;
+  --hero-mid: #2A2E38;
+  --hero-bot: #1E222B;
+  --glass-bg: rgba(255, 255, 255, 0.06);
+  --glass-border: rgba(255, 255, 255, 0.10);
+  --glass-shadow: 0 1px 0 rgba(255,255,255,0.05) inset, 0 8px 28px rgba(0, 0, 0, 0.35);
+  --page-grad: linear-gradient(165deg, #3A3F4C 0%, #2A2E38 50%, #1E222B 100%);
+  --chart-line: #D9DCE5;
+  --chart-fill: rgba(167, 176, 196, 0.25);
+  --chart-grid: rgba(255, 255, 255, 0.08);
+  --ring-track: rgba(167, 176, 196, 0.25);
+  --ring-fill: #A7B0C4;
 }
 
-/* header */
-.top-title, #screen-title { color: var(--ink); text-shadow: none; }
-.round-icon-btn, .icon-btn, .flame-badge {
-  background: var(--glass-bg); border: 1px solid var(--glass-border); color: var(--ink); box-shadow: none;
+/* ========== Animated moving gradient background ========== */
+html, body {
+  background: #D9DCE5;
+  color: var(--ink);
 }
-.dash-copy, .copyright { color: var(--muted); }
+.app-shell {
+  background: transparent;
+  position: relative;
+}
 
-/* tab bar */
-.tab-strip { background: rgba(255,255,255,0.72); border: 1px solid var(--glass-border); box-shadow: 0 10px 28px rgba(20,20,26,0.12), 0 1px 0 rgba(255,255,255,0.9) inset; }
-html[data-theme="dark"] .tab-strip { background: rgba(28,28,32,0.74); box-shadow: 0 10px 28px rgba(0,0,0,0.5), 0 1px 0 rgba(255,255,255,0.06) inset; }
-.tab-strip-btn { color: var(--muted); }
-.tab-strip-btn.active { color: #fff !important; background: transparent !important; }
-.tab-indicator { background: var(--accent-grad); box-shadow: none; }
+/* Full-viewport animated gradient layer */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  background:
+    radial-gradient(ellipse 80% 60% at 15% 20%, rgba(217, 220, 229, 0.95) 0%, transparent 55%),
+    radial-gradient(ellipse 70% 50% at 85% 15%, rgba(167, 176, 196, 0.55) 0%, transparent 50%),
+    radial-gradient(ellipse 60% 70% at 50% 90%, rgba(69, 75, 92, 0.18) 0%, transparent 55%),
+    linear-gradient(160deg, #E8EBF2 0%, #D9DCE5 40%, #C5CCD9 100%);
+  background-size: 140% 140%, 160% 160%, 120% 120%, 100% 100%;
+  animation: moonDrift 22s ease-in-out infinite alternate;
+  will-change: background-position;
+}
 
-/* chips + buttons + inputs */
-.group-chips, .group-chips::before { background: transparent !important; }
-.group-chips .chip { background: var(--glass-bg); border: 1px solid var(--glass-border); color: var(--muted); box-shadow: none; }
-.group-chips .chip.active { background: var(--accent-grad); color: #fff; border-color: transparent; box-shadow: none; transform: none; }
-.mo-btns button, .range-btn, .tab, button.chip {
-  background: var(--glass-bg); border: 1px solid var(--glass-border); color: var(--ink); box-shadow: none;
+html[data-theme="dark"] body::before {
+  background:
+    radial-gradient(ellipse 80% 60% at 20% 15%, rgba(69, 75, 92, 0.7) 0%, transparent 55%),
+    radial-gradient(ellipse 70% 50% at 80% 25%, rgba(167, 176, 196, 0.22) 0%, transparent 50%),
+    radial-gradient(ellipse 60% 70% at 40% 85%, rgba(45, 50, 62, 0.6) 0%, transparent 55%),
+    linear-gradient(165deg, #2A2E38 0%, #1E222B 100%);
+  background-size: 140% 140%, 160% 160%, 120% 120%, 100% 100%;
 }
-.mo-btns button.primary, .range-btn.active, .tab.active, .primary {
-  background: var(--accent-grad) !important; color: #fff !important; border-color: transparent !important; box-shadow: none;
-}
-input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]), select, textarea {
-  background: rgba(255,255,255,0.7); border: 1px solid var(--glass-border); color: var(--ink);
-}
-html[data-theme="dark"] input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]),
-html[data-theme="dark"] select, html[data-theme="dark"] textarea { background: rgba(255,255,255,0.07); }
-input::placeholder, textarea::placeholder { color: rgba(var(--ink-rgb), 0.4); }
-.fx-conn.is-on #cn-body b::before { background: #3DAE7C; }
 
-/* ---------------- motion: transform/opacity only, short, one layer at a time ---------------- */
-/* kill the per-card staggered entrance (dozens of simultaneous animated layers) */
-.tab-page.active .rn-card, .tab-page.active .health-block, .tab-page.active .glass-card { animation: none !important; }
-.rn-bars em, .mo-stage i { animation-delay: 0s !important; animation-duration: .45s !important; }
-.mo-stage svg rect, .rn-card svg rect { animation: none !important; }
-.home-line { animation-duration: .7s !important; }
-/* the page itself fades/slides in once */
+@keyframes moonDrift {
+  0%   { background-position: 0% 20%, 100% 0%, 50% 100%, 0% 0%; }
+  50%  { background-position: 40% 60%, 60% 40%, 30% 70%, 0% 0%; }
+  100% { background-position: 80% 30%, 20% 70%, 70% 20%, 0% 0%; }
+}
+
+/* Soft grain (very subtle) */
+.grain-overlay {
+  opacity: 0.06;
+  mix-blend-mode: soft-light;
+}
+html[data-theme="dark"] .grain-overlay {
+  opacity: 0.10;
+}
+
+/* Dashboard background becomes transparent so the animated layer shows */
+#dashboard-view.aura-dash {
+  background: transparent !important;
+  padding: 14px 16px 120px;
+}
+
+/* ========== Clean surfaces ========== */
+.sheet-stack,
+.metric-card,
+.today-card,
+.rn-card,
+.glass-card,
+.health-block,
+.check-table,
+.mo-card {
+  background: var(--glass-bg) !important;
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border) !important;
+  box-shadow: var(--glass-shadow) !important;
+  border-radius: 20px !important;
+}
+
+/* Remove heavy old purple / cream gradients from cards */
+.grad-pink, .grad-blue, .grad-orange, .grad-teal, .grad-purple,
+.chart-card {
+  background: var(--glass-bg) !important;
+  border: 1px solid var(--glass-border) !important;
+  box-shadow: var(--glass-shadow) !important;
+  color: var(--ink) !important;
+}
+
+/* ========== Text & contrast fixes ========== */
+.today-steps,
+.today-kicker,
+.today-sub,
+.home-axis,
+.home-axis span,
+.rn-label,
+.rn-sub,
+.rn-kicker,
+.pill-label,
+.pill-unit,
+.mo-note,
+.manual-hint,
+.login-sub,
+.login-note {
+  color: var(--muted) !important;
+}
+
+.today-steps,
+h1, h2, h3, h4,
+.top-title,
+.rn-value,
+.score-value {
+  color: var(--ink) !important;
+}
+
+/* Force graph / chart lines & text to be visible */
+svg text,
+.home-line,
+.chart-line,
+path[stroke],
+line[stroke],
+.donut-track {
+  stroke: var(--chart-line) !important;
+  fill: none;
+}
+.donut-track { stroke: var(--ring-track) !important; }
+.donut-cardio,
+.donut-str,
+#goal-ring {
+  stroke: var(--ring-fill) !important;
+}
+
+/* Status pills & chips */
+.status-pill,
+.on-track-pill,
+.streak-chip,
+.rn-chip,
+.pill {
+  background: var(--glass-bg) !important;
+  border: 1px solid var(--glass-border) !important;
+  color: var(--ink) !important;
+  box-shadow: none !important;
+}
+.rn-chip.active,
+.sub-tab-btn.active,
+.range-btn.active,
+.tab.active {
+  background: var(--slate) !important;
+  color: #fff !important;
+  border-color: transparent !important;
+}
+
+/* ========== Tab bar – clean floating ========== */
+.tab-strip {
+  background: rgba(255, 255, 255, 0.82) !important;
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(69, 75, 92, 0.08);
+  box-shadow: 0 12px 36px rgba(69, 75, 92, 0.12) !important;
+  border-radius: 24px !important;
+}
+html[data-theme="dark"] .tab-strip {
+  background: rgba(42, 46, 56, 0.88) !important;
+  border-color: rgba(255,255,255,0.08);
+}
+.tab-strip-btn {
+  color: var(--silver) !important;
+  font-weight: 600;
+}
+.tab-strip-btn.active {
+  background: var(--slate) !important;
+  color: #fff !important;
+  border-radius: 16px;
+}
+.tab-strip-btn svg {
+  stroke: currentColor;
+}
+
+/* ========== Buttons ========== */
+.primary,
+.mo-btns button.primary,
+.rn-start,
+#gb-load-btn,
+button.primary {
+  background: var(--slate) !important;
+  color: #fff !important;
+  border: none !important;
+  border-radius: 14px !important;
+  font-weight: 650;
+  box-shadow: 0 6px 18px rgba(69, 75, 92, 0.22) !important;
+}
+.mo-btns button:not(.primary),
+.range-btn,
+.sub-tab-btn,
+.rn-btn {
+  background: var(--glass-bg) !important;
+  color: var(--ink) !important;
+  border: 1px solid var(--glass-border) !important;
+  border-radius: 12px !important;
+}
+
+/* Date nav */
+.date-nav-btn {
+  background: var(--glass-bg) !important;
+  border: 1px solid var(--glass-border) !important;
+  color: var(--ink) !important;
+  border-radius: 12px;
+}
+
+/* Round icon buttons (header) */
+.round-icon-btn {
+  background: var(--glass-bg) !important;
+  border: 1px solid var(--glass-border) !important;
+  color: var(--ink) !important;
+  box-shadow: var(--glass-shadow);
+}
+
+/* ========== Login / upload card ========== */
+.login-card {
+  background: rgba(255, 255, 255, 0.78) !important;
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(69, 75, 92, 0.10) !important;
+  box-shadow: 0 16px 48px rgba(69, 75, 92, 0.12) !important;
+  color: var(--ink) !important;
+}
+.login-title { color: var(--slate) !important; }
+.dropzone {
+  border: 1.5px dashed var(--silver) !important;
+  background: rgba(217, 220, 229, 0.4) !important;
+  color: var(--ink) !important;
+}
+.dropzone span { color: var(--muted) !important; }
+
+/* ========== Completely redesigned Band Connection card ========== */
+.fx-conn {
+  position: relative;
+  overflow: hidden;
+  padding: 22px 20px !important;
+  background: linear-gradient(155deg, rgba(255,255,255,0.85) 0%, rgba(217,220,229,0.65) 100%) !important;
+  border: 1px solid rgba(69, 75, 92, 0.10) !important;
+  border-radius: 24px !important;
+  box-shadow: 0 12px 36px rgba(69, 75, 92, 0.10) !important;
+}
+html[data-theme="dark"] .fx-conn {
+  background: linear-gradient(155deg, rgba(58,63,76,0.7) 0%, rgba(42,46,56,0.85) 100%) !important;
+}
+
+.fx-conn h4 {
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted) !important;
+  margin: 0 0 14px !important;
+}
+
+.fx-conn #cn-body {
+  font-size: 15px !important;
+  line-height: 1.45 !important;
+  color: var(--ink) !important;
+  margin-bottom: 18px !important;
+}
+.fx-conn #cn-body b {
+  font-size: 20px !important;
+  font-weight: 750 !important;
+  color: var(--slate) !important;
+  display: block;
+  margin-bottom: 4px;
+}
+html[data-theme="dark"] .fx-conn #cn-body b {
+  color: var(--moon) !important;
+}
+
+/* Connection status indicator dot */
+.fx-conn.is-on #cn-body b::before {
+  content: "";
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #5BBF7A;
+  box-shadow: 0 0 0 3px rgba(91, 191, 122, 0.25);
+  margin-right: 8px;
+  vertical-align: middle;
+  position: relative;
+  top: -1px;
+}
+
+.fx-conn .mo-btns {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px !important;
+  margin-top: 4px;
+}
+.fx-conn .mo-btns button {
+  padding: 12px 10px !important;
+  font-size: 13px !important;
+  font-weight: 650 !important;
+  border-radius: 14px !important;
+  min-height: 44px;
+}
+.fx-conn .mo-btns button.primary {
+  grid-column: 1 / -1;
+  background: var(--slate) !important;
+  color: #fff !important;
+  box-shadow: 0 8px 20px rgba(69, 75, 92, 0.25) !important;
+}
+html[data-theme="dark"] .fx-conn .mo-btns button.primary {
+  background: var(--silver) !important;
+  color: var(--slate) !important;
+}
+
+/* Progress bar – refined */
+.fx-prog {
+  height: 4px !important;
+  background: rgba(167, 176, 196, 0.3) !important;
+  border-radius: 99px !important;
+  margin-top: 16px !important;
+  overflow: hidden;
+}
+.fx-prog i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--silver), var(--slate)) !important;
+  border-radius: 99px;
+  transition: width 0.4s var(--ease);
+}
+.fx-prog.on i {
+  animation: progPulse 1.4s ease-in-out infinite;
+}
+@keyframes progPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* ========== Misc clean-ups ========== */
+.stale-banner {
+  background: rgba(69, 75, 92, 0.08) !important;
+  color: var(--ink) !important;
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+}
+
+/* Reduce visual noise on lists */
+.check-list li {
+  border-bottom-color: var(--line) !important;
+}
+.check-list input[type="checkbox"] {
+  accent-color: var(--slate);
+}
+
+/* Hero metrics area breathing room */
+.hero-metrics {
+  margin-bottom: 8px;
+}
+
+/* Soften any remaining hard purple leftovers from styles.css */
+:root {
+  --hero-top: #E8EBF2 !important;
+  --hero-mid: #D9DCE5 !important;
+  --hero-bot: #C5CCD9 !important;
+}
+
+/* Chart containers */
+.hr-chart-wrap,
+.chart-wrap,
+canvas {
+  color: var(--ink);
+}
+
+/* Ensure SVG fills for icons use currentColor or palette */
+.ex-icon .sf-head,
+.ex-icon line,
+.food-icon {
+  stroke: var(--slate) !important;
+}
+
+/* Page transitions stay smooth */
 .tab-pages.dir-fwd .tab-page.active  { animation: pg-fwd  .26s var(--ease) both; }
 .tab-pages.dir-back .tab-page.active { animation: pg-back .26s var(--ease) both; }
 @keyframes pg-fwd  { from { opacity: 0; transform: translate3d(14px, 0, 0); }  to { opacity: 1; transform: none; } }
 @keyframes pg-back { from { opacity: 0; transform: translate3d(-14px, 0, 0); } to { opacity: 1; transform: none; } }
-.group-chips { animation: none; }
-.tab-indicator { transition: transform .32s var(--ease), width .32s var(--ease), opacity .15s ease; }
-.tab-strip-btn { transition: color .2s ease; }
-.tab-strip-btn svg { transition: transform .28s var(--ease); }
-.tab-strip-btn.active svg { transform: scale(1.08); }
-.group-chips .chip, .mo-btns button, .range-btn, .tab { transition: background-color .18s ease, color .18s ease, transform .12s ease; }
-button:active { transform: scale(.97); }
-.mo-mood button { transition: transform .2s var(--ease); }
-.mo-mood button.active { animation: none; transform: scale(1.14); }
-#goal-ring { transition: stroke-dashoffset .7s var(--ease); }
 
-/* ---------------- hero text + summary pills (were white-on-colour) ---------------- */
-.date-nav-btn { background: var(--glass-bg); border: 1px solid var(--glass-border); color: var(--ink); }
-.today-kicker, .today-sub, .home-axis, .home-axis span { color: var(--muted); }
-.today-steps { color: var(--ink); }
-.on-track-pill { background: var(--glass-bg); border: 1px solid var(--glass-border); color: var(--ink); }
-.grad-pink, .grad-blue, .grad-orange, .grad-teal, .grad-purple { background: var(--glass-bg); border: 1px solid var(--glass-border); box-shadow: var(--glass-shadow); }
-.pill, .pill * { color: var(--ink); }
-.pill-label, .pill-unit { color: var(--muted); opacity: 1; }
-.rn-chip { background: var(--glass-bg); border: 1px solid var(--glass-border); color: var(--ink); }
-.rn-chip.active { background: var(--accent-grad); color: #fff; border-color: transparent; }
-.sub-tab-btn { color: var(--muted); }
-.sub-tab-btn.active { color: #fff; }
-.rn-start { background: var(--accent-grad) !important; color: #fff !important; box-shadow: 0 8px 20px rgba(20,20,26,0.22); }
-.home-date-label input, .home-date-label .today-kicker { color: var(--ink); }
-.rn-sub, .rn-kicker, .rn-label { color: var(--muted); }
+/* Active tab indicator */
+.tab-indicator {
+  background: var(--slate) !important;
+  border-radius: 16px;
+}
+
+/* Slightly reduce card density */
+.sheet-stack > * + * {
+  margin-top: 14px;
+}
+
+/* Make sure dark mode text never goes invisible */
+html[data-theme="dark"] .today-steps,
+html[data-theme="dark"] h1,
+html[data-theme="dark"] h2,
+html[data-theme="dark"] h3,
+html[data-theme="dark"] h4,
+html[data-theme="dark"] .top-title {
+  color: #E8EBF2 !important;
+}
+html[data-theme="dark"] .muted,
+html[data-theme="dark"] .mo-note,
+html[data-theme="dark"] .today-sub {
+  color: rgba(232, 235, 242, 0.6) !important;
+}
+
+/* ========== Sleek minimal moon mark ========== */
+.moon-mark {
+  display: inline-block;
+  vertical-align: -0.2em;
+  margin-right: 8px;
+  color: var(--slate);
+  flex-shrink: 0;
+}
+.moon-mark-sm {
+  margin-right: 6px;
+  vertical-align: -0.15em;
+  opacity: 0.9;
+}
+.login-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  font-weight: 750;
+  letter-spacing: -0.03em;
+}
+.login-title .moon-mark {
+  color: var(--slate);
+}
+.top-title {
+  display: inline-flex;
+  align-items: center;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+html[data-theme="dark"] .moon-mark {
+  color: var(--moon);
+}
