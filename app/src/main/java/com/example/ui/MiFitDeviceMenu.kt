@@ -447,12 +447,16 @@ fun MiFitDeviceMenuDialog(
               OutlinedTextField(
                 value = inputAuthKey,
                 onValueChange = {
-                  inputAuthKey = it
-                  onSaveAuthKey(it)
+                  val clean = it.trim()
+                    .replace("0x", "", ignoreCase = true)
+                    .replace(" ", "").replace(":", "").replace("-", "")
+                    .lowercase()
+                  inputAuthKey = clean
+                  onSaveAuthKey(clean)
                 },
                 placeholder = {
                   Text(
-                    text = "32 hex chars (Optional for pairing)",
+                    text = "32 hex chars (0x prefix OK)",
                     color = KestrelMuted,
                     fontSize = 12.sp
                   )
@@ -463,8 +467,12 @@ fun MiFitDeviceMenuDialog(
                       val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
                       val clip = clipboard?.primaryClip?.getItemAt(0)?.text?.toString() ?: ""
                       if (clip.isNotEmpty()) {
-                        inputAuthKey = clip.trim()
-                        onSaveAuthKey(clip.trim())
+                        val clean = clip.trim()
+                          .replace("0x", "", ignoreCase = true)
+                          .replace(" ", "").replace(":", "").replace("-", "")
+                          .lowercase()
+                        inputAuthKey = clean
+                        onSaveAuthKey(clean)
                       }
                     }
                   ) {
