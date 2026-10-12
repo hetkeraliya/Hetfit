@@ -102,6 +102,8 @@ class RunTrackingService : Service(), LocationListener {
   private var tickCount = 0
   /** Consecutive accepted GPS fixes before distance starts counting (kills indoor/stationary drift). */
   private var consecutiveGoodFixes = 0
+  /** The blended GPS + band distance the live screen shows; this is what gets saved. */
+  @Volatile private var lastEffectiveDist = 0.0
   private var lastGpsSentToBandMs = 0L
   private var gpsSearchingSent = false
   /** True when this session was started because the user accepted a band-workout offer. */
@@ -223,6 +225,7 @@ class RunTrackingService : Service(), LocationListener {
     }
     running = true; paused = false
     startMs = System.currentTimeMillis(); pausedAccumMs = 0; pauseStartMs = 0
+    lastEffectiveDist = 0.0
     movingSec = 0; distanceM = 0.0; lastLoc = null; lastMoveMs = startMs; accuracy = -1f
     hrSum = 0; hrCount = 0; hrMax = 0; nextKm = 1; lastKmMoving = 0; tickCount = 0
     consecutiveGoodFixes = 0; lastGpsSentToBandMs = 0; gpsSearchingSent = false
@@ -309,39 +312,27 @@ class RunTrackingService : Service(), LocationListener {
       streamGpsToBand(loc)
     }
 
-    // Phone-side distance filters (do not invent movement while standing still).
-    if (!loc.hasAccuracy() || loc.accuracy > 18f) {
-      consecutiveGoodFixes = 0
-      return
-    }
+    // Phone-side distance. The old filter needed 3 consecutive fixes that were each >= 5 m apart AND under 18 m accuracy.
+    // At running speed a 1 Hz fix moves only ~3 m, so almost every fix was thrown away: the route became a straight
+    // line and the saved distance collapsed. Now the anchor only moves when a fix is clearly away from it, so slow
+    // real movement accumulates and standing-still jitter does not.
+    if (!loc.hasAccuracy() || loc.accuracy > 35f) return
     val last = lastLoc
     if (last == null) {
       lastLoc = loc
-      consecutiveGoodFixes = 1
       addPoint(loc)
       return
     }
     val dt = (loc.time - last.time) / 1000.0
-    if (dt <= 0.0 || dt > 30.0) {
-      lastLoc = loc
-      consecutiveGoodFixes = 1
-      return
-    }
+    if (dt <= 0.0) return
     val d = last.distanceTo(loc).toDouble()
     val v = d / dt
     val maxV = when (type) { 4 -> 22.0; 3 -> 4.5; else -> 8.5 }
-    val minV = when (type) { 4 -> 1.2; 3 -> 0.7; else -> 0.9 }
-    val minD = when (type) { 4 -> 6.0; else -> 5.0 }
-    if (v > maxV) { consecutiveGoodFixes = 0; return }
-    if (d < minD || v < minV) {
-      consecutiveGoodFixes = 0
-      return
-    }
-    consecutiveGoodFixes++
-    if (consecutiveGoodFixes < 3) {
-      lastLoc = loc
-      return
-    }
+    val minV = when (type) { 4 -> 1.0; 3 -> 0.5; else -> 0.6 }
+    if (v > maxV) return                                   // GPS glitch: ignore, keep the anchor
+    val noise = (loc.accuracy * 0.6).toDouble().coerceIn(2.5, 12.0)
+    if (d < noise || v < minV) return                      // jitter / standing still
+    // A long gap (screen off, tunnel) with a plausible speed is bridged instead of being dropped.
     distanceM += d
     lastLoc = loc
     lastMoveMs = System.currentTimeMillis()
@@ -398,6 +389,7 @@ class RunTrackingService : Service(), LocationListener {
 
     // Soft calibration blend of GPS + band (learns scale over time, no hard rules).
     val effectiveDist = fuseDistance(distanceM, bandDistM, accuracy)
+    lastEffectiveDist = effectiveDist
 
     if (!paused) {
       val moving = when {
@@ -493,12 +485,11 @@ class RunTrackingService : Service(), LocationListener {
     val now = System.currentTimeMillis()
     val elapsed = elapsedSec(now)
     val st = MiBandManager.get(this).uiState.value
-    val bandDistM = if (fromBand && bandDistAtStart >= 0 && st.liveDistanceMeters >= bandDistAtStart)
+    val bandDistM = if (bandDistAtStart >= 0 && st.liveDistanceMeters >= bandDistAtStart)
       (st.liveDistanceMeters - bandDistAtStart).toDouble() else -1.0
-    val finalDist = when {
-      fromBand && bandDistM > distanceM && bandDistM > 5 -> bandDistM
-      else -> distanceM
-    }
+    // Save exactly what the live screen showed (7.77 km on screen used to be saved as 0.87 km because only raw GPS was stored).
+    val fused = fuseDistance(distanceM, bandDistM, accuracy)
+    val finalDist = maxOf(lastEffectiveDist, fused, distanceM)
     val wasFromBand = fromBand
     running = false
     fromBand = false
