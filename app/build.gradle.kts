@@ -115,6 +115,8 @@ dependencies {
   implementation(libs.firebase.appcheck.debug)
   implementation(libs.kotlinx.coroutines.android)
   implementation(libs.kotlinx.coroutines.core)
+  // Read steps / HR / sleep that Zepp (and other apps) write on this phone
+  implementation("androidx.health.connect:connect-client:1.1.0-alpha11")
   implementation(libs.logging.interceptor)
   implementation(libs.moshi.kotlin)
   implementation(libs.okhttp)
