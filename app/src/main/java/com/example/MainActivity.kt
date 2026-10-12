@@ -136,12 +136,74 @@ class MainActivity : ComponentActivity() {
   private val healthConnectPermissionLauncher = registerForActivityResult(
     androidx.health.connect.client.PermissionController.createRequestPermissionResultContract()
   ) { granted ->
+    val need = com.example.ble.ZeppHealthConnectImporter.permissionStrings().toSet()
+    val prefs = getSharedPreferences("kestrel_ble_prefs", Context.MODE_PRIVATE)
+    if (granted.containsAll(need)) {
+      prefs.edit().putInt("hc_denied", 0).apply()
+    } else {
+      prefs.edit().putInt("hc_denied", prefs.getInt("hc_denied", 0) + 1).apply()
+      Toast.makeText(
+        this,
+        "Allow Steps, Heart rate, Sleep and Exercise for this app in Health Connect to import Zepp data.",
+        Toast.LENGTH_LONG
+      ).show()
+    }
     if (pendingZeppImport) {
       pendingZeppImport = false
-      runZeppImport()
-    } else {
-      Toast.makeText(this, "Health Connect permissions updated", Toast.LENGTH_SHORT).show()
+      if (granted.containsAll(need)) runZeppImport()
     }
+  }
+
+  private var hcAskedThisLaunch = false
+
+  /**
+   * Called once per launch right after the Bluetooth / notification prompts: shows the Health Connect permission
+   * dialog (this is also what makes the app appear in Health Connect's app list) and imports Zepp data when allowed.
+   */
+  fun requestHealthConnectAtStartup() {
+    if (hcAskedThisLaunch) return
+    hcAskedThisLaunch = true
+    try {
+      val status = androidx.health.connect.client.HealthConnectClient.getSdkStatus(this)
+      if (status != androidx.health.connect.client.HealthConnectClient.SDK_AVAILABLE) {
+        Toast.makeText(this, "Install or update Health Connect to import Zepp data.", Toast.LENGTH_LONG).show()
+        try {
+          startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=com.google.android.apps.healthdata")))
+        } catch (_: Exception) { }
+        return
+      }
+      val client = androidx.health.connect.client.HealthConnectClient.getOrCreate(this)
+      MainScope().launch {
+        val granted = try {
+          client.permissionController.getGrantedPermissions()
+        } catch (e: Exception) {
+          return@launch
+        }
+        val need = com.example.ble.ZeppHealthConnectImporter.permissionStrings().toSet()
+        if (granted.containsAll(need)) {
+          runZeppImport()
+        } else if (getSharedPreferences("kestrel_ble_prefs", Context.MODE_PRIVATE).getInt("hc_denied", 0) < 3) {
+          pendingZeppImport = true
+          healthConnectPermissionLauncher.launch(need)
+        }
+      }
+    } catch (e: Exception) {
+      Log.w(TAG, "Health Connect startup request failed: ${e.message}")
+    }
+  }
+
+  /** Silent import used when the band is connected without an auth key (no dialogs). */
+  fun importZeppIfPermitted() {
+    try {
+      if (androidx.health.connect.client.HealthConnectClient.getSdkStatus(this)
+        != androidx.health.connect.client.HealthConnectClient.SDK_AVAILABLE
+      ) return
+      val client = androidx.health.connect.client.HealthConnectClient.getOrCreate(this)
+      MainScope().launch {
+        val granted = try { client.permissionController.getGrantedPermissions() } catch (e: Exception) { return@launch }
+        if (granted.containsAll(com.example.ble.ZeppHealthConnectImporter.permissionStrings().toSet())) runZeppImport()
+      }
+    } catch (_: Exception) { }
   }
 
   /** Called from the JS bridge — request permissions if needed, then import. */
@@ -212,6 +274,7 @@ class MainActivity : ComponentActivity() {
     enableEdgeToEdge()
 
     miBandManager = MiBandManager.get(applicationContext)
+    miBandManager.onNoKeySync = { importZeppIfPermitted() }
 
     setContent {
       MyApplicationTheme {
@@ -360,13 +423,16 @@ fun KestrelMainScreen(
 
   val notificationLauncher = rememberLauncherForActivityResult(
     contract = ActivityResultContracts.RequestPermission()
-  ) { }
+  ) { (context as? MainActivity)?.requestHealthConnectAtStartup() }
 
   fun askNotificationPermission() {
     if (Build.VERSION.SDK_INT >= 33 &&
       ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
     ) {
       notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+    } else {
+      // Nothing else to ask: now show the Health Connect permission dialog.
+      (context as? MainActivity)?.requestHealthConnectAtStartup()
     }
   }
 
@@ -380,6 +446,7 @@ fun KestrelMainScreen(
       miBandManager.startScan()
     } else {
       Log.w(TAG, "Some Bluetooth/Location permissions were not granted.")
+      (context as? MainActivity)?.requestHealthConnectAtStartup()
     }
   }
 
