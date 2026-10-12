@@ -32,6 +32,13 @@ class KestrelHealthWidgetProvider : AppWidgetProvider() {
             views.setTextViewText(R.id.tv_widget_hr, if (healthData.heartRate > 0) healthData.heartRate.toString() else "--")
             views.setTextViewText(R.id.tv_widget_cal, numFmt.format(healthData.calories))
 
+            val sleepTxt = if (healthData.sleepMinutes > 0) {
+                val h = healthData.sleepMinutes / 60
+                val m = healthData.sleepMinutes % 60
+                if (h > 0) "${h}h ${m}m" else "${m}m"
+            } else "—"
+            views.setTextViewText(R.id.tv_widget_sleep, sleepTxt)
+
             val workoutText = if (healthData.workoutMins > 0) {
                 "${healthData.workoutName} ${healthData.workoutMins}m"
             } else {
