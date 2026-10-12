@@ -138,7 +138,7 @@ class MainActivity : ComponentActivity() {
   ) { granted ->
     val need = com.example.ble.ZeppHealthConnectImporter.permissionStrings().toSet()
     val prefs = getSharedPreferences("kestrel_ble_prefs", Context.MODE_PRIVATE)
-    if (granted.containsAll(need)) {
+    if (com.example.ble.ZeppHealthConnectImporter.hasEnough(granted)) {
       prefs.edit().putInt("hc_denied", 0).apply()
     } else {
       prefs.edit().putInt("hc_denied", prefs.getInt("hc_denied", 0) + 1).apply()
@@ -150,7 +150,7 @@ class MainActivity : ComponentActivity() {
     }
     if (pendingZeppImport) {
       pendingZeppImport = false
-      if (granted.containsAll(need)) runZeppImport()
+      if (com.example.ble.ZeppHealthConnectImporter.hasEnough(granted)) runZeppImport()
     }
   }
 
@@ -180,7 +180,7 @@ class MainActivity : ComponentActivity() {
           return@launch
         }
         val need = com.example.ble.ZeppHealthConnectImporter.permissionStrings().toSet()
-        if (granted.containsAll(need)) {
+        if (com.example.ble.ZeppHealthConnectImporter.hasEnough(granted)) {
           runZeppImport()
         } else if (getSharedPreferences("kestrel_ble_prefs", Context.MODE_PRIVATE).getInt("hc_denied", 0) < 3) {
           pendingZeppImport = true
@@ -201,7 +201,7 @@ class MainActivity : ComponentActivity() {
       val client = androidx.health.connect.client.HealthConnectClient.getOrCreate(this)
       MainScope().launch {
         val granted = try { client.permissionController.getGrantedPermissions() } catch (e: Exception) { return@launch }
-        if (granted.containsAll(com.example.ble.ZeppHealthConnectImporter.permissionStrings().toSet())) runZeppImport()
+        if (com.example.ble.ZeppHealthConnectImporter.hasEnough(granted)) runZeppImport()
       }
     } catch (_: Exception) { }
   }
@@ -225,7 +225,7 @@ class MainActivity : ComponentActivity() {
           return@launch
         }
         val need = com.example.ble.ZeppHealthConnectImporter.permissionStrings().toSet()
-        if (!granted.containsAll(need)) {
+        if (!com.example.ble.ZeppHealthConnectImporter.hasEnough(granted)) {
           pendingZeppImport = true
           healthConnectPermissionLauncher.launch(need)
         } else {
@@ -248,7 +248,7 @@ class MainActivity : ComponentActivity() {
   private fun runZeppImport() {
     MainScope().launch {
       val msg = try {
-        com.example.ble.ZeppHealthConnectImporter.importLastDays(applicationContext, 14)
+        com.example.ble.ZeppHealthConnectImporter.importLastDays(applicationContext, 30)
       } catch (e: Exception) {
         "Import failed: ${e.message}"
       }
@@ -275,6 +275,13 @@ class MainActivity : ComponentActivity() {
 
     miBandManager = MiBandManager.get(applicationContext)
     miBandManager.onNoKeySync = { importZeppIfPermitted() }
+    // Sleep used to be read over Bluetooth; now it only comes from Health Connect, so drop the old Bluetooth sleep flags once.
+    getSharedPreferences("kestrel_ble_prefs", Context.MODE_PRIVATE).let { p ->
+      if (!p.getBoolean("sleep_hc_only_v1", false)) {
+        Thread { try { BandSampleStore.get(applicationContext).clearSleepRows() } catch (_: Exception) { } }.start()
+        p.edit().putBoolean("sleep_hc_only_v1", true).apply()
+      }
+    }
 
     setContent {
       MyApplicationTheme {
@@ -371,6 +378,8 @@ fun KestrelMainScreen(
       val st = miBandManager.uiState.value
       KestrelWidgetManager.refresh(context)
       MiBandDataSyncEngine.pushToWebView(webViewInstance, store, st, fullHistory = false)
+      // Sleep comes from Health Connect: refresh it right after every Bluetooth sync.
+      (context as? MainActivity)?.importZeppIfPermitted()
     }
   }
 
@@ -1065,7 +1074,7 @@ class KestrelAndroidBridge(
       ?: run {
         kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.Main) {
           val msg = try {
-            com.example.ble.ZeppHealthConnectImporter.importLastDays(context.applicationContext, 14)
+            com.example.ble.ZeppHealthConnectImporter.importLastDays(context.applicationContext, 30)
           } catch (e: Exception) { "Import failed: ${e.message}" }
           Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
         }
