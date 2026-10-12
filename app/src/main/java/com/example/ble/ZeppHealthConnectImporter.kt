@@ -9,6 +9,10 @@ import android.util.Log
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.DistanceRecord
+import androidx.health.connect.client.records.Record
+import androidx.health.connect.client.records.metadata.DataOrigin
+import androidx.health.connect.client.request.AggregateRequest
+import kotlin.reflect.KClass
 import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.SleepSessionRecord
@@ -97,6 +101,24 @@ object ZeppHealthConnectImporter {
       false
     }
 
+  /** Reads every page (Health Connect returns at most 1000 records per call). */
+  private suspend fun <T : Record> readAll(
+    client: HealthConnectClient, type: KClass<T>, range: TimeRangeFilter, origins: Set<DataOrigin>
+  ): List<T> {
+    val out = ArrayList<T>()
+    var token: String? = null
+    var pages = 0
+    do {
+      val resp = client.readRecords(
+        ReadRecordsRequest(recordType = type, timeRangeFilter = range, dataOriginFilter = origins, pageSize = 1000, pageToken = token)
+      )
+      out.addAll(resp.records)
+      token = resp.pageToken
+      pages++
+    } while (token != null && pages < 300)
+    return out
+  }
+
   /**
    * Read last [days] of data from Health Connect and merge into [BandSampleStore].
    * Returns a short human-readable summary.
@@ -122,6 +144,15 @@ object ZeppHealthConnectImporter {
     val store = BandSampleStore.get(context)
     val zone = ZoneId.systemDefault()
 
+    // Prefer records written by Zepp itself (avoids double counting with the phone's own step counter).
+    val zeppOrigins: Set<DataOrigin> = ZEPP_PACKAGES.map { DataOrigin(it) }.toSet()
+    val hasZepp = try {
+      readAll(client, StepsRecord::class, range, zeppOrigins).isNotEmpty() ||
+        readAll(client, HeartRateRecord::class, range, zeppOrigins).isNotEmpty() ||
+        readAll(client, SleepSessionRecord::class, range, zeppOrigins).isNotEmpty()
+    } catch (e: Exception) { false }
+    val origins: Set<DataOrigin> = if (hasZepp) zeppOrigins else emptySet()
+
     var stepsChunks = 0
     var hrPoints = 0
     var sleepSessions = 0
@@ -130,9 +161,7 @@ object ZeppHealthConnectImporter {
 
     // ---- Steps (interval records → distribute into minutes) ----
     try {
-      val steps = client.readRecords(
-        ReadRecordsRequest(recordType = StepsRecord::class, timeRangeFilter = range)
-      ).records
+      val steps = readAll(client, StepsRecord::class, range, origins)
       for (r in steps) {
         val count = r.count.toInt().coerceAtLeast(0)
         if (count <= 0) continue
@@ -155,9 +184,7 @@ object ZeppHealthConnectImporter {
 
     // ---- Heart rate ----
     try {
-      val hrs = client.readRecords(
-        ReadRecordsRequest(recordType = HeartRateRecord::class, timeRangeFilter = range)
-      ).records
+      val hrs = readAll(client, HeartRateRecord::class, range, origins)
       for (r in hrs) {
         for (s in r.samples) {
           val bpm = s.beatsPerMinute.toInt()
@@ -174,9 +201,7 @@ object ZeppHealthConnectImporter {
 
     // ---- Sleep sessions → minute kinds (120 light / 121 deep / 122 REM) ----
     try {
-      val sleeps = client.readRecords(
-        ReadRecordsRequest(recordType = SleepSessionRecord::class, timeRangeFilter = range)
-      ).records
+      val sleeps = readAll(client, SleepSessionRecord::class, range, origins)
       for (sess in sleeps) {
         sleepSessions++
         val stages = sess.stages
@@ -218,28 +243,52 @@ object ZeppHealthConnectImporter {
 
     // ---- Workouts ----
     try {
-      val ex = client.readRecords(
-        ReadRecordsRequest(recordType = ExerciseSessionRecord::class, timeRangeFilter = range)
-      ).records
+      val ex = readAll(client, ExerciseSessionRecord::class, range, origins)
       for (e in ex) {
         val type = when (e.exerciseType) {
-          ExerciseSessionRecord.EXERCISE_TYPE_RUNNING, ExerciseSessionRecord.EXERCISE_TYPE_RUNNING_TREADMILL -> 1
+          ExerciseSessionRecord.EXERCISE_TYPE_RUNNING -> 1
+          ExerciseSessionRecord.EXERCISE_TYPE_RUNNING_TREADMILL -> 2
           ExerciseSessionRecord.EXERCISE_TYPE_WALKING -> 3
-          ExerciseSessionRecord.EXERCISE_TYPE_BIKING, ExerciseSessionRecord.EXERCISE_TYPE_BIKING_STATIONARY -> 4
+          ExerciseSessionRecord.EXERCISE_TYPE_BIKING -> 4
+          ExerciseSessionRecord.EXERCISE_TYPE_BIKING_STATIONARY -> 8
           ExerciseSessionRecord.EXERCISE_TYPE_HIKING -> 15
-          else -> 1
+          ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_POOL -> 6
+          ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_OPEN_WATER -> 7
+          ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING -> 0x34
+          ExerciseSessionRecord.EXERCISE_TYPE_YOGA -> 0x3c
+          else -> 5
+        }
+        var wDist = 0; var wCal = 0; var wAvg = 0; var wMax = 0; var wSteps = 0
+        try {
+          val agg = client.aggregate(
+            AggregateRequest(
+              metrics = setOf(
+                DistanceRecord.DISTANCE_TOTAL, TotalCaloriesBurnedRecord.ENERGY_TOTAL,
+                HeartRateRecord.BPM_AVG, HeartRateRecord.BPM_MAX, StepsRecord.COUNT_TOTAL
+              ),
+              timeRangeFilter = TimeRangeFilter.between(e.startTime, e.endTime),
+              dataOriginFilter = origins
+            )
+          )
+          wDist = agg[DistanceRecord.DISTANCE_TOTAL]?.inMeters?.toInt() ?: 0
+          wCal = agg[TotalCaloriesBurnedRecord.ENERGY_TOTAL]?.inKilocalories?.toInt() ?: 0
+          wAvg = agg[HeartRateRecord.BPM_AVG]?.toInt() ?: 0
+          wMax = agg[HeartRateRecord.BPM_MAX]?.toInt() ?: 0
+          wSteps = agg[StepsRecord.COUNT_TOTAL]?.toInt() ?: 0
+        } catch (ex: Exception) {
+          Log.w(TAG, "workout totals: ${ex.message}")
         }
         store.insertWorkout(
           BandWorkoutRow(
             startSec = e.startTime.epochSecond,
             endSec = e.endTime.epochSecond,
             type = type,
-            steps = 0,
+            steps = wSteps,
             activeSec = (e.endTime.epochSecond - e.startTime.epochSecond).toInt().coerceAtLeast(0),
-            calories = 0,
-            distanceM = 0,
-            avgHr = 0,
-            maxHr = 0
+            calories = wCal,
+            distanceM = wDist,
+            avgHr = if (wAvg in 30..220) wAvg else 0,
+            maxHr = if (wMax in 30..220) wMax else 0
           )
         )
         workouts++
