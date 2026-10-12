@@ -209,7 +209,10 @@
       '<button type="button" id="bf-hr">Measure HR</button>' +
       '<button type="button" id="bf-weather">Send weather</button>' +
       '<button type="button" id="bf-music">Push now playing</button>' +
+      '<button type="button" class="primary" id="bf-zepp">Import from Zepp</button>' +
+      '<button type="button" id="bf-hc">Health Connect</button>' +
       '</div>' +
+      '<p class="mo-note" id="bf-zepp-status" style="margin-top:8px">Pulls steps, HR, sleep &amp; workouts that Zepp already saved on this phone (via Health Connect).</p>' +
       '<div style="display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap;font-weight:600">' +
       '<span>Step goal</span><input type="number" id="bf-goal" class="mo-input" style="width:100px" value="' + (st.stepGoal || 8000) + '" min="1000" max="100000" step="500">' +
       '<button type="button" id="bf-goal-save">Set on band</button></div>';
@@ -228,6 +231,23 @@
       if (!A.sendWeather) { toast('Update app binary'); return; }
       const city = (Intl.DateTimeFormat().resolvedOptions().timeZone || 'Local').split('/').pop().replace(/_/g, ' ');
       toast(A.sendWeather(city, 25, 0));
+    };
+    const zeppStatus = feat.querySelector('#bf-zepp-status');
+    if (A.getHealthConnectStatus && zeppStatus) {
+      try {
+        const st = JSON.parse(A.getHealthConnectStatus() || '{}');
+        zeppStatus.textContent = (st.message || '') +
+          (st.zeppInstalled ? ' · Zepp detected on phone' : ' · Zepp app not found — install Zepp / Zepp Life') +
+          (st.available ? '' : ' · Health Connect missing');
+      } catch (e) {}
+    }
+    if (feat.querySelector('#bf-zepp')) feat.querySelector('#bf-zepp').onclick = () => {
+      if (!A.importFromZepp) { toast('Update the app binary'); return; }
+      toast(A.importFromZepp());
+    };
+    if (feat.querySelector('#bf-hc')) feat.querySelector('#bf-hc').onclick = () => {
+      if (A.openHealthConnectSettings) A.openHealthConnectSettings();
+      else toast('Open Health Connect in system settings');
     };
 
     const set = h('div', 'rn-card');
@@ -404,7 +424,7 @@
       const label = { CONNECTED: 'Connected', CONNECTING: 'Connecting…', AUTHENTICATING: 'Authenticating…', SCANNING: 'Searching…', DISCONNECTED: 'Not connected' }[st] || st;
       body.innerHTML = '<b style="font-size:16px">' + label + '</b>' + (s.battery > 0 ? ' · battery ' + s.battery + '%' : '') + (st === 'CONNECTED' && s.hr > 0 ? ' · ♥ ' + s.hr + ' bpm' : '') +
         '<br>' + (s.lastSync ? 'Last sync ' + new Date(s.lastSync).toLocaleString() : 'Not synced yet') +
-        (s.syncing ? '<br>' + (s.message || 'Syncing…') : '') + (s.ack ? '<br>Band replied: ' + s.ack : '') + (st !== 'CONNECTED' || s.limited ? (s.trace ? '<br><span style="opacity:.65;font-size:12px">Handshake: ' + s.trace + '</span>' : '') : '') + (s.error ? '<br><span style="color:#c0564f">' + s.error + '</span>' : '');
+        (s.syncing ? '<br>' + (s.message || 'Syncing…') : '') + (s.ack ? '<br>Band replied: ' + s.ack : '') + (s.error ? '<br><span style="color:#c0564f">' + s.error + '</span>' : '');
       c.classList.toggle('is-on', st === 'CONNECTED');
       prog.classList.toggle('on', !!s.syncing);
       prog.firstElementChild.style.width = (s.syncing ? Math.max(6, s.percent || 0) : 0) + '%';
