@@ -93,27 +93,22 @@ import com.example.ui.BandOnboardingScreen
 import com.example.ui.MiFitDeviceMenuDialog
 import com.example.ui.theme.MyApplicationTheme
 import com.example.widget.KestrelWidgetManager
-import kotlinx.coroutines.MainScope
-import kotlinx.coroutines.launch
 
 // Local bundled web asset guarantees 0ms offline load with NO web page timeout
 private const val KESTREL_LOCAL_URL = "file:///android_asset/web/index.html"
 private const val TAG = "KestrelApp"
 
 // Kestrel Theme Palette (Dusty Mauve, Obsidian Plum, Warm Cream)
-private val PlumBg = Color(0xFF2A232B)
-private val PlumCard = Color(0xFF3D3340)
-private val MauveAccent = Color(0xFFAA98A9)
-private val LilacAccent = Color(0xFFC4B3C2)
-private val CreamText = Color(0xFFFFEED7)
+private val PlumBg = Color(0xFF2B2F3B)
+private val PlumCard = Color(0xFF2F3442)
+private val MauveAccent = Color(0xFFA7B0C4)
+private val LilacAccent = Color(0xFFC3C9D8)
+private val CreamText = Color(0xFFD9DCE5)
 
 class MainActivity : ComponentActivity() {
 
   private lateinit var miBandManager: MiBandManager
   private var fileChooserCallback: ValueCallback<Array<Uri>>? = null
-  private var pendingZeppImport = false
-  /** Held so native imports (Zepp/HC) can refresh the dashboard. */
-  @Volatile var liveWebView: WebView? = null
 
   private val filePickerLauncher = registerForActivityResult(
     ActivityResultContracts.StartActivityForResult()
@@ -133,166 +128,11 @@ class MainActivity : ComponentActivity() {
     fileChooserCallback = null
   }
 
-  private val healthConnectPermissionLauncher = registerForActivityResult(
-    androidx.health.connect.client.PermissionController.createRequestPermissionResultContract()
-  ) { granted ->
-    val need = com.example.ble.ZeppHealthConnectImporter.permissionStrings().toSet()
-    val prefs = getSharedPreferences("kestrel_ble_prefs", Context.MODE_PRIVATE)
-    if (com.example.ble.ZeppHealthConnectImporter.hasEnough(granted)) {
-      prefs.edit().putInt("hc_denied", 0).apply()
-    } else {
-      prefs.edit().putInt("hc_denied", prefs.getInt("hc_denied", 0) + 1).apply()
-      Toast.makeText(
-        this,
-        "Allow Steps, Heart rate, Sleep and Exercise for this app in Health Connect to import Zepp data.",
-        Toast.LENGTH_LONG
-      ).show()
-    }
-    if (pendingZeppImport) {
-      pendingZeppImport = false
-      if (com.example.ble.ZeppHealthConnectImporter.hasEnough(granted)) runZeppImport()
-    }
-  }
-
-  private var hcAskedThisLaunch = false
-
-  /**
-   * Called once per launch right after the Bluetooth / notification prompts: shows the Health Connect permission
-   * dialog (this is also what makes the app appear in Health Connect's app list) and imports Zepp data when allowed.
-   */
-  fun requestHealthConnectAtStartup() {
-    if (hcAskedThisLaunch) return
-    hcAskedThisLaunch = true
-    try {
-      val status = androidx.health.connect.client.HealthConnectClient.getSdkStatus(this)
-      if (status != androidx.health.connect.client.HealthConnectClient.SDK_AVAILABLE) {
-        Toast.makeText(this, "Install or update Health Connect to import Zepp data.", Toast.LENGTH_LONG).show()
-        try {
-          startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=com.google.android.apps.healthdata")))
-        } catch (_: Exception) { }
-        return
-      }
-      val client = androidx.health.connect.client.HealthConnectClient.getOrCreate(this)
-      MainScope().launch {
-        val granted = try {
-          client.permissionController.getGrantedPermissions()
-        } catch (e: Exception) {
-          return@launch
-        }
-        val need = com.example.ble.ZeppHealthConnectImporter.permissionStrings().toSet()
-        if (com.example.ble.ZeppHealthConnectImporter.hasEnough(granted)) {
-          runZeppImport()
-        } else if (getSharedPreferences("kestrel_ble_prefs", Context.MODE_PRIVATE).getInt("hc_denied", 0) < 3) {
-          pendingZeppImport = true
-          healthConnectPermissionLauncher.launch(need)
-        }
-      }
-    } catch (e: Exception) {
-      Log.w(TAG, "Health Connect startup request failed: ${e.message}")
-    }
-  }
-
-  /** Silent import used when the band is connected without an auth key (no dialogs). */
-  fun importZeppIfPermitted() {
-    try {
-      if (androidx.health.connect.client.HealthConnectClient.getSdkStatus(this)
-        != androidx.health.connect.client.HealthConnectClient.SDK_AVAILABLE
-      ) return
-      val client = androidx.health.connect.client.HealthConnectClient.getOrCreate(this)
-      MainScope().launch {
-        val granted = try { client.permissionController.getGrantedPermissions() } catch (e: Exception) { return@launch }
-        if (com.example.ble.ZeppHealthConnectImporter.hasEnough(granted)) runZeppImport()
-      }
-    } catch (_: Exception) { }
-  }
-
-  /** Called from the JS bridge — request permissions if needed, then import. */
-  fun importZeppFromHealthConnect() {
-    try {
-      if (androidx.health.connect.client.HealthConnectClient.getSdkStatus(this)
-        != androidx.health.connect.client.HealthConnectClient.SDK_AVAILABLE
-      ) {
-        Toast.makeText(this, "Install or update Health Connect first", Toast.LENGTH_LONG).show()
-        openHealthConnectSettingsSafe()
-        return
-      }
-      val client = androidx.health.connect.client.HealthConnectClient.getOrCreate(this)
-      MainScope().launch {
-        val granted = try {
-          client.permissionController.getGrantedPermissions()
-        } catch (e: Exception) {
-          Toast.makeText(this@MainActivity, "HC error: ${e.message}", Toast.LENGTH_LONG).show()
-          return@launch
-        }
-        val need = com.example.ble.ZeppHealthConnectImporter.permissionStrings().toSet()
-        if (!com.example.ble.ZeppHealthConnectImporter.hasEnough(granted)) {
-          pendingZeppImport = true
-          healthConnectPermissionLauncher.launch(need)
-        } else {
-          runZeppImport()
-        }
-      }
-    } catch (e: Exception) {
-      Toast.makeText(this, "Health Connect: ${e.message}", Toast.LENGTH_LONG).show()
-    }
-  }
-
-  private fun openHealthConnectSettingsSafe() {
-    try {
-      val i = com.example.ble.ZeppHealthConnectImporter.permissionContractIntent(this)
-        ?: Intent(Settings.ACTION_SETTINGS)
-      startActivity(i)
-    } catch (_: Exception) {}
-  }
-
-  private fun runZeppImport() {
-    MainScope().launch {
-      val msg = try {
-        com.example.ble.ZeppHealthConnectImporter.importLastDays(applicationContext, 30)
-      } catch (e: Exception) {
-        "Import failed: ${e.message}"
-      }
-      Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
-      try {
-        val store = BandSampleStore.get(applicationContext)
-        MiBandDataSyncEngine.pushToWebView(
-          liveWebView,
-          store,
-          miBandManager.uiState.value,
-          fullHistory = true
-        )
-        liveWebView?.evaluateJavascript(
-          "window.kestrelToast && window.kestrelToast(${JSONObject.quote(msg)});",
-          null
-        )
-      } catch (_: Exception) {}
-    }
-  }
-
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
-    // Match system bars to Moonlight theme (remove peach/cream strips)
-    window.statusBarColor = android.graphics.Color.parseColor("#D9DCE5")
-    window.navigationBarColor = android.graphics.Color.parseColor("#D9DCE5")
-    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-      var flags = window.decorView.systemUiVisibility
-      flags = flags or android.view.View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
-      if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-        flags = flags or android.view.View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
-      }
-      window.decorView.systemUiVisibility = flags
-    }
 
     miBandManager = MiBandManager.get(applicationContext)
-    miBandManager.onNoKeySync = { importZeppIfPermitted() }
-    // Sleep used to be read over Bluetooth; now it only comes from Health Connect, so drop the old Bluetooth sleep flags once.
-    getSharedPreferences("kestrel_ble_prefs", Context.MODE_PRIVATE).let { p ->
-      if (!p.getBoolean("sleep_hc_only_v1", false)) {
-        Thread { try { BandSampleStore.get(applicationContext).clearSleepRows() } catch (_: Exception) { } }.start()
-        p.edit().putBoolean("sleep_hc_only_v1", true).apply()
-      }
-    }
 
     setContent {
       MyApplicationTheme {
@@ -389,8 +229,6 @@ fun KestrelMainScreen(
       val st = miBandManager.uiState.value
       KestrelWidgetManager.refresh(context)
       MiBandDataSyncEngine.pushToWebView(webViewInstance, store, st, fullHistory = false)
-      // Sleep comes from Health Connect: refresh it right after every Bluetooth sync.
-      (context as? MainActivity)?.importZeppIfPermitted()
     }
   }
 
@@ -443,16 +281,13 @@ fun KestrelMainScreen(
 
   val notificationLauncher = rememberLauncherForActivityResult(
     contract = ActivityResultContracts.RequestPermission()
-  ) { (context as? MainActivity)?.requestHealthConnectAtStartup() }
+  ) { }
 
   fun askNotificationPermission() {
     if (Build.VERSION.SDK_INT >= 33 &&
       ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
     ) {
       notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-    } else {
-      // Nothing else to ask: now show the Health Connect permission dialog.
-      (context as? MainActivity)?.requestHealthConnectAtStartup()
     }
   }
 
@@ -466,7 +301,6 @@ fun KestrelMainScreen(
       miBandManager.startScan()
     } else {
       Log.w(TAG, "Some Bluetooth/Location permissions were not granted.")
-      (context as? MainActivity)?.requestHealthConnectAtStartup()
     }
   }
 
@@ -551,7 +385,7 @@ fun KestrelMainScreen(
     modifier = Modifier
       .fillMaxSize()
       .testTag("kestrel_main_scaffold"),
-    containerColor = Color(0xFFFFEED7)
+    containerColor = Color(0xFFD9DCE5)
   ) { innerPadding ->
     Box(
       modifier = Modifier
@@ -566,11 +400,6 @@ fun KestrelMainScreen(
         factory = { ctx ->
           WebView(ctx).apply {
             webViewInstance = this
-            var c: Context? = ctx
-            while (c is android.content.ContextWrapper) {
-              if (c is MainActivity) { c.liveWebView = this; break }
-              c = c.baseContext
-            }
             setBackgroundColor(android.graphics.Color.parseColor("#D9DCE5"))
 
             settings.apply {
@@ -888,6 +717,37 @@ class KestrelAndroidBridge(
     return arr.toString()
   }
 
+  /** GPX import: the web UI parses the file and sends {startSec,endSec,type,distanceM,movingSec,avgHr,maxHr,points:[[t,lat,lon,alt,hr]]}. */
+  @JavascriptInterface
+  fun importGpxRun(json: String): String {
+    return try {
+      val o = org.json.JSONObject(json)
+      val arr = o.getJSONArray("points")
+      val pts = ArrayList<com.example.ble.TrackPoint>(arr.length())
+      for (i in 0 until arr.length()) {
+        val p = arr.getJSONArray(i)
+        pts.add(com.example.ble.TrackPoint(p.getLong(0), p.getDouble(1), p.getDouble(2), p.optDouble(3, 0.0), p.optInt(4, 0)))
+      }
+      if (pts.size < 2) return "The GPX file has no usable track points"
+      val startSec = o.getLong("startSec")
+      val endSec = o.getLong("endSec")
+      val store = BandSampleStore.get(context)
+      store.insertWorkout(
+        com.example.ble.BandWorkoutRow(
+          startSec = startSec, endSec = endSec, type = o.optInt("type", 1), steps = 0,
+          activeSec = o.optInt("movingSec", (endSec - startSec).toInt()), calories = 0,
+          distanceM = o.getInt("distanceM"), avgHr = o.optInt("avgHr", 0), maxHr = o.optInt("maxHr", 0)
+        )
+      )
+      store.insertTrack(startSec, pts)
+      // Same refresh path a freshly recorded run uses, so the list and detail update immediately.
+      android.os.Handler(android.os.Looper.getMainLooper()).post { RunTrackingService.onFinished?.invoke(startSec) }
+      "ok:$startSec"
+    } catch (e: Exception) {
+      "Import failed: ${e.message}"
+    }
+  }
+
   @JavascriptInterface
   fun deleteRun(startSec: Long) { BandSampleStore.get(context).deleteWorkout(startSec) }
 
@@ -1062,34 +922,5 @@ class KestrelAndroidBridge(
         .append(r.hr).append(',').append(r.sleep).append(',').append(r.deep).append(',').append(r.rem).append('\n') }
     }
     return ShareHelper.saveTextFile(context, "band_minutes.csv", "text/csv", sb.toString())
-  }
-
-  // ---------------- Zepp data on this phone (via Health Connect) ----------------
-  @JavascriptInterface fun getHealthConnectStatus(): String =
-    com.example.ble.ZeppHealthConnectImporter.status(context)
-
-  @JavascriptInterface fun openHealthConnectSettings() {
-    try {
-      val i = com.example.ble.ZeppHealthConnectImporter.permissionContractIntent(context)
-        ?: Intent(Settings.ACTION_SETTINGS)
-      i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-      context.startActivity(i)
-    } catch (_: Exception) {
-      Toast.makeText(context, "Open Health Connect from system settings", Toast.LENGTH_SHORT).show()
-    }
-  }
-
-  /** Import steps / HR / sleep / workouts Zepp wrote to Health Connect. */
-  @JavascriptInterface fun importFromZepp(): String {
-    (context as? MainActivity)?.importZeppFromHealthConnect()
-      ?: run {
-        kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.Main) {
-          val msg = try {
-            com.example.ble.ZeppHealthConnectImporter.importLastDays(context.applicationContext, 30)
-          } catch (e: Exception) { "Import failed: ${e.message}" }
-          Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
-        }
-      }
-    return "Importing from Zepp / Health Connect…"
   }
 }
