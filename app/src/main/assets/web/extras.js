@@ -125,7 +125,7 @@
     const c = 2 * Math.PI * 46;
     const card = h('div', 'rn-card');
     card.innerHTML = '<h4>Water today</h4><div class="mo-ring"><svg width="116" height="116" viewBox="0 0 116 116"><circle cx="58" cy="58" r="46" fill="none" stroke="rgba(170,152,169,.25)" stroke-width="12"/>' +
-      '<circle cx="58" cy="58" r="46" fill="none" stroke="#7fb8d6" stroke-width="12" stroke-linecap="round" stroke-dasharray="' + (c * pct) + ' ' + c + '" transform="rotate(-90 58 58)"/>' +
+      '<circle cx="58" cy="58" r="46" fill="none" stroke="#A7B0C4" stroke-width="12" stroke-linecap="round" stroke-dasharray="' + (c * pct) + ' ' + c + '" transform="rotate(-90 58 58)"/>' +
       '<text x="58" y="56" text-anchor="middle" font-size="20" font-weight="800" fill="currentColor">' + ml + '</text><text x="58" y="74" text-anchor="middle" font-size="11" fill="currentColor" opacity=".6">of ' + w.goal + ' ml</text></svg>' +
       '<div><div class="mo-btns"><button data-ml="150">+150</button><button data-ml="250">+250</button><button data-ml="330">+330</button><button data-ml="500">+500</button></div>' +
       '<div class="mo-btns" style="margin-top:8px"><button id="wt-undo">Undo</button><button id="wt-goal">Goal</button></div></div></div>';
@@ -136,7 +136,7 @@
     const wk = h('div', 'rn-card'); wk.innerHTML = '<h4>Last 7 days</h4>';
     const rows = []; for (let i = 6; i >= 0; i--) { const k = keyOf(new Date(Date.now() - i * 86400000)); rows.push([k, (w.days[k] || []).reduce((s, e) => s + e.ml, 0)]); }
     const mx = Math.max(w.goal, Math.max.apply(null, rows.map((r) => r[1])));
-    wk.innerHTML += '<div class="rn-bars" style="border:0;padding:0;background:transparent">' + rows.map((r) => '<div><span>' + (r[1] ? (r[1] / 1000).toFixed(1) : '') + '</span><em style="height:' + Math.max(3, (r[1] / mx) * 80) + 'px;background:' + (r[1] >= w.goal ? '#7fb8d6' : 'var(--accent)') + '"></em><span>' + r[0].slice(8) + '</span></div>').join('') + '</div>';
+    wk.innerHTML += '<div class="rn-bars" style="border:0;padding:0;background:transparent">' + rows.map((r) => '<div><span>' + (r[1] ? (r[1] / 1000).toFixed(1) : '') + '</span><em style="height:' + Math.max(3, (r[1] / mx) * 80) + 'px;background:' + (r[1] >= w.goal ? '#A7B0C4' : 'var(--accent)') + '"></em><span>' + r[0].slice(8) + '</span></div>').join('') + '</div>';
     stack.appendChild(wk);
 
     // mood
