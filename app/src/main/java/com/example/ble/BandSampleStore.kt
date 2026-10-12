@@ -350,6 +350,95 @@ class BandSampleStore private constructor(context: Context) :
     return list.size
   }
 
+  /**
+   * Rows coming from Bluetooth. They replace older rows for the same minute, but a minute that Health Connect
+   * already marked as sleep keeps its sleep kind / stages (only steps, heart rate and intensity are refreshed).
+   */
+  @Synchronized
+  fun insertBle(list: List<BandSample>): Int {
+    if (list.isEmpty()) return 0
+    val db = writableDatabase
+    db.beginTransaction()
+    try {
+      val cv = ContentValues()
+      val upd = db.compileStatement("UPDATE samples SET intensity = ?, steps = ?, hr = ? WHERE ts = ? AND kind IN (120,121,122)")
+      for (s in list) {
+        upd.clearBindings()
+        upd.bindLong(1, s.intensity.toLong()); upd.bindLong(2, s.steps.toLong()); upd.bindLong(3, s.hr.toLong()); upd.bindLong(4, s.ts)
+        if (upd.executeUpdateDelete() > 0) continue
+        cv.clear()
+        cv.put("ts", s.ts); cv.put("kind", s.kind); cv.put("intensity", s.intensity)
+        cv.put("steps", s.steps); cv.put("hr", s.hr); cv.put("sleep", s.sleep)
+        cv.put("deep", s.deep); cv.put("rem", s.rem)
+        db.insertWithOnConflict("samples", null, cv, SQLiteDatabase.CONFLICT_REPLACE)
+      }
+      db.setTransactionSuccessful()
+    } finally {
+      db.endTransaction()
+    }
+    return list.size
+  }
+
+  /** Sleep minutes from Health Connect: set kind / stages on the minute, keep any steps / heart rate already stored. */
+  @Synchronized
+  fun applySleep(list: List<BandSample>): Int {
+    if (list.isEmpty()) return 0
+    val db = writableDatabase
+    db.beginTransaction()
+    try {
+      val cv = ContentValues()
+      val upd = db.compileStatement("UPDATE samples SET kind = ?, deep = ?, rem = ?, sleep = ? WHERE ts = ?")
+      for (s in list) {
+        upd.clearBindings()
+        upd.bindLong(1, s.kind.toLong()); upd.bindLong(2, s.deep.toLong()); upd.bindLong(3, s.rem.toLong()); upd.bindLong(4, s.sleep.toLong()); upd.bindLong(5, s.ts)
+        if (upd.executeUpdateDelete() > 0) continue
+        cv.clear()
+        cv.put("ts", s.ts); cv.put("kind", s.kind); cv.put("intensity", s.intensity)
+        cv.put("steps", s.steps); cv.put("hr", s.hr); cv.put("sleep", s.sleep)
+        cv.put("deep", s.deep); cv.put("rem", s.rem)
+        db.insertWithOnConflict("samples", null, cv, SQLiteDatabase.CONFLICT_REPLACE)
+      }
+      db.setTransactionSuccessful()
+    } finally {
+      db.endTransaction()
+    }
+    return list.size
+  }
+
+  /** Non-sleep rows from Health Connect only fill minutes Bluetooth has not covered. */
+  @Synchronized
+  fun insertIfAbsent(list: List<BandSample>): Int {
+    if (list.isEmpty()) return 0
+    val db = writableDatabase
+    db.beginTransaction()
+    try {
+      val cv = ContentValues()
+      for (s in list) {
+        cv.clear()
+        cv.put("ts", s.ts); cv.put("kind", s.kind); cv.put("intensity", s.intensity)
+        cv.put("steps", s.steps); cv.put("hr", s.hr); cv.put("sleep", s.sleep)
+        cv.put("deep", s.deep); cv.put("rem", s.rem)
+        db.insertWithOnConflict("samples", null, cv, SQLiteDatabase.CONFLICT_IGNORE)
+      }
+      db.setTransactionSuccessful()
+    } finally {
+      db.endTransaction()
+    }
+    return list.size
+  }
+
+  /** One-time cleanup: sleep now comes only from Health Connect, so drop sleep flags that Bluetooth stored earlier. */
+  @Synchronized
+  fun clearSleepRows() {
+    writableDatabase.execSQL("UPDATE samples SET kind = 1, deep = 0, rem = 0, sleep = 0 WHERE kind IN (120,121,122)")
+  }
+
+  @Synchronized
+  fun hasWorkoutNear(startSec: Long, windowSec: Long): Boolean =
+    readableDatabase.rawQuery(
+      "SELECT 1 FROM workouts WHERE start_ts BETWEEN ? AND ? LIMIT 1", arrayOf((startSec - windowSec).toString(), (startSec + windowSec).toString())
+    ).use { it.moveToFirst() }
+
   @Synchronized
   fun count(): Int = readableDatabase.rawQuery("SELECT COUNT(*) FROM samples", null).use {
     if (it.moveToFirst()) it.getInt(0) else 0
