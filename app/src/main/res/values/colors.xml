@@ -8,7 +8,6 @@
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
 
-    <!-- Kestrel Moonlight Theme -->
     <color name="kestrel_plum_bg">#2A2E38</color>
     <color name="kestrel_plum_card">#3A3F4C</color>
     <color name="kestrel_plum_dark">#1E222B</color>
@@ -22,13 +21,18 @@
     <color name="kestrel_orange">#F97316</color>
     <color name="kestrel_flame_bg">#55F97316</color>
 
-    <!-- Frosted glass widget palette -->
+    <!-- Moonlight widget palette (matches app) -->
     <color name="glass_text">#454B5C</color>
-    <color name="glass_muted">#A7B0C4</color>
-    <color name="glass_sky">#A7B0C4</color>
-    <color name="glass_cyan">#C5CCD9</color>
-    <color name="glass_mint">#6EE7B7</color>
+    <color name="glass_muted">#8A93A6</color>
+    <color name="glass_sky">#454B5C</color>
+    <color name="glass_cyan">#454B5C</color>
+    <color name="glass_mint">#454B5C</color>
     <color name="glass_violet">#A7B0C4</color>
-    <color name="glass_rose">#FDA4AF</color>
+    <color name="glass_rose">#A7B0C4</color>
     <color name="glass_track">#33454B5C</color>
+    <color name="widget_bg">#F5F6F8</color>
+    <color name="widget_card">#FFFFFF</color>
+    <color name="widget_ink">#454B5C</color>
+    <color name="widget_muted">#8A93A6</color>
+    <color name="widget_line">#1A454B5C</color>
 </resources>
