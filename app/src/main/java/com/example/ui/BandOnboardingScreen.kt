@@ -87,16 +87,16 @@ import com.example.ble.MiBandState
 import kotlinx.coroutines.delay
 
 // Kestrel Color Palette (matching web app :root theme)
-private val KestrelBg = Color(0xFFD9DCE5) // --page-bg: #FFEED7 Warm Cream
-private val KestrelCard = Color(0xCCFFFFFF) // --card-soft: #ffffff White glass card
-private val KestrelCardLight = Color(0xFFE8EBF2) // Subtle warm tinted inner card
-private val KestrelBorder = Color(0x1A454B5C) // --line: rgba(170, 152, 169, 0.28)
-private val KestrelMauve = Color(0xFF454B5C) // --hero-mid: #AA98A9 Dusty Mauve
-private val KestrelMauveDark = Color(0xFF353A48) // --teal-deep: #7A6879 Deep Mauve
-private val KestrelLilac = Color(0xFFA7B0C4) // --hero-top: #C4B3C2
-private val KestrelCream = Color(0xFFD9DCE5) // --cream: #FFEED7
-private val KestrelText = Color(0xFF454B5C) // --ink: #3d3340 Deep Plum Ink
-private val KestrelMuted = Color(0x99454B5C) // --muted: rgba(61,51,64,0.55)
+private val KestrelBg = Color(0xFFD9DCE5) // --page-bg: #D9DCE5 Warm Cream
+private val KestrelCard = Color(0xFFFFFFFF) // --card-soft: #ffffff White glass card
+private val KestrelCardLight = Color(0xFFEEF0F5) // Subtle warm tinted inner card
+private val KestrelBorder = Color(0x33A7B0C4) // --line: rgba(170, 152, 169, 0.28)
+private val KestrelMauve = Color(0xFFA7B0C4) // --hero-mid: #A7B0C4 Dusty Mauve
+private val KestrelMauveDark = Color(0xFF454B5C) // --teal-deep: #454B5C Deep Mauve
+private val KestrelLilac = Color(0xFFC3C9D8) // --hero-top: #C3C9D8
+private val KestrelCream = Color(0xFFD9DCE5) // --cream: #D9DCE5
+private val KestrelText = Color(0xFF2F3442) // --ink: #2F3442 Deep Plum Ink
+private val KestrelMuted = Color(0x992F3442) // --muted: rgba(61,51,64,0.55)
 private val KestrelGreen = Color(0xFF10B981)
 
 @Composable
@@ -241,9 +241,9 @@ fun BandOnboardingScreen(
             Row(verticalAlignment = Alignment.CenterVertically) {
               val statusColor = when (uiState.status) {
                 ConnectionStatus.CONNECTED -> KestrelGreen
-                ConnectionStatus.CONNECTING, ConnectionStatus.AUTHENTICATING -> Color(0xFFA7B0C4)
+                ConnectionStatus.CONNECTING, ConnectionStatus.AUTHENTICATING -> Color(0xFFF59E0B)
                 ConnectionStatus.SCANNING -> KestrelMauve
-                ConnectionStatus.DISCONNECTED -> Color(0xFFA7B0C4)
+                ConnectionStatus.DISCONNECTED -> Color(0xFF94A3B8)
               }
 
               Box(
@@ -323,7 +323,7 @@ fun BandOnboardingScreen(
                     Icon(
                       imageVector = Icons.Default.Favorite,
                       contentDescription = null,
-                      tint = Color(0xFF454B5C),
+                      tint = Color(0xFFF43F5E),
                       modifier = Modifier.size(14.dp)
                     )
                   }
@@ -354,7 +354,7 @@ fun BandOnboardingScreen(
                     Icon(
                       imageVector = Icons.Default.DirectionsWalk,
                       contentDescription = null,
-                      tint = Color(0xFF454B5C),
+                      tint = Color(0xFF0284C7),
                       modifier = Modifier.size(14.dp)
                     )
                   }
@@ -388,8 +388,8 @@ fun BandOnboardingScreen(
             .fillMaxWidth()
             .padding(bottom = 14.dp),
           shape = RoundedCornerShape(16.dp),
-          colors = CardDefaults.cardColors(containerColor = Color(0xFFE8EBF2)),
-          border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFA7B0C4))
+          colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
+          border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFB74D))
         ) {
           Row(
             modifier = Modifier
@@ -402,14 +402,14 @@ fun BandOnboardingScreen(
               Icon(
                 Icons.Default.Security,
                 contentDescription = null,
-                tint = Color(0xFF454B5C),
+                tint = Color(0xFFEA580C),
                 modifier = Modifier.size(22.dp)
               )
               Spacer(modifier = Modifier.width(10.dp))
               Column {
                 Text(
                   "Bluetooth Permission Needed",
-                  color = Color(0xFF454B5C),
+                  color = Color(0xFF7C2D12),
                   fontWeight = FontWeight.Bold,
                   fontSize = 13.sp
                 )
@@ -422,7 +422,7 @@ fun BandOnboardingScreen(
             }
             Button(
               onClick = onRequestPermissions,
-              colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF454B5C)),
+              colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEA580C)),
               shape = RoundedCornerShape(12.dp)
             ) {
               Text("Grant", fontSize = 11.sp, fontWeight = FontWeight.Bold)
@@ -770,27 +770,18 @@ fun BandOnboardingScreen(
             OutlinedTextField(
               value = inputAuthKey,
               onValueChange = {
-                // Strip 0x / spaces / colons so the field always shows the clean 32-hex key
-                val clean = it.trim()
-                  .replace("0x", "", ignoreCase = true)
-                  .replace(" ", "").replace(":", "").replace("-", "")
-                  .lowercase()
-                inputAuthKey = clean
-                onSaveAuthKey(clean)
+                inputAuthKey = it
+                onSaveAuthKey(it)
               },
-              placeholder = { Text("32 hex chars (0x prefix OK)", color = KestrelMuted, fontSize = 11.sp) },
+              placeholder = { Text("32 hex chars (Optional)", color = KestrelMuted, fontSize = 11.sp) },
               trailingIcon = {
                 IconButton(
                   onClick = {
                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
                     val clip = clipboard?.primaryClip?.getItemAt(0)?.text?.toString() ?: ""
                     if (clip.isNotEmpty()) {
-                      val clean = clip.trim()
-                        .replace("0x", "", ignoreCase = true)
-                        .replace(" ", "").replace(":", "").replace("-", "")
-                        .lowercase()
-                      inputAuthKey = clean
-                      onSaveAuthKey(clean)
+                      inputAuthKey = clip.trim()
+                      onSaveAuthKey(clip.trim())
                     }
                   }
                 ) {
