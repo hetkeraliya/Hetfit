@@ -87,16 +87,16 @@ import com.example.ble.MiBandState
 import kotlinx.coroutines.delay
 
 // Kestrel Color Palette (matching web app :root theme)
-private val KestrelBg = Color(0xFFFFEED7) // --page-bg: #FFEED7 Warm Cream
-private val KestrelCard = Color(0xFFFFFFFF) // --card-soft: #ffffff White glass card
-private val KestrelCardLight = Color(0xFFFBF7F2) // Subtle warm tinted inner card
-private val KestrelBorder = Color(0x33AA98A9) // --line: rgba(170, 152, 169, 0.28)
-private val KestrelMauve = Color(0xFFAA98A9) // --hero-mid: #AA98A9 Dusty Mauve
-private val KestrelMauveDark = Color(0xFF7A6879) // --teal-deep: #7A6879 Deep Mauve
-private val KestrelLilac = Color(0xFFC4B3C2) // --hero-top: #C4B3C2
-private val KestrelCream = Color(0xFFFFEED7) // --cream: #FFEED7
-private val KestrelText = Color(0xFF3D3340) // --ink: #3d3340 Deep Plum Ink
-private val KestrelMuted = Color(0x993D3340) // --muted: rgba(61,51,64,0.55)
+private val KestrelBg = Color(0xFFD9DCE5) // --page-bg: #FFEED7 Warm Cream
+private val KestrelCard = Color(0xCCFFFFFF) // --card-soft: #ffffff White glass card
+private val KestrelCardLight = Color(0xFFE8EBF2) // Subtle warm tinted inner card
+private val KestrelBorder = Color(0x1A454B5C) // --line: rgba(170, 152, 169, 0.28)
+private val KestrelMauve = Color(0xFF454B5C) // --hero-mid: #AA98A9 Dusty Mauve
+private val KestrelMauveDark = Color(0xFF353A48) // --teal-deep: #7A6879 Deep Mauve
+private val KestrelLilac = Color(0xFFA7B0C4) // --hero-top: #C4B3C2
+private val KestrelCream = Color(0xFFD9DCE5) // --cream: #FFEED7
+private val KestrelText = Color(0xFF454B5C) // --ink: #3d3340 Deep Plum Ink
+private val KestrelMuted = Color(0x99454B5C) // --muted: rgba(61,51,64,0.55)
 private val KestrelGreen = Color(0xFF10B981)
 
 @Composable
