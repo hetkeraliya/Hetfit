@@ -1,38 +1,34 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="purple_200">#A7B0C4</color>
-    <color name="purple_500">#454B5C</color>
-    <color name="purple_700">#353A48</color>
-    <color name="teal_200">#A7B0C4</color>
-    <color name="teal_700">#454B5C</color>
+    <color name="purple_200">#FFBB86FC</color>
+    <color name="purple_500">#FF6200EE</color>
+    <color name="purple_700">#FF3700B3</color>
+    <color name="teal_200">#FF03DAC5</color>
+    <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
 
-    <color name="kestrel_plum_bg">#2A2E38</color>
-    <color name="kestrel_plum_card">#3A3F4C</color>
-    <color name="kestrel_plum_dark">#1E222B</color>
-    <color name="kestrel_plum_border">#454B5C</color>
-    <color name="kestrel_mauve">#454B5C</color>
-    <color name="kestrel_lilac">#A7B0C4</color>
+    <!-- Kestrel Theme Palette -->
+    <color name="kestrel_plum_bg">#2B2F3B</color>
+    <color name="kestrel_plum_card">#2F3442</color>
+    <color name="kestrel_plum_dark">#1E212A</color>
+    <color name="kestrel_plum_border">#565D70</color>
+    <color name="kestrel_mauve">#A7B0C4</color>
+    <color name="kestrel_lilac">#C3C9D8</color>
     <color name="kestrel_cream">#D9DCE5</color>
-    <color name="kestrel_cream_muted">#C5CCD9</color>
+    <color name="kestrel_cream_muted">#B7BDCC</color>
     <color name="kestrel_green">#10B981</color>
     <color name="kestrel_red">#EF4444</color>
-    <color name="kestrel_orange">#F97316</color>
+    <color name="kestrel_orange">#C9704A</color>
     <color name="kestrel_flame_bg">#55F97316</color>
 
-    <!-- Moonlight widget palette (matches app) -->
-    <color name="glass_text">#454B5C</color>
-    <color name="glass_muted">#8A93A6</color>
-    <color name="glass_sky">#454B5C</color>
-    <color name="glass_cyan">#454B5C</color>
-    <color name="glass_mint">#454B5C</color>
-    <color name="glass_violet">#A7B0C4</color>
-    <color name="glass_rose">#A7B0C4</color>
-    <color name="glass_track">#33454B5C</color>
-    <color name="widget_bg">#F5F6F8</color>
-    <color name="widget_card">#FFFFFF</color>
-    <color name="widget_ink">#454B5C</color>
-    <color name="widget_muted">#8A93A6</color>
-    <color name="widget_line">#1A454B5C</color>
+    <!-- Frosted glass widget palette (cool) -->
+    <color name="glass_text">#F4FAFF</color>
+    <color name="glass_muted">#B4CCE0</color>
+    <color name="glass_sky">#A7B0C4</color>
+    <color name="glass_cyan">#C3C9D8</color>
+    <color name="glass_mint">#A9BFB7</color>
+    <color name="glass_violet">#B4B9D6</color>
+    <color name="glass_rose">#CDB7BE</color>
+    <color name="glass_track">#33FFFFFF</color>
 </resources>
