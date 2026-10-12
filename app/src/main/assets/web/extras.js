@@ -411,20 +411,39 @@
   let connTimer = 0;
   function renderConn(stack) {
     const c = h('div', 'rn-card fx-conn');
-    c.innerHTML = '<h4>Band connection</h4><div id="cn-body" class="mo-note" style="margin:0 0 10px">Loading…</div>' +
-      '<div class="mo-btns"><button class="primary" id="cn-connect">Connect / pair</button><button id="cn-sync">Sync now</button><button id="cn-hr">Measure heart rate</button><button id="cn-buzz">Vibrate band</button></div>' +
+    c.innerHTML =
+      '<h4>Band connection</h4>' +
+      '<div id="cn-body">Loading…</div>' +
+      '<div class="mo-btns">' +
+        '<button class="primary" id="cn-connect">Connect / Pair</button>' +
+        '<button id="cn-sync">Sync now</button>' +
+        '<button id="cn-hr">Heart rate</button>' +
+        '<button id="cn-buzz">Vibrate</button>' +
+      '</div>' +
       '<div class="fx-prog" id="cn-prog"><i></i></div>';
     stack.appendChild(c);
-    if (!A || !A.getBandStatus) { c.querySelector('#cn-body').textContent = 'Band controls are available in the Android app.'; return; }
+    if (!A || !A.getBandStatus) {
+      c.querySelector('#cn-body').innerHTML = '<b>Not available</b>Band controls are available in the Android app.';
+      return;
+    }
     const body = c.querySelector('#cn-body'), prog = c.querySelector('#cn-prog');
     const paint = () => {
       if (!c.isConnected) { clearInterval(connTimer); return; }
       let s = {}; try { s = JSON.parse(A.getBandStatus()); } catch (e) {}
       const st = (s.status || 'DISCONNECTED');
       const label = { CONNECTED: 'Connected', CONNECTING: 'Connecting…', AUTHENTICATING: 'Authenticating…', SCANNING: 'Searching…', DISCONNECTED: 'Not connected' }[st] || st;
-      body.innerHTML = '<b style="font-size:16px">' + label + '</b>' + (s.battery > 0 ? ' · battery ' + s.battery + '%' : '') + (st === 'CONNECTED' && s.hr > 0 ? ' · ♥ ' + s.hr + ' bpm' : '') +
-        '<br>' + (s.lastSync ? 'Last sync ' + new Date(s.lastSync).toLocaleString() : 'Not synced yet') +
-        (s.syncing ? '<br>' + (s.message || 'Syncing…') : '') + (s.ack ? '<br>Band replied: ' + s.ack : '') + (s.error ? '<br><span style="color:#c0564f">' + s.error + '</span>' : '');
+      let meta = [];
+      if (s.battery > 0) meta.push(s.battery + '% battery');
+      if (st === 'CONNECTED' && s.hr > 0) meta.push('♥ ' + s.hr + ' bpm');
+      let extra = '';
+      if (s.lastSync) extra += '<div style="margin-top:6px;font-size:12.5px;opacity:.7">Last sync ' + new Date(s.lastSync).toLocaleString() + '</div>';
+      else extra += '<div style="margin-top:6px;font-size:12.5px;opacity:.7">Not synced yet</div>';
+      if (s.syncing) extra += '<div style="margin-top:4px;font-size:12.5px">' + (s.message || 'Syncing…') + '</div>';
+      if (s.ack) extra += '<div style="margin-top:4px;font-size:12.5px">Band replied: ' + s.ack + '</div>';
+      if (s.error) extra += '<div style="margin-top:4px;font-size:12.5px;color:#c0564f">' + s.error + '</div>';
+      body.innerHTML = '<b>' + label + '</b>' +
+        (meta.length ? '<span style="font-size:13px;opacity:.75">' + meta.join(' · ') + '</span>' : '') +
+        extra;
       c.classList.toggle('is-on', st === 'CONNECTED');
       prog.classList.toggle('on', !!s.syncing);
       prog.firstElementChild.style.width = (s.syncing ? Math.max(6, s.percent || 0) : 0) + '%';
