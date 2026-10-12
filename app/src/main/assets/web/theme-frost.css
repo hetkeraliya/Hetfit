@@ -1,0 +1,248 @@
+/* =====================================================================
+   Frost theme — frosted-glass surfaces over soft mesh gradients.
+   Colours only: no layout, spacing, size or behaviour is changed.
+   Palette: traditional Japanese colours (fuji 藤, sakura 桜, momo 桃, mizu 水, asagi 浅葱, wakatake 若竹).
+   Load AFTER styles.css and run.css.
+   ===================================================================== */
+:root {
+  /* brand */
+  --accent: #8F86DE;            /* fuji, deepened */
+  --accent-rgb: 143, 134, 222;
+  --accent-deep: #5A52AE;
+  --accent-deep-rgb: 90, 82, 174;
+  --accent-grad: linear-gradient(135deg, #A89CF2 0%, #C58BE0 48%, #F29BBA 100%);
+  --cream: #FFFFFF;             /* text on coloured buttons */
+  --cream-rgb: 255, 255, 255;
+  --ink: #2B2650;
+  --ink-rgb: 43, 38, 80;
+  --muted: rgba(43, 38, 80, 0.58);
+  --banner: rgba(255, 255, 255, 0.40);
+  --banner-ink: #4B4590;
+  --line: rgba(255, 255, 255, 0.55);
+  --card-soft: rgba(255, 255, 255, 0.34);
+  --page-bg: #B9A9EC;
+  --teal: var(--accent); --teal-deep: var(--accent-deep);
+  --blue: #9CC9F0; --blue-deep: var(--accent-deep);
+  /* mesh stops */
+  --hero-top: #9B8FEA;          /* fuji */
+  --hero-mid: #D58BC6;          /* sakura-momo */
+  --hero-bot: #7CBFE0;          /* mizu */
+  /* glass */
+  --glass-bg: linear-gradient(145deg, rgba(255,255,255,0.46) 0%, rgba(255,255,255,0.22) 100%);
+  --glass-blur: blur(20px) saturate(165%);
+  --glass-border: rgba(255, 255, 255, 0.62);
+  --glass-shadow: 0 10px 32px rgba(70, 58, 150, 0.20), inset 0 1px 0 rgba(255,255,255,0.65);
+  --mesh:
+    radial-gradient(70% 45% at 8% 4%,  #F7B7CC 0%, transparent 60%),   /* sakura */
+    radial-gradient(65% 42% at 98% 10%, #8E86F0 0%, transparent 62%),  /* fuji   */
+    radial-gradient(70% 50% at 90% 62%, #79D2E3 0%, transparent 62%),  /* mizu   */
+    radial-gradient(75% 48% at 6% 78%,  #F29BB8 0%, transparent 62%),  /* momo   */
+    radial-gradient(60% 40% at 55% 100%, #9EE0C4 0%, transparent 65%), /* wakatake */
+    linear-gradient(180deg, #B6A6EE 0%, #C9A4E4 50%, #A9C4EE 100%);
+}
+html[data-theme="dark"] {
+  --accent: #A79CFF;
+  --accent-rgb: 167, 156, 255;
+  --accent-deep: #7C72E6;
+  --accent-deep-rgb: 124, 114, 230;
+  --accent-grad: linear-gradient(135deg, #7F74F0 0%, #A66FDC 52%, #E0709F 100%);
+  --cream: #FFFFFF;
+  --ink: #F1EFFF;
+  --ink-rgb: 241, 239, 255;
+  --muted: rgba(241, 239, 255, 0.62);
+  --banner: rgba(255, 255, 255, 0.08);
+  --banner-ink: #CFC9FF;
+  --line: rgba(255, 255, 255, 0.16);
+  --card-soft: rgba(255, 255, 255, 0.07);
+  --page-bg: #14122B;
+  --hero-top: #3A3490; --hero-mid: #6B3E92; --hero-bot: #1F5C78;
+  --glass-bg: linear-gradient(145deg, rgba(255,255,255,0.13) 0%, rgba(255,255,255,0.05) 100%);
+  --glass-blur: blur(22px) saturate(150%);
+  --glass-border: rgba(255, 255, 255, 0.18);
+  --glass-shadow: 0 12px 34px rgba(0, 0, 0, 0.38), inset 0 1px 0 rgba(255,255,255,0.14);
+  --mesh:
+    radial-gradient(70% 45% at 8% 4%,  rgba(224,112,159,0.55) 0%, transparent 60%),
+    radial-gradient(65% 42% at 98% 10%, rgba(110,98,240,0.65) 0%, transparent 62%),
+    radial-gradient(70% 50% at 90% 62%, rgba(32,150,170,0.50) 0%, transparent 62%),
+    radial-gradient(75% 48% at 6% 78%,  rgba(150,70,170,0.50) 0%, transparent 62%),
+    radial-gradient(60% 40% at 55% 100%, rgba(40,130,120,0.40) 0%, transparent 65%),
+    linear-gradient(180deg, #1A1740 0%, #181536 55%, #10122B 100%);
+}
+/* ---- recolored from styles.css ---- */
+html, body { background: var(--accent-grad); }
+.app-shell { background: var(--accent-grad); }
+#dashboard-view.aura-dash { background: radial-gradient(120% 70% at 10% -10%, rgba(var(--cream-rgb), 0.45) 0%, transparent 55%),
+    radial-gradient(90% 50% at 100% 8%, rgba(var(--accent-rgb), 0.35) 0%, transparent 50%),
+    linear-gradient(180deg, var(--hero-top) 0%, var(--hero-mid) 42%, var(--hero-bot) 100%); }
+html[data-theme="dark"] #dashboard-view.aura-dash { background: radial-gradient(120% 70% at 10% -10%, rgba(var(--cream-rgb), 0.18) 0%, transparent 55%),
+    linear-gradient(180deg, var(--ink) 0%, #2a232b 40%, #1c181e 100%); }
+.tab-strip { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: 0 10px 30px rgba(var(--ink-rgb),0.16); }
+.tab-strip-btn { color: var(--accent-deep); }
+.tab-strip-btn.active { background: var(--accent-grad); color: var(--cream); }
+.sub-tab-btn.active { background: var(--accent-grad); color: var(--cream); }
+.check-list input[type="checkbox"] { accent-color: var(--accent); }
+.ex-icon .sf-head { stroke: var(--accent); }
+.ex-icon line { stroke: var(--accent); }
+.food-icon { stroke: var(--accent); }
+.login-card { background: radial-gradient(120% 100% at 15% 0%, var(--cream) 0%, transparent 55%),
+    radial-gradient(120% 100% at 90% 10%, var(--accent) 0%, transparent 50%),
+    linear-gradient(160deg, var(--banner-ink) 0%, var(--accent) 55%, var(--hero-bot) 100%); }
+.copyright, .dash-copy { color: rgba(var(--ink-rgb),0.55); }
+.dash-copy { color: rgba(var(--cream-rgb),0.7); }
+#gb-load-btn { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); color: var(--ink); }
+.sheet-stack { box-shadow: 0 10px 32px rgba(var(--ink-rgb),0.10); }
+.metric-card { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: 0 10px 28px rgba(var(--ink-rgb),0.09); }
+.hr-chart-wrap .status-pill { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: 0 4px 14px rgba(var(--ink-rgb),0.10); }
+.status-pill { border: 1px solid rgba(var(--accent-rgb),0.22); }
+html[data-theme="dark"] .status-pill { color: var(--cream); }
+.today-card { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
+.streak-chip { background: rgba(var(--accent-rgb),0.16); }
+.range-btn.active, .tab.active { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
+.chart-card { background: radial-gradient(140% 90% at 100% 0%, var(--cream) 0%, transparent 45%),
+    radial-gradient(120% 100% at 0% 100%, var(--accent) 0%, transparent 45%),
+    linear-gradient(165deg, var(--banner-ink) 0%, var(--accent) 45%, var(--hero-bot) 100%); }
+.day-pill.selected { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); color: var(--ink); border-color: var(--cream); }
+.grad-pink { background: linear-gradient(150deg, var(--cream) 0%, var(--accent) 55%, var(--accent-deep) 100%); }
+.grad-blue { background: linear-gradient(150deg, #e8d4e0 0%, var(--accent) 45%, var(--banner-ink) 100%); }
+.grad-orange { background: linear-gradient(150deg, var(--cream) 0%, #e8c9a8 40%, var(--accent) 100%); }
+.grad-teal { background: linear-gradient(150deg, #d8c8d6 0%, var(--accent) 55%, var(--banner-ink) 100%); }
+.grad-purple { background: linear-gradient(150deg, var(--cream) 0%, var(--accent) 55%, var(--hero-mid) 100%); }
+.pill-add { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
+.health-block { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: 0 8px 24px rgba(var(--ink-rgb),0.08); }
+.check-table { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: 0 8px 24px rgba(var(--ink-rgb),0.08); }
+.donut-track { stroke: var(--cream); }
+.donut-cardio { stroke: var(--accent); }
+.donut-str { stroke: var(--accent-deep); }
+.donut-flex { stroke: var(--cream); }
+.swatch.cardio { background: var(--accent-grad); }
+.swatch.strength { background: var(--accent-deep); }
+.swatch.flex { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); border: 1px solid rgba(var(--accent-rgb),0.45); }
+.check-row { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
+.score-bar-fill { background: linear-gradient(90deg, var(--accent), var(--accent-deep)); }
+.tag-btn { background: rgba(var(--accent-rgb),0.18); }
+.muscle-chip { background: rgba(var(--accent-rgb),0.16); }
+.muscle-coach-note { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
+.log-workout-box { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
+.log-workout-row button, .modal-actions button { color: var(--cream); }
+.modal-actions .demo-watch-btn { color: var(--cream); }
+.modal-inner { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: 0 20px 50px rgba(var(--ink-rgb),0.28); }
+.exercise-row { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
+.exercise-sets, .exercise-reps { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
+.workout-card { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
+.badge.earned { background: linear-gradient(160deg, rgba(var(--accent-rgb),0.22), rgba(var(--cream-rgb),0.35)); }
+.correlation-row { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
+.coach-msg-user { color: var(--cream); }
+.coach-msg-ai { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
+.coach-input-row button, .coach-plan-btn { color: var(--cream); }
+.coach-plan-btn { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
+.tab-strip-btn.active { color: var(--cream) !important; }
+.tab-indicator { background: var(--accent-grad); box-shadow: 0 6px 16px rgba(var(--accent-deep-rgb),.38); }
+.group-chips .chip { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
+.group-chips .chip.active { background: var(--accent-grad); color: var(--cream); box-shadow: 0 4px 14px rgba(var(--accent-deep-rgb),.35); }
+.fx-prog { background: rgba(var(--accent-rgb),.2); }
+.fx-prog i { background: linear-gradient(90deg, var(--accent), #e9a8b8, var(--accent)); }
+/* ---- recolored from run.css ---- */
+.rn-hero { color: var(--cream); }
+.rn-start { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); color: var(--hero-mid); box-shadow: 0 10px 26px rgba(0,0,0,.25),0 0 0 7px rgba(var(--cream-rgb),.18); }
+.rn-chip { border: 1px solid rgba(var(--cream-rgb),.35); color: var(--cream); }
+.rn-chip.active { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); color: var(--hero-mid); }
+.rn-opts input { accent-color: var(--cream); }
+.rn-day.today i { color: var(--cream); }
+.rn-item:active { background: rgba(var(--accent-rgb),.12); }
+.rn-thumb { color: var(--cream); }
+.rn-btn.primary { color: var(--cream); }
+.rn-route .none { color: var(--cream); }
+.rn-split .bar { background: rgba(var(--accent-rgb),.18); }
+.rn-live { background: linear-gradient(180deg,var(--ink) 0%,#2a232b 45%,#1c181e 100%); color: var(--cream); }
+.rn-ctrl .a { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); color: var(--ink); }
+.rn-ctrl .b { color: var(--cream); }
+.rn-cd { color: var(--cream); }
+.rn-share-prev { background: repeating-conic-gradient(rgba(var(--accent-rgb),.25) 0 25%,transparent 0 50%) 0 0/20px 20px; }
+.rn-pills button.active { color: var(--cream); }
+.mo-btns button.primary { color: var(--cream); }
+.mo-mood button.active { background: rgba(var(--accent-rgb),.15); }
+.mo-tags button.active { color: var(--cream); }
+.mo-stage { background: rgba(var(--accent-rgb),.2); }
+.rn-band-offer-card { background: var(--glass-bg); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: 0 -8px 40px rgba(var(--ink-rgb),.2); }
+.rn-band-offer-card h3 { color: var(--ink); }
+.rn-band-offer-card p { color: var(--accent-deep); }
+
+/* ---------------- core surfaces (override the generated rules above) ---------------- */
+html, body { background: var(--page-bg); }
+.app-shell { background: transparent; }
+#dashboard-view.aura-dash,
+html[data-theme="dark"] #dashboard-view.aura-dash { background: var(--mesh); }
+
+/* every card-like surface = frosted glass */
+.glass-card, .rn-card, .health-block, .metric-card, .today-card, .sheet-stack,
+.insight-card, .score-card, .badge, .login-card, .modal, .sheet, .popover {
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+}
+.glass-card, .rn-card, .health-block, .metric-card, .today-card, .insight-card, .score-card {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+.sheet-stack { background: var(--glass-bg); border: 1px solid var(--glass-border); box-shadow: var(--glass-shadow); }
+/* nested panes skip their own blur (one blur layer per stack keeps scrolling smooth) */
+.sheet-stack .glass-card, .sheet-stack .rn-card, .sheet-stack .health-block, .sheet-stack .metric-card, .sheet-stack .today-card { -webkit-backdrop-filter: none; backdrop-filter: none; }
+/* cards that sit inside the big glass sheet get a lighter inner pane so they read as layers, not blobs */
+.sheet-stack .glass-card, .sheet-stack .rn-card, .sheet-stack .health-block, .sheet-stack .metric-card, .sheet-stack .today-card {
+  background: linear-gradient(145deg, rgba(255,255,255,0.40), rgba(255,255,255,0.16));
+  box-shadow: 0 6px 20px rgba(70, 58, 150, 0.12), inset 0 1px 0 rgba(255,255,255,0.6);
+}
+html[data-theme="dark"] .sheet-stack .glass-card, html[data-theme="dark"] .sheet-stack .rn-card,
+html[data-theme="dark"] .sheet-stack .health-block, html[data-theme="dark"] .sheet-stack .metric-card,
+html[data-theme="dark"] .sheet-stack .today-card {
+  background: linear-gradient(145deg, rgba(255,255,255,0.10), rgba(255,255,255,0.04));
+  box-shadow: 0 6px 20px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.10);
+}
+
+/* floating tab bar + section chips */
+.tab-strip {
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: blur(26px) saturate(180%); backdrop-filter: blur(26px) saturate(180%);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 14px 36px rgba(60, 48, 140, 0.28), inset 0 1px 0 rgba(255,255,255,0.6);
+}
+.tab-strip-btn { color: rgba(var(--ink-rgb), 0.62); }
+.tab-strip-btn.active { color: #fff !important; background: transparent !important; }
+.tab-indicator { background: var(--accent-grad); box-shadow: 0 8px 20px rgba(var(--accent-deep-rgb), 0.45), inset 0 1px 0 rgba(255,255,255,0.45); }
+.group-chips { background: transparent; }
+.group-chips .chip {
+  background: linear-gradient(145deg, rgba(255,255,255,0.45), rgba(255,255,255,0.22));
+  border: 1px solid var(--glass-border); color: var(--ink);
+  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+}
+.group-chips .chip.active { background: var(--accent-grad); color: #fff; border-color: transparent; box-shadow: 0 6px 16px rgba(var(--accent-deep-rgb), 0.40); }
+
+/* buttons, inputs, selects */
+.mo-btns button, .range-btn, .tab, button.chip {
+  background: linear-gradient(145deg, rgba(255,255,255,0.50), rgba(255,255,255,0.24));
+  border: 1px solid var(--glass-border); color: var(--ink);
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+}
+.mo-btns button.primary, .range-btn.active, .tab.active, .primary {
+  background: var(--accent-grad) !important; color: #fff !important; border-color: transparent !important;
+  box-shadow: 0 8px 20px rgba(var(--accent-deep-rgb), 0.38);
+}
+html[data-theme="dark"] .mo-btns button, html[data-theme="dark"] .range-btn, html[data-theme="dark"] .tab {
+  background: linear-gradient(145deg, rgba(255,255,255,0.12), rgba(255,255,255,0.05)); color: var(--ink);
+}
+input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]), select, textarea {
+  background: rgba(255, 255, 255, 0.45); border: 1px solid var(--glass-border); color: var(--ink);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+}
+html[data-theme="dark"] input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]), html[data-theme="dark"] select, html[data-theme="dark"] textarea { background: rgba(255,255,255,0.08); }
+input::placeholder, textarea::placeholder { color: rgba(var(--ink-rgb), 0.45); }
+.fx-prog i { background: linear-gradient(90deg, #A89CF2, #F29BBA, #79D2E3, #A89CF2); background-size: 200% 100%; }
+.fx-conn.is-on #cn-body b::before { background: #5FD0A5; }
+
+/* titles on the mesh stay white */
+.screen-title, #screen-title, .dash-title, .flame-badge { color: #fff; text-shadow: 0 2px 14px rgba(60, 48, 140, 0.35); }
+
+/* browsers without backdrop-filter: fall back to a solid-ish pane so text stays readable */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass-card, .rn-card, .health-block, .metric-card, .today-card, .sheet-stack, .tab-strip { background: rgba(255,255,255,0.78); }
+  html[data-theme="dark"] .glass-card, html[data-theme="dark"] .rn-card, html[data-theme="dark"] .tab-strip { background: rgba(30,26,70,0.86); }
+}
