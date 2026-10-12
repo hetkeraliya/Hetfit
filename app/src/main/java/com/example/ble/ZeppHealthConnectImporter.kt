@@ -75,7 +75,12 @@ object ZeppHealthConnectImporter {
     return o.toString()
   }
 
-  fun permissionStrings(): List<String> = PERMISSIONS.toList()
+  private val SLEEP_PERMISSION = HealthPermission.getReadPermission(SleepSessionRecord::class)
+
+  /** Sleep is the only thing we ask Health Connect for; steps, heart rate, stress and workouts come over Bluetooth. */
+  fun permissionStrings(): List<String> = listOf(SLEEP_PERMISSION)
+
+  fun hasEnough(granted: Set<String>): Boolean = granted.contains(SLEEP_PERMISSION)
 
   fun permissionContractIntent(context: Context): Intent? {
     return try {
@@ -133,9 +138,8 @@ object ZeppHealthConnectImporter {
     } catch (e: Exception) {
       return@withContext "Could not read permissions: ${e.message}"
     }
-    val missing = PERMISSIONS - granted
-    if (missing.isNotEmpty()) {
-      return@withContext "Permission needed. Allow Steps, Heart rate and Sleep for Hetfit in Health Connect, then try again."
+    if (!granted.contains(SLEEP_PERMISSION)) {
+      return@withContext "Permission needed. Allow Sleep for this app in Health Connect, then try again."
     }
 
     val end = Instant.now()
@@ -158,6 +162,7 @@ object ZeppHealthConnectImporter {
     var sleepSessions = 0
     var workouts = 0
     val samples = ArrayList<BandSample>(4096)
+    val sleepSamples = ArrayList<BandSample>(2048)
 
     // ---- Steps (interval records → distribute into minutes) ----
     try {
@@ -201,7 +206,7 @@ object ZeppHealthConnectImporter {
 
     // ---- Sleep sessions → minute kinds (120 light / 121 deep / 122 REM) ----
     try {
-      val sleeps = readAll(client, SleepSessionRecord::class, range, origins)
+      val sleeps = readAll(client, SleepSessionRecord::class, range, emptySet())
       for (sess in sleeps) {
         sleepSessions++
         val stages = sess.stages
@@ -210,7 +215,7 @@ object ZeppHealthConnectImporter {
           var t = (sess.startTime.epochSecond / 60) * 60
           val endM = (sess.endTime.epochSecond / 60) * 60
           while (t < endM) {
-            samples.add(BandSample(t, kind = 120, intensity = 0, steps = 0, hr = 0, sleep = 0, deep = 0, rem = 0))
+            sleepSamples.add(BandSample(t, kind = 120, intensity = 0, steps = 0, hr = 0, sleep = 0, deep = 0, rem = 0))
             t += 60
           }
         } else {
@@ -225,7 +230,7 @@ object ZeppHealthConnectImporter {
             var t = (st.startTime.epochSecond / 60) * 60
             val endM = (st.endTime.epochSecond / 60) * 60
             while (t < endM) {
-              samples.add(
+              sleepSamples.add(
                 BandSample(
                   t, kind = kind, intensity = 0, steps = 0, hr = 0, sleep = 0,
                   deep = if (kind == 121) 50 else 0,
@@ -258,6 +263,7 @@ object ZeppHealthConnectImporter {
           ExerciseSessionRecord.EXERCISE_TYPE_YOGA -> 0x3c
           else -> 5
         }
+        if (store.hasWorkoutNear(e.startTime.epochSecond, 300)) continue
         var wDist = 0; var wCal = 0; var wAvg = 0; var wMax = 0; var wSteps = 0
         try {
           val agg = client.aggregate(
@@ -321,11 +327,12 @@ object ZeppHealthConnectImporter {
         )
       }
     }
-    val n = store.insertAll(merged.values.toList())
+    store.insertIfAbsent(merged.values.toList())
+    val n = store.applySleep(sleepSamples)
 
     buildString {
       append("Imported from phone (Health Connect / Zepp): ")
-      append("$n minutes")
+      append("$n sleep minutes")
       if (sleepSessions > 0) append(", $sleepSessions sleep session(s)")
       if (hrPoints > 0) append(", $hrPoints HR samples")
       if (workouts > 0) append(", $workouts workout(s)")
