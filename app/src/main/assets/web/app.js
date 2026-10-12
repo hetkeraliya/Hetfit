@@ -2291,7 +2291,8 @@
           .forEach((c, i) => c.style.setProperty('--i', Math.min(i, 9)));
       }
     });
-    if ($('screen-title')) $('screen-title').textContent = GROUP_TITLES[group];
+    const titleEl = $('screen-title-text') || $('screen-title');
+    if (titleEl) titleEl.textContent = GROUP_TITLES[group];
     document.getElementById('dashboard-view')?.classList.toggle('on-home', group === 'vitals' && currentPage === 'chart');
     document.getElementById('flame-badge')?.classList.toggle('hidden', group !== 'vitals');
     const bleBtn = document.getElementById('ble-dash-btn');
