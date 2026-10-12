@@ -93,6 +93,8 @@ import com.example.ui.BandOnboardingScreen
 import com.example.ui.MiFitDeviceMenuDialog
 import com.example.ui.theme.MyApplicationTheme
 import com.example.widget.KestrelWidgetManager
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.launch
 
 // Local bundled web asset guarantees 0ms offline load with NO web page timeout
 private const val KESTREL_LOCAL_URL = "file:///android_asset/web/index.html"
@@ -109,6 +111,9 @@ class MainActivity : ComponentActivity() {
 
   private lateinit var miBandManager: MiBandManager
   private var fileChooserCallback: ValueCallback<Array<Uri>>? = null
+  private var pendingZeppImport = false
+  /** Held so native imports (Zepp/HC) can refresh the dashboard. */
+  @Volatile var liveWebView: WebView? = null
 
   private val filePickerLauncher = registerForActivityResult(
     ActivityResultContracts.StartActivityForResult()
@@ -126,6 +131,80 @@ class MainActivity : ComponentActivity() {
     }
     fileChooserCallback?.onReceiveValue(uris)
     fileChooserCallback = null
+  }
+
+  private val healthConnectPermissionLauncher = registerForActivityResult(
+    androidx.health.connect.client.PermissionController.createRequestPermissionResultContract()
+  ) { granted ->
+    if (pendingZeppImport) {
+      pendingZeppImport = false
+      runZeppImport()
+    } else {
+      Toast.makeText(this, "Health Connect permissions updated", Toast.LENGTH_SHORT).show()
+    }
+  }
+
+  /** Called from the JS bridge — request permissions if needed, then import. */
+  fun importZeppFromHealthConnect() {
+    try {
+      if (androidx.health.connect.client.HealthConnectClient.getSdkStatus(this)
+        != androidx.health.connect.client.HealthConnectClient.SDK_AVAILABLE
+      ) {
+        Toast.makeText(this, "Install or update Health Connect first", Toast.LENGTH_LONG).show()
+        openHealthConnectSettingsSafe()
+        return
+      }
+      val client = androidx.health.connect.client.HealthConnectClient.getOrCreate(this)
+      MainScope().launch {
+        val granted = try {
+          client.permissionController.getGrantedPermissions()
+        } catch (e: Exception) {
+          Toast.makeText(this@MainActivity, "HC error: ${e.message}", Toast.LENGTH_LONG).show()
+          return@launch
+        }
+        val need = com.example.ble.ZeppHealthConnectImporter.permissionStrings().toSet()
+        if (!granted.containsAll(need)) {
+          pendingZeppImport = true
+          healthConnectPermissionLauncher.launch(need)
+        } else {
+          runZeppImport()
+        }
+      }
+    } catch (e: Exception) {
+      Toast.makeText(this, "Health Connect: ${e.message}", Toast.LENGTH_LONG).show()
+    }
+  }
+
+  private fun openHealthConnectSettingsSafe() {
+    try {
+      val i = com.example.ble.ZeppHealthConnectImporter.permissionContractIntent(this)
+        ?: Intent(Settings.ACTION_SETTINGS)
+      startActivity(i)
+    } catch (_: Exception) {}
+  }
+
+  private fun runZeppImport() {
+    MainScope().launch {
+      val msg = try {
+        com.example.ble.ZeppHealthConnectImporter.importLastDays(applicationContext, 14)
+      } catch (e: Exception) {
+        "Import failed: ${e.message}"
+      }
+      Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
+      try {
+        val store = BandSampleStore.get(applicationContext)
+        MiBandDataSyncEngine.pushToWebView(
+          liveWebView,
+          store,
+          miBandManager.uiState.value,
+          fullHistory = true
+        )
+        liveWebView?.evaluateJavascript(
+          "window.kestrelToast && window.kestrelToast(${JSONObject.quote(msg)});",
+          null
+        )
+      } catch (_: Exception) {}
+    }
   }
 
   override fun onCreate(savedInstanceState: Bundle?) {
@@ -400,6 +479,11 @@ fun KestrelMainScreen(
         factory = { ctx ->
           WebView(ctx).apply {
             webViewInstance = this
+            var c: Context? = ctx
+            while (c is android.content.ContextWrapper) {
+              if (c is MainActivity) { c.liveWebView = this; break }
+              c = c.baseContext
+            }
             setBackgroundColor(android.graphics.Color.parseColor("#FFEED7"))
 
             settings.apply {
@@ -891,5 +975,34 @@ class KestrelAndroidBridge(
         .append(r.hr).append(',').append(r.sleep).append(',').append(r.deep).append(',').append(r.rem).append('\n') }
     }
     return ShareHelper.saveTextFile(context, "band_minutes.csv", "text/csv", sb.toString())
+  }
+
+  // ---------------- Zepp data on this phone (via Health Connect) ----------------
+  @JavascriptInterface fun getHealthConnectStatus(): String =
+    com.example.ble.ZeppHealthConnectImporter.status(context)
+
+  @JavascriptInterface fun openHealthConnectSettings() {
+    try {
+      val i = com.example.ble.ZeppHealthConnectImporter.permissionContractIntent(context)
+        ?: Intent(Settings.ACTION_SETTINGS)
+      i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+      context.startActivity(i)
+    } catch (_: Exception) {
+      Toast.makeText(context, "Open Health Connect from system settings", Toast.LENGTH_SHORT).show()
+    }
+  }
+
+  /** Import steps / HR / sleep / workouts Zepp wrote to Health Connect. */
+  @JavascriptInterface fun importFromZepp(): String {
+    (context as? MainActivity)?.importZeppFromHealthConnect()
+      ?: run {
+        kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+          val msg = try {
+            com.example.ble.ZeppHealthConnectImporter.importLastDays(context.applicationContext, 14)
+          } catch (e: Exception) { "Import failed: ${e.message}" }
+          Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+        }
+      }
+    return "Importing from Zepp / Health Connect…"
   }
 }
