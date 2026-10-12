@@ -1514,7 +1514,7 @@
     MUSCLE_REGIONS.forEach((m) => {
       svgRoot.querySelectorAll('[data-muscle="'+m+'"]').forEach((el) => {
         const pct = counts[m] / max;
-        el.style.fill = pct === 0 ? '' : ('rgba(170,152,169,'+(0.28+pct*0.62).toFixed(2)+')');
+        el.style.fill = pct === 0 ? '' : ('rgba(69,75,92,'+(0.28+pct*0.62).toFixed(2)+')');
       });
     });
     const secList = $('muscle-secondary');
