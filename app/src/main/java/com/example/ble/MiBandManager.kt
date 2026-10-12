@@ -12,10 +12,7 @@ import android.bluetooth.BluetoothProfile
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
-import android.content.BroadcastReceiver
 import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.location.LocationManager
 import android.os.Build
@@ -252,20 +249,27 @@ class MiBandManager(private val context: Context) {
     return prefs.getString("mi_auth_key", "") ?: ""
   }
 
+  /**
+   * Normalize auth key: strip 0x/0X, spaces, colons, dashes; lowercase.
+   * Accepts "0xA1B2…", "a1:b2:…", "A1B2-…".
+   */
+  fun normalizeAuthKey(key: String): String {
+    var s = key.trim()
+    s = s.replace("0x", "", ignoreCase = true)
+    s = s.replace(" ", "").replace(":", "").replace("-", "")
+      .replace("\n", "").replace("\t", "")
+    return s.lowercase()
+  }
+
   fun saveAuthKey(key: String) {
-    val clean = key.trim()
-      .replace("0x", "", ignoreCase = true)
-      .replace(" ", "")
-      .replace(":", "")
-      .replace("-", "")
-      .lowercase()
+    val clean = normalizeAuthKey(key)
     prefs.edit().putString("mi_auth_key", clean).apply()
     _uiState.value = _uiState.value.copy(authKey = clean)
   }
 
   /** True when a valid 32-hex auth key is stored (required for history sync on Mi Band 4/5). */
   fun hasValidAuthKey(): Boolean {
-    val k = getStoredAuthKey().lowercase()
+    val k = normalizeAuthKey(getStoredAuthKey())
     return k.length == 32 && k.all { it in "0123456789abcdef" }
   }
 
@@ -463,7 +467,7 @@ class MiBandManager(private val context: Context) {
     stopScan()
     clearGattQueue()
 
-    val cleanKey = authKeyHex.trim().replace("0x", "", ignoreCase = true).replace(" ", "").replace(":", "").replace("-", "").lowercase()
+    val cleanKey = normalizeAuthKey(authKeyHex)
     if (cleanKey.isNotEmpty()) {
       saveAuthKey(cleanKey)
     }
@@ -488,49 +492,16 @@ class MiBandManager(private val context: Context) {
       Log.w(TAG, "Gatt close error: ${e.message}")
     }
 
-    authTrace = ""
-    limitedMode = false
-    // Like Gadgetbridge: finish Android pairing FIRST, then open the GATT link. Doing both at once made the band drop
-    // or ignore the authentication step.
+    // Trigger Android system pairing if not already bonded
     if (device.bondState != BluetoothDevice.BOND_BONDED) {
-      trace("pairing")
-      var started = false
-      lateinit var receiver: BroadcastReceiver
-      val go = {
-        if (!started) {
-          started = true
-          try { context.unregisterReceiver(receiver) } catch (_: Exception) {}
-          trace("bond=" + device.bondState)
-          handler.post { startGatt(device) }
-        }
-      }
-      receiver = object : BroadcastReceiver() {
-        @Suppress("DEPRECATION")
-        override fun onReceive(c: Context?, i: Intent?) {
-          val d = i?.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
-          if (d?.address != device.address) return
-          val st = i?.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, -1) ?: -1
-          val prev = i?.getIntExtra(BluetoothDevice.EXTRA_PREVIOUS_BOND_STATE, -1) ?: -1
-          if (st == BluetoothDevice.BOND_BONDED || (st == BluetoothDevice.BOND_NONE && prev == BluetoothDevice.BOND_BONDING)) go()
-        }
-      }
       try {
-        context.registerReceiver(receiver, IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED))
-        val ok = device.createBond()
-        if (!ok) go() else handler.postDelayed({ go() }, 30_000)
+        device.createBond()
       } catch (e: Exception) {
         Log.w(TAG, "createBond exception: ${e.message}")
-        go()
       }
-    } else {
-      startGatt(device)
     }
-  }
 
-  @SuppressLint("MissingPermission")
-  private fun startGatt(device: BluetoothDevice) {
-    if (userDisconnected) return
-    try { bluetoothGatt?.close() } catch (_: Exception) {}
+    // Connect with TRANSPORT_LE
     bluetoothGatt = device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
   }
 
@@ -545,7 +516,6 @@ class MiBandManager(private val context: Context) {
 
   @SuppressLint("MissingPermission")
   private fun teardown() {
-    authFlowId++
     fetcher.cancel()
     clearGattQueue()
     try {
@@ -583,14 +553,6 @@ class MiBandManager(private val context: Context) {
     if (isGattBusy) return
     val next = gattQueue.poll() ?: return
     isGattBusy = true
-    // A GATT call that returns false never fires its callback; without this the whole queue (auth included) froze.
-    val token = ++gattOpToken
-    handler.postDelayed({
-      if (isGattBusy && token == gattOpToken) {
-        Log.w(TAG, "GATT operation timed out — releasing the queue")
-        completeGattOperation()
-      }
-    }, 4000)
     handler.post {
       try {
         next.invoke()
@@ -638,11 +600,6 @@ class MiBandManager(private val context: Context) {
       }
 
       Log.d(TAG, "Services discovered. Checking authentication & sensor services...")
-      trace("services")
-      // Zepp OS bands (Mi Band 7/8, Amazfit GTR 4 ...) expose the chunked 2021 characteristics and use a different, encrypted login.
-      zeppOsBand = false   // Mi Band 5 also exposes the chunked 0x16 characteristic, so its presence says nothing about the login type
-      trace("chunked=" + (gatt.services.any { sv -> sv.getCharacteristic(UUID.fromString("00000016-0000-3512-2118-0009af100700")) != null }))
-      authUseKeyFirst = false
       val authService = gatt.getService(AUTH_SERVICE_UUID)
       val authChar = authService?.getCharacteristic(AUTH_CHAR_UUID)
 
@@ -650,22 +607,18 @@ class MiBandManager(private val context: Context) {
         .replace(" ", "").replace(":", "").replace("-", "").lowercase()
       if (authChar != null && key.length == 32 && key.all { it in "0123456789abcdef" }) {
         Log.d(TAG, "Starting Huami AES-128 auth handshake…")
-        authByte = 0x08
+        authByte = 0x00
         authTriedAltByte = false
-        authUseKeyFirst = false
-        authFlowId++
-        armAuthWatchdog(gatt)
         // Persist cleaned key
         if (key != _uiState.value.authKey) saveAuthKey(key)
         gatt.setCharacteristicNotification(authChar, true)
         val descriptor = authChar.getDescriptor(CLIENT_CONFIG_DESCRIPTOR_UUID)
         if (descriptor != null) {
           descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-          trace("props=%x".format(authChar.properties))
-          enqueueGatt { val okd = gatt.writeDescriptor(descriptor); if (!okd) { trace("cccd-call-failed"); completeGattOperation(); sendRequestRandomKey(gatt, authChar) } }
+          enqueueGatt { gatt.writeDescriptor(descriptor) }
           // sendAuthKey runs from onDescriptorWrite → sendRequestRandomKey
         } else {
-          sendRequestRandomKey(gatt, authChar)
+          sendAuthKey(gatt, authChar)
         }
       } else {
         // No valid key: live sensors may work after OS pairing, but history sync will not.
@@ -688,7 +641,6 @@ class MiBandManager(private val context: Context) {
       status: Int
     ) {
       Log.d(TAG, "onDescriptorWrite uuid: ${descriptor?.uuid} status: $status")
-      if (descriptor?.characteristic?.uuid == AUTH_CHAR_UUID) trace("cccd=$status")
       completeGattOperation()
 
       if (descriptor?.characteristic?.uuid == AUTH_CHAR_UUID && gatt != null) {
@@ -707,7 +659,6 @@ class MiBandManager(private val context: Context) {
       status: Int
     ) {
       Log.d(TAG, "onCharacteristicWrite uuid: ${characteristic?.uuid} status: $status")
-      if (characteristic?.uuid == AUTH_CHAR_UUID) trace("write=$status")
       completeGattOperation()
     }
 
@@ -794,25 +745,8 @@ class MiBandManager(private val context: Context) {
    *
    * AUTH_BYTE is 0x00 on most firmwares; some Mi Band 5 builds use 0x08.
    */
-  private var authByte: Byte = 0x08   // Gadgetbridge HuamiService.AUTH_BYTE = 0x08 (the band answers 03/08 = refused when 0x00 is used)
+  private var authByte: Byte = 0x00
   private var authTriedAltByte = false
-  /** Gadgetbridge only sends the key while pairing; on a normal reconnect it goes straight to "request random number". */
-  private var authUseKeyFirst = false
-  @Volatile private var zeppOsBand = false
-  /** Use whichever write type the band's auth characteristic actually supports (forcing "with response" on a no-response-only char fails). */
-  private fun authWriteType(ch: BluetoothGattCharacteristic): Int {
-    val p = ch.properties
-    return if ((p and BluetoothGattCharacteristic.PROPERTY_WRITE) != 0) BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
-    else BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
-  }
-  @Volatile private var authTrace = ""
-  @Volatile private var limitedMode = false
-  private fun trace(msg: String) {
-    authTrace = (if (authTrace.isEmpty()) msg else "$authTrace > $msg").takeLast(170)
-    Log.d(TAG, "auth trace: $authTrace")
-  }
-  private var authFlowId = 0
-  private var gattOpToken = 0
 
   @SuppressLint("MissingPermission")
   private fun sendAuthKey(gatt: BluetoothGatt, authChar: BluetoothGattCharacteristic) {
@@ -832,32 +766,26 @@ class MiBandManager(private val context: Context) {
     packet[1] = authByte
     System.arraycopy(keyBytes, 0, packet, 2, 16)
     Log.d(TAG, "Auth step 1: send key (byte=0x%02x)".format(authByte))
-    trace("sent-key")
     enqueueGatt {
       authChar.value = packet
-      authChar.writeType = authWriteType(authChar)
-      val okw = gatt.writeCharacteristic(authChar)
-      if (!okw) { trace("write-call-failed"); completeGattOperation() }
+      authChar.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+      gatt.writeCharacteristic(authChar)
     }
   }
 
   @SuppressLint("MissingPermission")
   private fun sendRequestRandomKey(gatt: BluetoothGatt, authChar: BluetoothGattCharacteristic) {
-    // Called after the auth CCCD is enabled. Gadgetbridge's normal reconnect path asks for the random number straight
-    // away (0x02 0x00). Re-sending the key first made already-paired bands go silent, which looked like
-    // "stuck at authentication". The key-first path stays as an automatic fallback.
-    if (authUseKeyFirst) sendAuthKey(gatt, authChar) else requestRandomNumber(gatt, authChar)
+    // Called after CCCD enable — start the full handshake with the key.
+    sendAuthKey(gatt, authChar)
   }
 
   @SuppressLint("MissingPermission")
   private fun requestRandomNumber(gatt: BluetoothGatt, authChar: BluetoothGattCharacteristic) {
     Log.d(TAG, "Auth step 2: request random (byte=0x%02x)".format(authByte))
-    trace("sent-random")
     enqueueGatt {
       authChar.value = byteArrayOf(0x02, authByte)
-      authChar.writeType = authWriteType(authChar)
-      val okw = gatt.writeCharacteristic(authChar)
-      if (!okw) { trace("write-call-failed"); completeGattOperation() }
+      authChar.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+      gatt.writeCharacteristic(authChar)
     }
   }
 
@@ -872,7 +800,6 @@ class MiBandManager(private val context: Context) {
     val opCode = value[1].toInt() and 0xFF
     val status = value[2].toInt() and 0xFF
     Log.d(TAG, "Auth notify: op=0x%02x status=0x%02x len=%d".format(opCode, status, value.size))
-    trace("reply %02x/%02x".format(opCode, status))
 
     when (opCode) {
       0x01 -> {
@@ -885,7 +812,7 @@ class MiBandManager(private val context: Context) {
             sendAuthKey(gatt, authChar)
             return
           }
-          failAuth(gatt, "The band is answering correctly, but it does not accept this key. It is already paired with a different key (usually Zepp's current one). Get the key again from your Zepp / Zepp Life account (unpairing the band in Zepp invalidates old keys), or factory-reset the band and remove it from Zepp, then pair here.")
+          failAuth(gatt, "Auth key rejected by band (token invalid). Re-copy the 32-char key from Zepp Life or Gadgetbridge.")
           return
         }
         requestRandomNumber(gatt, authChar)
@@ -893,13 +820,6 @@ class MiBandManager(private val context: Context) {
       0x02 -> {
         // Challenge: [0x10, 0x02, 0x01, ...16 bytes]
         if (status != 0x01 || value.size < 19) {
-          if (!authUseKeyFirst) {
-            authUseKeyFirst = true
-            Log.w(TAG, "Random challenge refused — falling back to key-first pairing handshake")
-            sendAuthKey(gatt, authChar)
-            armAuthWatchdog(gatt)
-            return
-          }
           failAuth(gatt, "Band rejected random challenge — check the auth key.")
           return
         }
@@ -922,9 +842,8 @@ class MiBandManager(private val context: Context) {
           Log.d(TAG, "Auth step 3: send encrypted challenge")
           enqueueGatt {
             authChar.value = response
-            authChar.writeType = authWriteType(authChar)
-            val okw = gatt.writeCharacteristic(authChar)
-            if (!okw) { trace("write-call-failed"); completeGattOperation() }
+            authChar.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+            gatt.writeCharacteristic(authChar)
           }
         } catch (e: Exception) {
           failAuth(gatt, "AES error: ${e.message}")
@@ -933,19 +852,11 @@ class MiBandManager(private val context: Context) {
       0x03 -> {
         if (status == 0x01) {
           Log.i(TAG, "Huami authentication successful")
-          authFlowId++            // cancels the auth watchdog
           authTriedAltByte = false
           _uiState.value = _uiState.value.copy(status = ConnectionStatus.CONNECTED, errorMessage = null)
           subscribeToSensors(gatt)
         } else {
           // Wrong key → status often 0x10 or 0x00
-          if (!authUseKeyFirst) {
-            authUseKeyFirst = true
-            Log.w(TAG, "Encrypted response refused — falling back to key-first pairing handshake")
-            sendAuthKey(gatt, authChar)
-            armAuthWatchdog(gatt)
-            return
-          }
           if (!authTriedAltByte) {
             authTriedAltByte = true
             authByte = if (authByte.toInt() == 0) 0x08 else 0x00
@@ -953,39 +864,10 @@ class MiBandManager(private val context: Context) {
             sendAuthKey(gatt, authChar)
             return
           }
-          failAuth(gatt, "The band is answering correctly, but it does not accept this key. It is already paired with a different key (usually Zepp's current one). Get the key again from your Zepp / Zepp Life account (unpairing the band in Zepp invalidates old keys), or factory-reset the band and remove it from Zepp, then pair here.")
+          failAuth(gatt, "Token invalid — auth key does not match this band. Get a fresh key from Zepp / Gadgetbridge and try again.")
         }
       }
     }
-  }
-
-  /** If the band never answers an auth step, retry once the other way, then give a clear error instead of hanging. */
-  @SuppressLint("MissingPermission")
-  private fun armAuthWatchdog(gatt: BluetoothGatt) {
-    val id = authFlowId
-    handler.postDelayed({
-      if (id != authFlowId || _uiState.value.status != ConnectionStatus.AUTHENTICATING) return@postDelayed
-      val ch = gatt.getService(AUTH_SERVICE_UUID)?.getCharacteristic(AUTH_CHAR_UUID)
-      if (ch != null && !authUseKeyFirst) {
-        Log.w(TAG, "No auth reply after 8 s — retrying with the key-first handshake")
-        authUseKeyFirst = true
-        isGattBusy = false
-        sendAuthKey(gatt, ch)
-        armAuthWatchdog(gatt)
-      } else {
-        // Keep the link instead of dropping it: live heart-rate / steps / battery still work on many firmwares.
-        trace("no-reply")
-        limitedMode = true
-        _uiState.value = _uiState.value.copy(
-          status = ConnectionStatus.CONNECTED,
-          errorMessage = if (zeppOsBand)
-            "This band uses the newer Zepp OS login (Mi Band 7/8 and similar). This app only speaks the older Mi Band 4/5 login, so it cannot authenticate or sync history with it."
-          else
-            "Band did not answer authentication, so history sync is off (live mode only). Force-stop Zepp / Gadgetbridge, forget the band in Android Bluetooth settings, then Connect / pair again."
-        )
-        subscribeToSensors(gatt)
-      }
-    }, 8000)
   }
 
   @SuppressLint("MissingPermission")
@@ -1017,7 +899,7 @@ class MiBandManager(private val context: Context) {
     handler.postDelayed({ applyBandSettings() }, 9000)
     // Pull the band's stored history as soon as the link is usable (like Gadgetbridge does on connect).
     handler.postDelayed({
-      if (_uiState.value.status == ConnectionStatus.CONNECTED && !limitedMode && !fetcher.running) syncNow()
+      if (_uiState.value.status == ConnectionStatus.CONNECTED && !fetcher.running) syncNow()
     }, 3000)
     // 1. Subscribe to Steps / Activity
     val activityService = gatt.getService(ACTIVITY_SERVICE_UUID)
@@ -1197,7 +1079,7 @@ class MiBandManager(private val context: Context) {
     val o = org.json.JSONObject()
     o.put("status", st.status.name); o.put("battery", st.batteryPercent); o.put("hr", st.liveHeartRate)
     o.put("lastSync", st.lastSyncMillis); o.put("syncing", st.syncing); o.put("percent", st.syncPercent)
-    o.put("message", st.syncMessage ?: ""); o.put("error", st.errorMessage ?: ""); o.put("ack", lastAck ?: ""); o.put("trace", authTrace); o.put("limited", limitedMode)
+    o.put("message", st.syncMessage ?: ""); o.put("error", st.errorMessage ?: ""); o.put("ack", lastAck ?: "")
     return o.toString()
   }
 
