@@ -975,9 +975,9 @@ html[data-theme="dark"] .check-row { background: rgba(255,255,255,0.05); }
   display: block;
   margin: 8px auto 4px;
 }
-.muscle-svg .muscle-fixed { fill: rgba(120,120,140,0.18); }
+.muscle-svg .muscle-fixed { fill: rgba(69,75,92,0.14); }
 .muscle-svg path {
-  fill: rgba(120,120,140,0.18);
+  fill: rgba(69,75,92,0.14);
   stroke: var(--card-soft);
   stroke-width: 2;
   transition: fill 0.3s ease;
