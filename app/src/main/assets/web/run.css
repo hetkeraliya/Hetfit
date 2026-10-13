@@ -310,3 +310,104 @@ button.primary, .rn-btn.primary, .mo-btns button.primary{
 .rn-pr > div:last-child{font-size:16px;font-weight:800;color:#454B5C;white-space:nowrap}
 .rn-empty{padding:16px;text-align:center;color:#8A93A6;font-size:13px}
 .rn-h{font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#8A93A6;margin:14px 4px 8px}
+
+/* ===== Share activity (Strava-style, Moonlight theme) ===== */
+.rn-share{
+  background:#2A2E38 !important;
+  color:#E8EBF2 !important;
+}
+.rn-share .rn-bar{
+  padding:10px 4px 12px;
+}
+.rn-share-title{
+  font-size:16px;font-weight:750;color:#E8EBF2;
+}
+.rn-chip-btn{
+  appearance:none;border:1px solid rgba(255,255,255,.14);
+  background:rgba(255,255,255,.1);color:#E8EBF2;
+  border-radius:999px;padding:10px 16px;font-weight:700;font-size:14px;
+}
+.rn-share-prev{
+  background:#1A1D26;
+  border:1px solid rgba(255,255,255,.06);
+  border-radius:20px;
+  overflow:hidden;
+  margin:4px 0 14px;
+  display:flex;align-items:center;justify-content:center;
+  min-height:220px;max-height:48vh;
+}
+.rn-share-prev canvas{
+  width:100% !important;
+  height:auto !important;
+  max-height:48vh;
+  display:block;
+  object-fit:contain;
+}
+.rn-share-section{margin:0 0 12px}
+.rn-share-label{
+  display:block;font-size:11px;font-weight:800;letter-spacing:.1em;
+  text-transform:uppercase;color:rgba(232,235,242,.55);margin:0 2px 8px;
+}
+.rn-pills{display:flex;flex-wrap:wrap;gap:8px}
+.rn-pill{
+  appearance:none;border:1px solid rgba(255,255,255,.12);
+  background:rgba(255,255,255,.08);color:#E8EBF2;
+  border-radius:999px;padding:10px 14px;font-size:13px;font-weight:650;
+  cursor:pointer;
+}
+.rn-pill.active{
+  background:#D9DCE5;color:#2A2E38;border-color:transparent;
+}
+.rn-share-actions{
+  display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:16px 0 8px;
+}
+.rn-share-cta{
+  appearance:none;border:1px solid rgba(255,255,255,.12);
+  background:rgba(255,255,255,.1);color:#E8EBF2;
+  border-radius:16px;padding:14px 12px;font-size:14px;font-weight:700;
+  cursor:pointer;min-height:48px;
+}
+.rn-share-cta.primary{
+  background:#D9DCE5;color:#2A2E38;border-color:transparent;
+  grid-column:1 / -1;
+}
+.rn-share-cta.ghost{
+  grid-column:1 / -1;
+  background:transparent;border-color:rgba(255,255,255,.18);
+}
+.rn-share-tip{opacity:.55;font-size:12px;line-height:1.45;margin:4px 2px 12px}
+
+/* Band → phone offer sheet */
+.rn-band-offer{
+  position:fixed;inset:0;z-index:280;
+  background:rgba(30,34,43,.55);
+  display:none;align-items:flex-end;justify-content:center;
+  padding:18px;box-sizing:border-box;
+}
+.rn-band-offer.open{display:flex !important}
+.rn-band-offer-card{
+  width:min(420px,100%);
+  background:#fff;color:#454B5C;
+  border-radius:24px;padding:22px 20px 18px;
+  box-shadow:0 -10px 40px rgba(0,0,0,.2);
+}
+.rn-band-offer-badge{
+  display:inline-block;font-size:11px;font-weight:800;letter-spacing:.1em;
+  text-transform:uppercase;color:#454B5C;
+  background:#E8EBF2;border-radius:999px;padding:5px 10px;margin-bottom:10px;
+}
+.rn-band-offer-card h3{
+  margin:0 0 8px;font-size:18px;font-weight:800;color:#454B5C;
+}
+.rn-band-offer-card p{
+  margin:0 0 16px;font-size:14px;line-height:1.45;color:#8A93A6;
+}
+.rn-band-offer-actions{
+  display:grid;grid-template-columns:1fr 1fr;gap:10px;
+}
+.rn-band-offer-actions .rn-share-cta{
+  color:#454B5C;background:#F2F4F7;border-color:rgba(69,75,92,.1);
+}
+.rn-band-offer-actions .rn-share-cta.primary{
+  background:#454B5C;color:#fff;border-color:transparent;
+}
