@@ -297,3 +297,29 @@ button.primary, .rn-btn.primary, .mo-btns button.primary{
   margin-top:10px;
 }
 .rn-detail .rn-card h4{color:#D9DCE5!important}
+
+/* Strava-like live map panel */
+.rn-live .rn-route,
+.rn-overlay.rn-live .rn-route{
+  flex:1 1 auto;
+  min-height:220px;
+  max-height:48vh;
+  border-radius:20px;
+  background:#1A1D26;
+  border:1px solid rgba(255,255,255,0.06);
+  margin:4px 0 12px;
+  overflow:hidden;
+}
+.rn-live .rn-route svg,
+.rn-overlay .rn-route svg{
+  width:100%;
+  height:100%;
+  display:block;
+}
+.rn-detail .rn-route{
+  min-height:200px;
+  border-radius:18px;
+  background:#1A1D26;
+  margin:10px 0 14px;
+  overflow:hidden;
+}
