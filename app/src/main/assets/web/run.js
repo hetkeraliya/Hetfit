@@ -159,6 +159,27 @@
     const ox = (W - w * s) / 2 - minX * s, oy = (H - hh * s) / 2 - minY * s;
     return xy.map((p) => [p[0] * s + ox, p[1] * s + oy]);
   }
+  // Strava-style speed heat colours (slow → fast) in Moonlight-friendly tones
+  function heatColor(t) {
+    // t: 0 = stopped/slow, 1 = fast
+    t = Math.max(0, Math.min(1, t));
+    // slate-blue → silver → warm accent for speed (still minimal palette)
+    if (t < 0.25) {
+      const u = t / 0.25;
+      return 'rgb(' + Math.round(69 + u * 40) + ',' + Math.round(75 + u * 50) + ',' + Math.round(92 + u * 60) + ')';
+    }
+    if (t < 0.55) {
+      const u = (t - 0.25) / 0.3;
+      return 'rgb(' + Math.round(109 + u * 58) + ',' + Math.round(125 + u * 51) + ',' + Math.round(152 + u * 44) + ')';
+    }
+    if (t < 0.8) {
+      const u = (t - 0.55) / 0.25;
+      return 'rgb(' + Math.round(167 + u * 40) + ',' + Math.round(176 - u * 40) + ',' + Math.round(196 - u * 80) + ')';
+    }
+    const u = (t - 0.8) / 0.2;
+    return 'rgb(' + Math.round(207 + u * 30) + ',' + Math.round(136 - u * 40) + ',' + Math.round(116 - u * 40) + ')';
+  }
+
   function routeSvg(track, opts) {
     opts = opts || {};
     const W = opts.W || 400, H = opts.H || 300, pad = opts.pad == null ? 28 : opts.pad;
@@ -166,19 +187,29 @@
     const pr = projectTrack(track, W, H, pad);
     let paths = '';
     const stroke = opts.stroke || '#454B5C', sw = opts.sw || 5;
-    if (opts.pace) {
-      const seg = Math.max(1, Math.floor(pr.length / 90));
+    const useHeat = opts.pace || opts.heat || opts.live;
+    if (useHeat) {
+      // denser segments for smoother heat trail
+      const seg = Math.max(1, Math.floor(pr.length / 140));
       const speeds = [];
       for (let i = 0; i + seg < pr.length; i += seg) {
-        const d = hav(track[i], track[i + seg]), dt = Math.max(1, track[i + seg][0] - track[i][0]);
-        speeds.push(d / dt);
+        const d = hav(track[i], track[i + seg]);
+        const t0 = track[i][0] || 0, t1 = track[i + seg][0] || 0;
+        const dt = Math.max(0.5, (t1 && t0) ? (t1 - t0) : seg);
+        speeds.push(d / dt); // m/s
       }
       const sorted = speeds.slice().sort((a, b) => a - b);
-      const lo = sorted[Math.floor(sorted.length * 0.1)] || 0, hi = sorted[Math.floor(sorted.length * 0.9)] || 1;
+      const lo = sorted[Math.floor(sorted.length * 0.08)] || 0;
+      const hi = sorted[Math.floor(sorted.length * 0.92)] || 1;
+      // underglow path for heat feel
+      let full = 'M' + pr[0][0].toFixed(1) + ' ' + pr[0][1].toFixed(1);
+      for (let i = 1; i < pr.length; i++) full += ' L' + pr[i][0].toFixed(1) + ' ' + pr[i][1].toFixed(1);
+      paths += '<path d="' + full + '" stroke="rgba(167,176,196,0.22)" stroke-width="' + (sw + 8) + '" fill="none" stroke-linecap="round" stroke-linejoin="round"/>';
       let idx = 0;
       for (let i = 0; i + seg < pr.length; i += seg, idx++) {
-        const t = Math.min(1, Math.max(0, (speeds[idx] - lo) / Math.max(0.01, hi - lo)));
-        const col = 'hsl(' + Math.round(340 - t * 60) + ',' + Math.round(55 + t * 20) + '%,' + Math.round(62 + t * 10) + '%)';
+        const t = Math.min(1, Math.max(0, (speeds[idx] - lo) / Math.max(0.15, hi - lo)));
+        // stopped / very slow → cooler slate
+        const col = speeds[idx] < 0.4 ? '#6B7385' : heatColor(t);
         let d = 'M' + pr[i][0].toFixed(1) + ' ' + pr[i][1].toFixed(1);
         for (let j = i + 1; j <= i + seg && j < pr.length; j++) d += ' L' + pr[j][0].toFixed(1) + ' ' + pr[j][1].toFixed(1);
         paths += '<path d="' + d + '" stroke="' + col + '" stroke-width="' + sw + '" fill="none" stroke-linecap="round" stroke-linejoin="round"/>';
@@ -189,8 +220,16 @@
       paths = '<path d="' + d + '" stroke="' + stroke + '" stroke-width="' + sw + '" fill="none" stroke-linecap="round" stroke-linejoin="round"/>';
     }
     const a = pr[0], b = pr[pr.length - 1];
-    const dots = '<circle cx="' + a[0] + '" cy="' + a[1] + '" r="' + (sw + 2) + '" fill="#4E9F83" stroke="#fff" stroke-width="2"/>' +
-      '<circle cx="' + b[0] + '" cy="' + b[1] + '" r="' + (sw + 2) + '" fill="#454B5C" stroke="#fff" stroke-width="2"/>';
+    // Start = green, current/end = pulsing marker when live
+    let dots = '<circle cx="' + a[0].toFixed(1) + '" cy="' + a[1].toFixed(1) + '" r="' + (sw + 1) + '" fill="#5BBF7A" stroke="#fff" stroke-width="2"/>';
+    if (opts.live) {
+      dots +=
+        '<circle cx="' + b[0].toFixed(1) + '" cy="' + b[1].toFixed(1) + '" r="' + (sw + 10) + '" fill="rgba(69,75,92,0.18)"/>' +
+        '<circle cx="' + b[0].toFixed(1) + '" cy="' + b[1].toFixed(1) + '" r="' + (sw + 5) + '" fill="rgba(69,75,92,0.28)"/>' +
+        '<circle cx="' + b[0].toFixed(1) + '" cy="' + b[1].toFixed(1) + '" r="' + (sw + 2) + '" fill="#454B5C" stroke="#fff" stroke-width="2.5"/>';
+    } else {
+      dots += '<circle cx="' + b[0].toFixed(1) + '" cy="' + b[1].toFixed(1) + '" r="' + (sw + 2) + '" fill="#454B5C" stroke="#fff" stroke-width="2"/>';
+    }
     return '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">' + paths + dots + '</svg>';
   }
   function sparkSvg(vals, color) {
@@ -481,10 +520,17 @@
   let finishing = false;
 
   function startActivity() {
-    if (!A || !A.startRun) { toast('Recording is available in the Android app.'); return; }
     if (lastState && lastState.active) { openLive(); return; }
     const type = codeType(TYPES.find((t) => t.key === prefs.type).code);
-    const go = () => { finishing = false; livePts = []; A.startRun(type.code, !!prefs.voice); openLive(true); };
+    const go = () => {
+      finishing = false; livePts = [];
+      if (A && A.startRun) {
+        try { A.startRun(type.code, !!prefs.voice); } catch (e) { console.warn('[startRun]', e); }
+      } else {
+        toast('GPS recording needs the Android app build.');
+      }
+      openLive(true);
+    };
     if (!prefs.countdown) { go(); return; }
     let cd = $('rn-cd');
     if (!cd) { cd = h('div', 'rn-cd'); cd.id = 'rn-cd'; document.body.appendChild(cd); }
@@ -511,7 +557,15 @@
       $('rn-l-finish').onclick = confirmFinish;
     }
     if (A && A.getLiveTrack) {
-      try { livePts = JSON.parse(A.getLiveTrack()).map((p) => [0, p[0], p[1], p[2], 0]); } catch (e) {}
+      try {
+        const raw = JSON.parse(A.getLiveTrack());
+        // native may send [lat,lon,alt] or [t,lat,lon,alt,hr]
+        livePts = (raw || []).map((p) => {
+          if (p.length >= 5) return [p[0], p[1], p[2], p[3], p[4]];
+          if (p.length >= 3 && Math.abs(p[0]) <= 90 && Math.abs(p[1]) <= 180) return [0, p[0], p[1], p[2] || 0, 0];
+          return [p[0] || 0, p[1], p[2], p[3] || 0, p[4] || 0];
+        });
+      } catch (e) {}
     }
     if (A && A.getRunState && !fresh) { try { const s = JSON.parse(A.getRunState()); if (s.active) window.kestrelRunTick(s); } catch (e) {} }
   }
@@ -547,11 +601,20 @@
     $('rn-l-avg').textContent = fmtPace(s.avgPace);
     $('rn-l-hr').textContent = s.hr > 0 ? s.hr : '--';
     $('rn-l-pause').textContent = s.paused ? 'Resume' : 'Pause';
-    if (s.lat != null) {
+    if (s.lat != null && isFinite(s.lat) && isFinite(s.lon)) {
+      const nowSec = (s.elapsedSec != null) ? s.elapsedSec : (Date.now() / 1000);
       const last = livePts[livePts.length - 1];
-      if (!last || last[1] !== s.lat || last[2] !== s.lon) livePts.push([0, s.lat, s.lon, 0, 0]);
+      // keep point if moved ~3m or every few seconds so standing shows as slow heat
+      const moved = !last || (hav(last, [0, s.lat, s.lon, 0, 0]) > 3);
+      const aged = !last || ((nowSec - (last[0] || 0)) > 4);
+      if (moved || aged) livePts.push([nowSec, s.lat, s.lon, s.alt || 0, s.hr || 0]);
+      if (livePts.length > 4000) livePts = livePts.slice(-3000);
     }
-    if (++tickN % 3 === 0 && livePts.length > 1) $('rn-l-route').innerHTML = routeSvg(livePts.slice(-1500), { W: 400, H: 220, pad: 20, sw: 4 });
+    // refresh heat map often enough to feel live
+    if (++tickN % 2 === 0 && livePts.length > 1) {
+      const el = $('rn-l-route');
+      if (el) el.innerHTML = routeSvg(livePts.slice(-2000), { W: 420, H: 280, pad: 18, sw: 5, heat: true, live: true });
+    }
   };
 
   window.kestrelRunFinished = function (startSec) {
