@@ -481,10 +481,15 @@
   let finishing = false;
 
   function startActivity() {
-    if (!A || !A.startRun) { toast('Recording is available in the Android app.'); return; }
     if (lastState && lastState.active) { openLive(); return; }
     const type = codeType(TYPES.find((t) => t.key === prefs.type).code);
-    const go = () => { finishing = false; livePts = []; A.startRun(type.code, !!prefs.voice); openLive(true); };
+    const go = () => {
+      finishing = false; livePts = [];
+      if (A && A.startRun) {
+        try { A.startRun(type.code, !!prefs.voice); } catch (e) { console.warn(e); }
+      }
+      openLive(true);
+    };
     if (!prefs.countdown) { go(); return; }
     let cd = $('rn-cd');
     if (!cd) { cd = h('div', 'rn-cd'); cd.id = 'rn-cd'; document.body.appendChild(cd); }
@@ -643,21 +648,39 @@
 
   function openShare(a, an, track) {
     const o = overlay('rn-share');
-    o.innerHTML = '<div class="rn-bar"><button id="rn-s-back">‹ Back</button><b>Share</b><span style="width:60px"></span></div>' +
+    o.innerHTML =
+      '<div class="rn-bar">' +
+        '<button type="button" id="rn-s-back" class="rn-chip-btn">‹ Back</button>' +
+        '<b class="rn-share-title">Share activity</b>' +
+        '<span style="width:64px"></span>' +
+      '</div>' +
       '<div class="rn-share-prev"><canvas id="rn-s-canvas"></canvas></div>' +
-      '<div class="rn-pills" id="rn-s-tpl"></div><div class="rn-pills" id="rn-s-fmt"></div>' +
-      '<div class="rn-actions"><button class="rn-btn primary" id="rn-s-ig">Instagram Story</button><button class="rn-btn" id="rn-s-wa">WhatsApp</button>' +
-      '<button class="rn-btn" id="rn-s-more">More…</button><button class="rn-btn" id="rn-s-save">Save image</button></div>' +
-      '<p class="mo-note">Tip: “Route only” has a transparent background, so you can put it over any photo in your story.</p>';
+      '<div class="rn-share-section"><span class="rn-share-label">Style</span><div class="rn-pills" id="rn-s-tpl"></div></div>' +
+      '<div class="rn-share-section"><span class="rn-share-label">Format</span><div class="rn-pills" id="rn-s-fmt"></div></div>' +
+      '<div class="rn-share-actions">' +
+        '<button type="button" class="rn-share-cta primary" id="rn-s-ig">Instagram Story</button>' +
+        '<button type="button" class="rn-share-cta" id="rn-s-wa">WhatsApp</button>' +
+        '<button type="button" class="rn-share-cta" id="rn-s-more">More</button>' +
+        '<button type="button" class="rn-share-cta ghost" id="rn-s-save">Save image</button>' +
+      '</div>' +
+      '<p class="mo-note rn-share-tip">Route only uses a transparent background — drop it over any photo in your story.</p>';
     o.classList.add('open'); o.scrollTop = 0;
     const data = shareData(a, an, track);
     const redraw = () => {
       const c = $('rn-s-canvas'); const sz = SIZES[shareSel.fmt];
       c.width = sz[0]; c.height = sz[1];
       drawCard(c.getContext('2d'), sz[0], sz[1], shareSel.tpl, data);
-      [['rn-s-tpl', [['glass', 'Glass'], ['cream', 'Cream'], ['route', 'Route only'], ['splits', 'Splits']], 'tpl'], ['rn-s-fmt', [['story', 'Story 9:16'], ['post', 'Post 4:5'], ['square', 'Square']], 'fmt']].forEach(([id, items, key]) => {
+      [
+        ['rn-s-tpl', [['glass', 'Moonlight'], ['cream', 'Silver'], ['route', 'Route only'], ['splits', 'Splits']], 'tpl'],
+        ['rn-s-fmt', [['story', 'Story 9:16'], ['post', 'Post 4:5'], ['square', 'Square']], 'fmt']
+      ].forEach(([id, items, key]) => {
         const box = $(id); box.innerHTML = '';
-        items.forEach(([v, label]) => { const b = h('button', shareSel[key] === v ? 'active' : '', label); b.onclick = () => { shareSel[key] = v; redraw(); }; box.appendChild(b); });
+        items.forEach(([v, label]) => {
+          const b = h('button', 'rn-pill' + (shareSel[key] === v ? ' active' : ''), label);
+          b.type = 'button';
+          b.onclick = () => { shareSel[key] = v; redraw(); };
+          box.appendChild(b);
+        });
       });
     };
     redraw();
@@ -715,7 +738,7 @@
     };
     const M = 80, tall = H > 1500;
     // header
-    txt('KESTREL', M, 130, 30, 800, tpl === 'cream' ? '#7A6879' : '#c4b3c2', 'left', 7);
+    txt('KESTREL', M, 130, 30, 800, tpl === 'cream' ? '#8A93A6' : '#A7B0C4', 'left', 7);
     txt(d.title, M, 215, 74, 800, tpl === 'route' ? '#fff' : ink, 'left');
     txt(d.date, M, 268, 32, 600, tpl === 'route' ? 'rgba(255,255,255,.85)' : soft, 'left');
     // route area
@@ -737,7 +760,7 @@
       d.splits.slice(0, n).forEach((s, i) => {
         const y = rTop + i * rowH + 40, w = (W - 2 * M - 230) * (slow === fast ? 1 : 0.35 + 0.65 * (1 - (sp[i] - fast) / (slow - fast)));
         txt(String(s.partial ? s.km - 1 + '+' : s.km), M, y + 28, 30, 700, soft);
-        ctx.fillStyle = 'rgba(255,238,215,.12)'; rr(ctx, M + 70, y, W - 2 * M - 230, 36, 18); ctx.fill();
+        ctx.fillStyle = 'rgba(217,220,229,.14)'; rr(ctx, M + 70, y, W - 2 * M - 230, 36, 18); ctx.fill();
         ctx.fillStyle = '#454B5C'; rr(ctx, M + 70, y, Math.max(24, w), 36, 18); ctx.fill();
         txt(fmtPace(sp[i]), W - M, y + 28, 30, 800, ink, 'right');
       });
@@ -773,12 +796,12 @@
     }
     sheet.innerHTML =
       '<div class="rn-band-offer-card">' +
-      '<div class="rn-band-offer-icon">⌚</div>' +
-      '<h3>' + label + ' started on band</h3>' +
-      '<p>Track it on your phone too? GPS map comes from the phone; heart rate and steps come from the band.</p>' +
+      '<div class="rn-band-offer-badge">Band</div>' +
+      '<h3>' + label + ' started on your band</h3>' +
+      '<p>Record GPS on the phone for a map & heat trail. Heart rate still comes from the band.</p>' +
       '<div class="rn-band-offer-actions">' +
-      '<button type="button" class="rn-btn" id="rn-band-no">Not now</button>' +
-      '<button type="button" class="rn-btn primary" id="rn-band-yes">Track on phone</button>' +
+      '<button type="button" class="rn-share-cta" id="rn-band-no">Not now</button>' +
+      '<button type="button" class="rn-share-cta primary" id="rn-band-yes">Track on phone</button>' +
       '</div></div>';
     sheet.classList.add('open');
     const close = () => sheet.classList.remove('open');
