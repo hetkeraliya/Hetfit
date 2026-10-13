@@ -285,3 +285,9 @@ button:active { transform: scale(.97); }
 .metric-card, .today-card, .glass-card { transition: transform .2s var(--ease); }
 .metric-card:active, .today-card:active { transform: scale(.985); }
 @media (prefers-reduced-motion: reduce) { body::before { animation: none; } }
+
+/* Monochrome mood faces */
+.mo-mood button { color: #454B5C !important; filter: none !important; }
+.mo-mood button .mood-ico { color: #454B5C; }
+.mo-mood button.active { background: rgba(69,75,92,.12) !important; border-color: #454B5C !important; }
+.fx-conn #cn-body b { margin-right: 6px; }
