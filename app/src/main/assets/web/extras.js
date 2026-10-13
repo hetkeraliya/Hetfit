@@ -112,7 +112,14 @@
 
   // ---------------- Water + mood ----------------
   const WATER = 'kestrel.water.v1', MOOD = 'kestrel.mood.v1';
-  const MOODS = ['😞', '🙁', '😐', '🙂', '😄'];
+  const MOODS = [
+    // Monochrome face SVGs (single slate color)
+    '<svg class="mood-ico" viewBox="0 0 40 40" width="32" height="32" aria-hidden="true"><circle cx="20" cy="20" r="17" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="14" cy="16" r="1.8" fill="currentColor"/><circle cx="26" cy="16" r="1.8" fill="currentColor"/><path d="M13 27c2.5-3 11.5-3 14 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+    '<svg class="mood-ico" viewBox="0 0 40 40" width="32" height="32" aria-hidden="true"><circle cx="20" cy="20" r="17" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="14" cy="16" r="1.8" fill="currentColor"/><circle cx="26" cy="16" r="1.8" fill="currentColor"/><path d="M14 27c2-1.5 10-1.5 12 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+    '<svg class="mood-ico" viewBox="0 0 40 40" width="32" height="32" aria-hidden="true"><circle cx="20" cy="20" r="17" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="14" cy="16" r="1.8" fill="currentColor"/><circle cx="26" cy="16" r="1.8" fill="currentColor"/><path d="M14 26h12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+    '<svg class="mood-ico" viewBox="0 0 40 40" width="32" height="32" aria-hidden="true"><circle cx="20" cy="20" r="17" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="14" cy="16" r="1.8" fill="currentColor"/><circle cx="26" cy="16" r="1.8" fill="currentColor"/><path d="M14 25c2 2.5 10 2.5 12 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+    '<svg class="mood-ico" viewBox="0 0 40 40" width="32" height="32" aria-hidden="true"><circle cx="20" cy="20" r="17" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="14" cy="16" r="1.8" fill="currentColor"/><circle cx="26" cy="16" r="1.8" fill="currentColor"/><path d="M12 24c3 5 13 5 16 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>'
+  ];
   const TAGS = ['Calm', 'Happy', 'Focused', 'Tired', 'Stressed', 'Anxious', 'Sore', 'Motivated'];
   let moodDraft = { score: 0, tags: [], note: '' };
 
@@ -442,7 +449,7 @@
       if (s.ack) extra += '<div style="margin-top:4px;font-size:12.5px">Band replied: ' + s.ack + '</div>';
       if (s.error) extra += '<div style="margin-top:4px;font-size:12.5px;color:#c0564f">' + s.error + '</div>';
       body.innerHTML = '<b>' + label + '</b>' +
-        (meta.length ? '<span style="font-size:13px;opacity:.75">' + meta.join(' · ') + '</span>' : '') +
+        (meta.length ? ' <span style="font-size:13px;opacity:.75">' + meta.join(' · ') + '</span>' : '') +
         extra;
       c.classList.toggle('is-on', st === 'CONNECTED');
       prog.classList.toggle('on', !!s.syncing);
