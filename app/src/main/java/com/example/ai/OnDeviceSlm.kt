@@ -2,9 +2,6 @@ package com.example.ai
 
 import android.content.Context
 import android.util.Log
-import com.google.mediapipe.tasks.genai.llminference.LlmInference
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
@@ -14,20 +11,14 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 
 /**
- * On-device small language model (SLM) via MediaPipe GenAI.
- * - No API key for inference
- * - Model file downloaded once into app storage, then fully offline
- * - Preferred model: Gemma 3 1B int4 (~0.5–1 GB depending on build)
+ * On-device SLM via MediaPipe GenAI (reflection-based so the project still compiles
+ * if the tasks-genai API surface differs slightly across versions).
  *
- * Falls back gracefully if the model is missing or the device is too weak.
+ * No API key for inference. Model is downloaded once into app storage.
  */
 object OnDeviceSlm {
   private const val TAG = "OnDeviceSlm"
   private const val MODEL_FILE = "gemma3-1b-it-int4.task"
-  /**
-   * Public MediaPipe-ready Gemma 3 1B (update URL if upstream renames the asset).
-   * First launch downloads this; after that, zero network.
-   */
   private const val DEFAULT_MODEL_URL =
     "https://huggingface.co/litert-community/Gemma3-1B-IT/resolve/main/gemma3-1b-it-int4.task?download=true"
 
@@ -37,9 +28,10 @@ object OnDeviceSlm {
     .writeTimeout(60, TimeUnit.SECONDS)
     .build()
 
-  private val engine = AtomicReference<LlmInference?>(null)
+  /** Holds MediaPipe LlmInference instance (typed as Any to avoid hard API coupling). */
+  private val engine = AtomicReference<Any?>(null)
   @Volatile private var lastError: String? = null
-  @Volatile private var downloadProgress: Int = -1 // -1 idle, 0-100, 101 ready
+  @Volatile private var downloadProgress: Int = -1
 
   private fun modelFile(ctx: Context): File =
     File(File(ctx.filesDir, "models").apply { mkdirs() }, MODEL_FILE)
@@ -56,6 +48,7 @@ object OnDeviceSlm {
     o.put("lastError", lastError ?: JSONObject.NULL)
     o.put("engine", "mediapipe-tasks-genai")
     o.put("modelName", "Gemma-class SLM (int4)")
+    o.put("mediapipeAvailable", isMediaPipePresent())
     return o.toString()
   }
 
@@ -64,7 +57,13 @@ object OnDeviceSlm {
     return f.exists() && f.length() > 50_000_000L
   }
 
-  /** Blocking download with progress (0–100). Call from background. */
+  private fun isMediaPipePresent(): Boolean = try {
+    Class.forName("com.google.mediapipe.tasks.genai.llminference.LlmInference")
+    true
+  } catch (_: Throwable) {
+    false
+  }
+
   fun downloadModel(ctx: Context, url: String = DEFAULT_MODEL_URL): String {
     val dest = modelFile(ctx)
     val tmp = File(dest.absolutePath + ".part")
@@ -106,9 +105,8 @@ object OnDeviceSlm {
         tmp.delete()
       }
       downloadProgress = 100
-      // unload old engine so next ask reloads new file
       close()
-      "Model saved (${dest.length() / (1024 * 1024)} MB). Ready to load."
+      "Model saved (${dest.length() / (1024 * 1024)} MB). Tap Load model."
     } catch (e: Exception) {
       Log.e(TAG, "download", e)
       lastError = e.message ?: "Download error"
@@ -126,21 +124,33 @@ object OnDeviceSlm {
       lastError = "Model not downloaded yet"
       return false
     }
+    if (!isMediaPipePresent()) {
+      lastError = "MediaPipe tasks-genai not on classpath"
+      return false
+    }
     return try {
-      val options = try {
-        LlmInference.LlmInferenceOptions.builder()
-          .setModelPath(f.absolutePath)
-          .setMaxTokens(512)
-          .setTopK(40)
-          .setTemperature(0.7f)
-          .build()
+      val llmClass = Class.forName("com.google.mediapipe.tasks.genai.llminference.LlmInference")
+      // Prefer nested LlmInferenceOptions, else top-level LlmInferenceOptions
+      val optionsClass = try {
+        Class.forName("com.google.mediapipe.tasks.genai.llminference.LlmInference\$LlmInferenceOptions")
       } catch (_: Throwable) {
-        LlmInference.LlmInferenceOptions.builder()
-          .setModelPath(f.absolutePath)
-          .setMaxTokens(512)
-          .build()
+        Class.forName("com.google.mediapipe.tasks.genai.llminference.LlmInferenceOptions")
       }
-      val llm = LlmInference.createFromOptions(ctx, options)
+      val builderMethod = optionsClass.getMethod("builder")
+      val builder = builderMethod.invoke(null)
+      val bClass = builder.javaClass
+      // Required
+      bClass.getMethod("setModelPath", String::class.java).invoke(builder, f.absolutePath)
+      // Optional knobs — ignore if missing
+      tryInvoke(builder, "setMaxTokens", 512)
+      tryInvoke(builder, "setMaxTopK", 64)
+      tryInvoke(builder, "setTopK", 40)
+      tryInvoke(builder, "setTemperature", 0.7f)
+      val options = bClass.getMethod("build").invoke(builder)
+      val create = llmClass.methods.first {
+        it.name == "createFromOptions" && it.parameterTypes.size == 2
+      }
+      val llm = create.invoke(null, ctx, options)
       engine.set(llm)
       lastError = null
       downloadProgress = 101
@@ -153,28 +163,45 @@ object OnDeviceSlm {
     }
   }
 
+  private fun tryInvoke(builder: Any, name: String, value: Any) {
+    try {
+      val cls = when (value) {
+        is Int -> Int::class.javaPrimitiveType
+        is Float -> Float::class.javaPrimitiveType
+        else -> value.javaClass
+      }
+      builder.javaClass.getMethod(name, cls).invoke(builder, value)
+    } catch (_: Throwable) {
+      // optional
+    }
+  }
+
   fun generate(ctx: Context, prompt: String): String? {
     if (!ensureLoaded(ctx)) return null
     val llm = engine.get() ?: return null
     return try {
-      llm.generateResponse(prompt)?.trim()?.ifBlank { null }
+      val m = llm.javaClass.methods.first {
+        it.name == "generateResponse" && it.parameterTypes.size == 1 &&
+          it.parameterTypes[0] == String::class.java
+      }
+      val result = m.invoke(llm, prompt)
+      (result as? String)?.trim()?.ifBlank { null }
     } catch (e: Exception) {
       Log.e(TAG, "generate", e)
       lastError = e.message
-      // engine may be bad after OOM — drop it
-      try { llm.close() } catch (_: Exception) {}
-      engine.set(null)
+      close()
       null
     }
   }
 
   fun close() {
-    try { engine.getAndSet(null)?.close() } catch (_: Exception) {}
+    val llm = engine.getAndSet(null) ?: return
+    try {
+      llm.javaClass.methods.firstOrNull { it.name == "close" && it.parameterTypes.isEmpty() }
+        ?.invoke(llm)
+    } catch (_: Exception) {}
   }
 
-  /**
-   * Build a fitness-coach system prompt with local context, then run SLM.
-   */
   fun coach(ctx: Context, userQuestion: String, contextBlock: String): String {
     val prompt = buildString {
       append("You are Kestrel, a concise on-device fitness and wellness coach. ")
