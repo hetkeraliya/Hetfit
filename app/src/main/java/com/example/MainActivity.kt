@@ -980,6 +980,28 @@ class KestrelAndroidBridge(
     com.example.ai.LocalKestrelBrain.answer(context, question)
 
   @JavascriptInterface
+  fun getOnDeviceModelStatus(): String =
+    com.example.ai.OnDeviceSlm.statusJson(context)
+
+  @JavascriptInterface
+  fun downloadOnDeviceModel(): String {
+    // Long-running; WebView bridge may ANR — run on worker and return "started"
+    Thread {
+      val msg = com.example.ai.OnDeviceSlm.downloadModel(context)
+      android.os.Handler(android.os.Looper.getMainLooper()).post {
+        android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
+      }
+    }.start()
+    return "Download started — keep the app open. Status updates in Local coach."
+  }
+
+  @JavascriptInterface
+  fun loadOnDeviceModel(): String {
+    return if (com.example.ai.OnDeviceSlm.ensureLoaded(context)) "Model loaded"
+    else com.example.ai.OnDeviceSlm.statusJson(context)
+  }
+
+  @JavascriptInterface
   fun updatePlanProgress(json: String) {
     com.example.notify.KestrelCoachNotifications.savePlanProgress(context, json)
   }
