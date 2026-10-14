@@ -16,4 +16,11 @@
     <string name="widget_workout_desc">Your most recent workout from the band</string>
     <string name="widget_band_name">Kestrel Band Status</string>
     <string name="widget_band_desc">Band connection, battery and a Sync / Connect button</string>
+    <string name="shortcut_start_run_short">Start run</string>
+    <string name="shortcut_start_run_long">Start GPS run with band HR</string>
+    <string name="shortcut_sync_short">Sync band</string>
+    <string name="shortcut_sync_long">Sync Mi Band now</string>
+    <string name="shortcut_live_short">Open live</string>
+    <string name="shortcut_live_long">Open live run screen</string>
+    <string name="tile_start_run">Start run</string>
 </resources>
