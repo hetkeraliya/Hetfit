@@ -140,16 +140,38 @@ class BandSyncService : Service() {
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
 
+    val badge = when (st.status) {
+      ConnectionStatus.CONNECTED -> if (st.syncing) "Sync" else "Band"
+      ConnectionStatus.CONNECTING, ConnectionStatus.AUTHENTICATING -> "Link"
+      ConnectionStatus.SCANNING -> "Scan"
+      ConnectionStatus.DISCONNECTED -> "Off"
+    }
+    val big = android.widget.RemoteViews(packageName, com.example.R.layout.notification_kestrel_coach)
+    big.setTextViewText(com.example.R.id.kc_badge, badge)
+    big.setTextViewText(com.example.R.id.kc_title, title)
+    big.setTextViewText(com.example.R.id.kc_body, "$base\n$sub")
+    big.setTextViewText(com.example.R.id.kc_progress_label, if (st.syncing) "Sync" else "")
+    big.setTextViewText(
+      com.example.R.id.kc_progress_bar,
+      if (st.syncing) {
+        val p = st.syncPercent.coerceIn(0, 100)
+        val filled = p / 10
+        "█".repeat(filled) + "░".repeat(10 - filled) + "  $p%"
+      } else ""
+    )
+
     val b = NotificationCompat.Builder(this, CHANNEL_ID)
       .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
       .setContentTitle(title)
       .setContentText(base)
-      .setStyle(NotificationCompat.BigTextStyle().bigText("$base\n$sub"))
-      .setSubText(if (st.syncing) "Syncing" else null)
+      .setCustomContentView(big)
+      .setCustomBigContentView(big)
+      .setStyle(NotificationCompat.DecoratedCustomViewStyle())
       .setContentIntent(open)
       .setOngoing(true)
       .setOnlyAlertOnce(true)
       .setShowWhen(false)
+      .setColor(0xFF454B5C.toInt())
       .setCategory(NotificationCompat.CATEGORY_SERVICE)
       .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
 
