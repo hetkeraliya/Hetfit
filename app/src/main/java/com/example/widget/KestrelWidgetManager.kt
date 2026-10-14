@@ -65,6 +65,10 @@ object KestrelWidgetManager {
     private const val KEY_W_CAL = "widget_workout_cal"
     private const val KEY_W_DIST = "widget_workout_dist"
     private const val KEY_W_HR = "widget_workout_hr"
+    private const val KEY_WATER = "widget_water_ml"
+    private const val KEY_WATER_GOAL = "widget_water_goal"
+    private const val KEY_MOOD = "widget_mood_score"
+    private const val KEY_MOOD_LABEL = "widget_mood_label"
 
     private val providers = listOf(
         KestrelHealthWidgetProvider::class.java,
@@ -197,6 +201,47 @@ object KestrelWidgetManager {
                 putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, ids)
             }
             context.sendBroadcast(intent)
+        }
+        refreshLifeWidgets(context)
+    }
+
+    fun saveLife(context: Context, waterMl: Int, waterGoal: Int, moodScore: Int, moodLabel: String) {
+        prefs(context).edit()
+            .putInt(KEY_WATER, waterMl.coerceAtLeast(0))
+            .putInt(KEY_WATER_GOAL, waterGoal.coerceAtLeast(500))
+            .putInt(KEY_MOOD, moodScore.coerceIn(0, 5))
+            .putString(KEY_MOOD_LABEL, moodLabel)
+            .apply()
+        refreshLifeWidgets(context)
+    }
+
+    fun readLife(context: Context): org.json.JSONObject {
+        val p = prefs(context)
+        return org.json.JSONObject()
+            .put("waterMl", p.getInt(KEY_WATER, 0))
+            .put("waterGoal", p.getInt(KEY_WATER_GOAL, 2500))
+            .put("moodScore", p.getInt(KEY_MOOD, 0))
+            .put("moodLabel", p.getString(KEY_MOOD_LABEL, "") ?: "")
+            .put("sleepMin", p.getInt(KEY_SLEEP, 0))
+    }
+
+    fun waterMl(context: Context) = prefs(context).getInt(KEY_WATER, 0)
+    fun waterGoal(context: Context) = prefs(context).getInt(KEY_WATER_GOAL, 2500)
+    fun moodScore(context: Context) = prefs(context).getInt(KEY_MOOD, 0)
+    fun moodLabel(context: Context) = prefs(context).getString(KEY_MOOD_LABEL, "") ?: ""
+
+    fun refreshLifeWidgets(context: Context) {
+        val mgr = AppWidgetManager.getInstance(context)
+        listOf(
+            KestrelWaterWidgetProvider::class.java,
+            KestrelMoodWidgetProvider::class.java
+        ).forEach { cls ->
+            val ids = mgr.getAppWidgetIds(ComponentName(context, cls))
+            if (ids.isNotEmpty()) {
+                val intent = Intent(context, cls).setAction(AppWidgetManager.ACTION_APPWIDGET_UPDATE)
+                intent.putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, ids)
+                context.sendBroadcast(intent)
+            }
         }
     }
 }
