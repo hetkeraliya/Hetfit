@@ -1,3 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Kestrel</string>
     <string name="widget_dashboard_name">Kestrel Health Dashboard</string>
@@ -25,7 +26,7 @@
     <string name="shortcut_live_long">Open live run screen</string>
     <string name="tile_start_run">Start run</string>
     <string name="widget_water_name">Kestrel Water</string>
-    <string name="widget_water_desc">Today's water intake toward your goal</string>
+    <string name="widget_water_desc">Today\'s water intake toward your goal</string>
     <string name="widget_mood_name">Kestrel Mood</string>
     <string name="widget_mood_desc">Latest mood check-in</string>
 </resources>
