@@ -504,6 +504,31 @@
             <button type="button" class="sub-tab-btn" data-plan="nutrition">Nutrition</button>
           </div>
 
+          <div class="glass-card plan-progress-card" id="plan-progress-card">
+            <div class="plan-progress-head">
+              <span class="plan-progress-title">Today's plan</span>
+              <span class="plan-progress-pct" id="plan-progress-pct">0%</span>
+            </div>
+            <div class="plan-bar"><i id="plan-progress-bar" style="width:0%"></i></div>
+            <div class="plan-progress-grid">
+              <div class="plan-mini">
+                <span>Workout</span>
+                <div class="plan-bar plan-bar-sm"><i id="plan-bar-workout" style="width:0%"></i></div>
+                <b id="plan-cnt-workout">0/0</b>
+              </div>
+              <div class="plan-mini">
+                <span>Study</span>
+                <div class="plan-bar plan-bar-sm"><i id="plan-bar-study" style="width:0%"></i></div>
+                <b id="plan-cnt-study">0/0</b>
+              </div>
+              <div class="plan-mini">
+                <span>Nutrition</span>
+                <div class="plan-bar plan-bar-sm"><i id="plan-bar-nutrition" style="width:0%"></i></div>
+                <b id="plan-cnt-nutrition">0/0</b>
+              </div>
+            </div>
+          </div>
+
           <div class="plan-panel active" data-plan-panel="workout">
             <div class="glass-card list-card">
               <div class="insight-head">
@@ -609,6 +634,7 @@
 <script src="app.js"></script>
 <script src="ble-ui.js"></script>
 <script src="run.js"></script>
+<script src="motion.js"></script>
 <script src="extras.js"></script>
 <script>
   // Kestrel Native Realtime BLE Sync Engine
