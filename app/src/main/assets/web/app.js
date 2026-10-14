@@ -1940,6 +1940,8 @@
 
   function buildCheckList(container, section, date, items, iconFn) {
     container.innerHTML = '';
+    container.dataset.planSection = section;
+    container.dataset.planCount = String(items.length);
     const watchable = iconFn === exerciseIconHtml;
     items.forEach(([main, sub], i) => {
       const id = 'i' + i;
@@ -1956,9 +1958,68 @@
       li.querySelector('input').addEventListener('change', (e) => {
         setPlanChecked(section, date, id, e.target.checked);
         li.classList.toggle('checked', e.target.checked);
+        updatePlanProgress();
       });
       container.appendChild(li);
     });
+  }
+
+  function countPlanSection(section, date, total) {
+    let done = 0;
+    for (let i = 0; i < total; i++) {
+      if (isPlanChecked(section, date, 'i' + i)) done++;
+    }
+    return { done: done, total: total };
+  }
+
+  function updatePlanProgress() {
+    function fromList(sel) {
+      const root = document.querySelector(sel);
+      if (!root) return { done: 0, total: 0 };
+      const boxes = root.querySelectorAll('input[type="checkbox"]');
+      let done = 0;
+      boxes.forEach((b) => { if (b.checked) done++; });
+      return { done: done, total: boxes.length };
+    }
+    const workout = fromList('#plan-workout-list');
+    const study = fromList('#plan-study-list');
+    let nutriDone = 0, nutriTotal = 0;
+    document.querySelectorAll('#plan-nutrition-meals input[type="checkbox"]').forEach((b) => {
+      nutriTotal++;
+      if (b.checked) nutriDone++;
+    });
+
+    function paint(barId, cntId, done, total) {
+      const pct = total > 0 ? Math.round(done / total * 100) : 0;
+      const bar = $(barId); if (bar) bar.style.width = pct + '%';
+      const cnt = $(cntId); if (cnt) cnt.textContent = done + '/' + total;
+      return { done: done, total: total, pct: pct };
+    }
+    const W = paint('plan-bar-workout', 'plan-cnt-workout', workout.done, workout.total);
+    const S = paint('plan-bar-study', 'plan-cnt-study', study.done, study.total);
+    const N = paint('plan-bar-nutrition', 'plan-cnt-nutrition', nutriDone, nutriTotal);
+    const allDone = W.done + S.done + N.done;
+    const allTotal = W.total + S.total + N.total;
+    const allPct = allTotal > 0 ? Math.round(allDone / allTotal * 100) : 0;
+    const pctEl = $('plan-progress-pct'); if (pctEl) pctEl.textContent = allPct + '%';
+    const barEl = $('plan-progress-bar'); if (barEl) barEl.style.width = allPct + '%';
+
+    // Push summary to native for smart notifications
+    try {
+      const bridge = window.KestrelAndroidBridge;
+      if (bridge && typeof bridge.updatePlanProgress === 'function') {
+        bridge.updatePlanProgress(JSON.stringify({
+          date: date,
+          overallPct: allPct,
+          overallDone: allDone,
+          overallTotal: allTotal,
+          workoutDone: W.done, workoutTotal: W.total,
+          studyDone: S.done, studyTotal: S.total,
+          nutritionDone: N.done, nutritionTotal: N.total,
+          remaining: Math.max(0, allTotal - allDone)
+        }));
+      }
+    } catch (e) {}
   }
 
   function renderPlan() {
@@ -2007,6 +2068,7 @@
     }
     const proteinEl = $('plan-protein-tally'); if (proteinEl) proteinEl.textContent = PROTEIN_TALLY_TEXT;
     const vitEl = $('plan-vitamins'); if (vitEl) vitEl.innerHTML = VITAMIN_NOTES.map((v) => '<li>' + v + '</li>').join('');
+    try { updatePlanProgress(); } catch (e) {}
   }
 
   const planSubTabs = $('plan-sub-tabs');
