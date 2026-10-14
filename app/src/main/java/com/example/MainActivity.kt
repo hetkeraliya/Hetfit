@@ -971,6 +971,15 @@ class KestrelAndroidBridge(
   // ---------------- Zepp / Health Connect import ----------------
 
   @JavascriptInterface
+  fun syncLifeWidgets(waterMl: Int, waterGoal: Int, moodScore: Int, moodLabel: String) {
+    com.example.widget.KestrelWidgetManager.saveLife(context, waterMl, waterGoal, moodScore, moodLabel)
+  }
+
+  @JavascriptInterface
+  fun askLocalCoach(question: String): String =
+    com.example.ai.LocalKestrelBrain.answer(context, question)
+
+  @JavascriptInterface
   fun updatePlanProgress(json: String) {
     com.example.notify.KestrelCoachNotifications.savePlanProgress(context, json)
   }
