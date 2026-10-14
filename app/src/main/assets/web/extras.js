@@ -2,6 +2,21 @@
 (function () {
   'use strict';
   const A = window.KestrelAndroidBridge || null;
+  function pushLifeWidgets() {
+    try {
+      if (!A || typeof A.syncLifeWidgets !== 'function') return;
+      const w = JSON.parse(localStorage.getItem('kestrel.water.v1') || '{"goal":2500,"days":{}}');
+      const key = (function(){ const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); })();
+      const list = (w.days && w.days[key]) || [];
+      const ml = list.reduce(function(s,e){ return s + (e.ml||0); }, 0);
+      const m = JSON.parse(localStorage.getItem('kestrel.mood.v1') || '{}');
+      const todayMoods = m[key] || [];
+      const last = todayMoods.length ? todayMoods[todayMoods.length-1] : null;
+      const score = last ? (last.score||0) : 0;
+      const label = last && last.tags && last.tags[0] ? last.tags[0] : '';
+      A.syncLifeWidgets(ml, w.goal||2500, score, label);
+    } catch (e) {}
+  }
   const app = () => window.kestrelApp;
   const $ = (id) => document.getElementById(id);
   function h(tag, cls, html) { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; }
@@ -93,7 +108,7 @@
 
     // data health + repair
     const dh = h('div', 'rn-card'); dh.innerHTML = '<h4>Band data on this phone</h4><div id="sl-stats" class="mo-note">Loading…</div>' +
-      '<div class="mo-btns" style="margin-top:10px"><button id="sl-sync">Sync now</button><button id="sl-resync" class="primary">Re-sync everything</button></div>' +
+      '<div class="mo-btns" style="margin-top:10px"><button id="sl-sync">Sync now</button><button id="sl-resync" >Re-sync everything</button></div>' +
       '<p class="mo-note">If a night is missing, “Re-sync everything” clears the local copy and downloads all sleep and activity the band still holds (about the last week).</p>';
     stack.appendChild(dh);
     if (A && A.getStoreStats) {
@@ -137,9 +152,9 @@
       '<div><div class="mo-btns"><button data-ml="150">+150</button><button data-ml="250">+250</button><button data-ml="330">+330</button><button data-ml="500">+500</button></div>' +
       '<div class="mo-btns" style="margin-top:8px"><button id="wt-undo">Undo</button><button id="wt-goal">Goal</button></div></div></div>';
     stack.appendChild(card);
-    card.querySelectorAll('button[data-ml]').forEach((b) => (b.onclick = () => { (w.days[key] = w.days[key] || []).push({ t: Date.now(), ml: Number(b.dataset.ml) }); save(WATER, w); render(); }));
-    card.querySelector('#wt-undo').onclick = () => { if (list.length) { list.pop(); save(WATER, w); render(); } };
-    card.querySelector('#wt-goal').onclick = () => { const v = Number(prompt('Daily water goal (ml)', w.goal)); if (v >= 500) { w.goal = Math.round(v); save(WATER, w); render(); } };
+    card.querySelectorAll('button[data-ml]').forEach((b) => (b.onclick = () => { (w.days[key] = w.days[key] || []).push({ t: Date.now(), ml: Number(b.dataset.ml) }); save(WATER, w); pushLifeWidgets(); render(); }));
+    card.querySelector('#wt-undo').onclick = () => { if (list.length) { list.pop(); save(WATER, w); pushLifeWidgets(); render(); } };
+    card.querySelector('#wt-goal').onclick = () => { const v = Number(prompt('Daily water goal (ml)', w.goal)); if (v >= 500) { w.goal = Math.round(v); save(WATER, w); pushLifeWidgets(); render(); } };
     const wk = h('div', 'rn-card'); wk.innerHTML = '<h4>Last 7 days</h4>';
     const rows = []; for (let i = 6; i >= 0; i--) { const k = keyOf(new Date(Date.now() - i * 86400000)); rows.push([k, (w.days[k] || []).reduce((s, e) => s + e.ml, 0)]); }
     const mx = Math.max(w.goal, Math.max.apply(null, rows.map((r) => r[1])));
@@ -152,7 +167,7 @@
     const mc = h('div', 'rn-card');
     mc.innerHTML = '<h4>How are you feeling?</h4><div class="mo-mood">' + MOODS.map((e, i) => '<button data-s="' + (i + 1) + '" class="' + (moodDraft.score === i + 1 ? 'active' : '') + '">' + e + '</button>').join('') + '</div>' +
       '<div class="mo-tags">' + TAGS.map((t) => '<button data-t="' + t + '" class="' + (moodDraft.tags.indexOf(t) >= 0 ? 'active' : '') + '">' + t + '</button>').join('') + '</div>' +
-      '<input class="mo-input" id="md-note" placeholder="Add a note (optional)" value="' + moodDraft.note.replace(/"/g, '&quot;') + '"><div class="mo-btns" style="margin-top:10px"><button class="primary" id="md-save">Log mood</button></div>' +
+      '<input class="mo-input" id="md-note" placeholder="Add a note (optional)" value="' + moodDraft.note.replace(/"/g, '&quot;') + '"><div class="mo-btns" style="margin-top:10px"><button id="md-save">Log mood</button></div>' +
       (todays.length ? '<p class="mo-note">Today: ' + todays.map((e) => MOODS[e.score - 1] + ' ' + new Date(e.t).getHours() + ':' + pad2(new Date(e.t).getMinutes())).join(' · ') + '</p>' : '');
     stack.appendChild(mc);
     mc.querySelectorAll('button[data-s]').forEach((b) => (b.onclick = () => { moodDraft.note = mc.querySelector('#md-note').value; moodDraft.score = Number(b.dataset.s); render(); }));
@@ -160,7 +175,7 @@
     mc.querySelector('#md-save').onclick = () => {
       if (!moodDraft.score) { toast('Pick a mood first'); return; }
       (m[key] = m[key] || []).push({ t: Date.now(), score: moodDraft.score, tags: moodDraft.tags.slice(), note: mc.querySelector('#md-note').value.trim() });
-      save(MOOD, m); moodDraft = { score: 0, tags: [], note: '' }; render();
+      save(MOOD, m); pushLifeWidgets(); moodDraft = { score: 0, tags: [], note: '' }; render();
     };
     const tr = h('div', 'rn-card'); tr.innerHTML = '<h4>Mood, last 14 days</h4>';
     const avg = (k) => { const e = m[k] || []; return e.length ? e.reduce((s, x) => s + x.score, 0) / e.length : 0; };
@@ -180,6 +195,29 @@
   const NOTIFY_APPS = [['com.whatsapp', 'WhatsApp'], ['org.telegram.messenger', 'Telegram'], ['com.instagram.android', 'Instagram'], ['com.facebook.orca', 'Messenger'],
     ['com.google.android.gm', 'Gmail'], ['com.google.android.apps.messaging', 'Messages'], ['com.google.android.dialer', 'Phone (missed calls)'], ['com.twitter.android', 'X / Twitter'], ['com.snapchat.android', 'Snapchat']];
   const DAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+
+
+    // On-device coach (no API key)
+    const ai = h('div', 'rn-card');
+    ai.innerHTML = '<h4>Local coach</h4><p class="mo-note st-status">Runs on this phone — no account, no API key.</p>' +
+      '<div class="st-actions" style="margin-top:8px">' +
+      '<button type="button" data-q="How am I today?">Today</button>' +
+      '<button type="button" data-q="Water status">Water</button>' +
+      '<button type="button" data-q="Mood advice">Mood</button>' +
+      '<button type="button" data-q="Plan status">Plan</button>' +
+      '</div><p class="mo-note" id="local-coach-out" style="margin-top:10px"></p>';
+    stack.appendChild(ai);
+    const out = ai.querySelector('#local-coach-out');
+    ai.querySelectorAll('button[data-q]').forEach((b) => {
+      b.onclick = () => {
+        pushLifeWidgets();
+        if (A && typeof A.askLocalCoach === 'function') {
+          out.textContent = A.askLocalCoach(b.getAttribute('data-q') || 'summary');
+        } else {
+          out.textContent = 'Rebuild the app binary to enable on-device coach.';
+        }
+      };
+    });
 
   function renderPai(stack) {
     // PAI
@@ -210,7 +248,7 @@
     feat.innerHTML =
       '<h4>Actions</h4>' +
       '<div class="st-actions">' +
-        '<button type="button" class="primary" id="bf-find">Find</button>' +
+        '<button type="button" id="bf-find">Find</button>' +
         '<button type="button" id="bf-stop">Stop</button>' +
         '<button type="button" id="bf-time">Time</button>' +
         '<button type="button" id="bf-hr">HR</button>' +
@@ -336,7 +374,7 @@
     };
 
     const save = h('div', 'rn-card');
-    save.innerHTML = '<div class="mo-btns"><button class="primary" id="bs-save">Save to band</button></div><p class="mo-note">Settings are stored here and re-sent every time the band connects.</p>';
+    save.innerHTML = '<div class="mo-btns"><button id="bs-save">Save to band</button></div><p class="mo-note">Settings are stored here and re-sent every time the band connects.</p>';
     stack.appendChild(save);
     save.querySelector('#bs-save').onclick = () => {
       const g = (id) => stack.querySelector('#' + id);
@@ -374,7 +412,7 @@
     nf.innerHTML = '<h4>Notifications</h4>' + chk('nf-on', 'Show phone notifications on the band', nc.enabled) + chk('nf-all', 'All apps', nc.all) +
       '<div id="nf-apps" style="' + (nc.all ? 'opacity:.4;pointer-events:none' : '') + '">' + NOTIFY_APPS.map((a) => chk('nf-' + a[0].replace(/\./g, '_'), a[1], nc.packages.indexOf(a[0]) >= 0)).join('') + '</div>' +
       '<p class="mo-note st-status">' + (nc.access ? 'Access granted' : 'Allow notification access once') + '</p>' +
-      '<div class="mo-btns"><button class="primary" id="nf-save">Save</button>' + (nc.access ? '' : '<button id="nf-grant">Allow access</button>') + '<button id="nf-test">Send test</button></div>';
+      '<div class="mo-btns"><button id="nf-save">Save</button>' + (nc.access ? '' : '<button id="nf-grant">Allow access</button>') + '<button id="nf-test">Send test</button></div>';
     stack.appendChild(nf);
     nf.querySelector('#nf-all').onchange = (e) => { nf.querySelector('#nf-apps').style.cssText = e.target.checked ? 'opacity:.4;pointer-events:none' : ''; };
     nf.querySelector('#nf-save').onclick = () => {
@@ -402,7 +440,7 @@
 
     const b = h('div', 'rn-card');
     b.innerHTML = '<h4>Backup</h4><p class="mo-note st-status">Days, workouts, notes, water, mood, settings, runs</p>' +
-      '<div class="mo-btns"><button class="primary" id="bk-save">Create backup</button><button id="bk-restore">Restore backup…</button></div><input type="file" id="bk-file" accept=".json,application/json" class="hidden">';
+      '<div class="mo-btns"><button id="bk-save">Create backup</button><button id="bk-restore">Restore backup…</button></div><input type="file" id="bk-file" accept=".json,application/json" class="hidden">';
     stack.appendChild(b);
     b.querySelector('#bk-save').onclick = () => {
       const data = {}; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); data[k] = localStorage.getItem(k); }
@@ -438,7 +476,7 @@
       '<h4>Connection</h4>' +
       '<div id="cn-body">Loading…</div>' +
       '<div class="mo-btns">' +
-        '<button class="primary" id="cn-connect">Connect</button>' +
+        '<button id="cn-connect">Connect</button>' +
         '<button id="cn-sync">Sync</button>' +
         '<button id="cn-hr">HR</button>' +
         '<button id="cn-buzz">Buzz</button>' +
