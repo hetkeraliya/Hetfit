@@ -216,15 +216,13 @@
         '<button type="button" id="bf-hr">HR</button>' +
         '<button type="button" id="bf-weather">Weather</button>' +
         '<button type="button" id="bf-music">Music</button>' +
+        '<button type="button" id="bf-zepp">Import HC</button>' +
+        '<button type="button" id="bf-hc">HC settings</button>' +
       '</div>' +
       '<div class="st-row">' +
         '<span class="st-label">Step goal</span>' +
         '<input type="number" id="bf-goal" class="mo-input st-input" value="' + (st.stepGoal || 8000) + '" min="1000" max="100000" step="500">' +
-        '<button type="button" id="bf-goal-save" class="st-mini">Set</button>' +
-      '</div>' +
-      '<div class="st-row st-row-gap">' +
-        '<button type="button" class="primary st-flex" id="bf-zepp">Import Health Connect</button>' +
-        '<button type="button" class="st-mini" id="bf-hc">Settings</button>' +
+        '<button type="button" id="bf-goal-save">Set</button>' +
       '</div>' +
       '<p class="mo-note st-status" id="bf-zepp-status">Health Connect</p>';
     stack.appendChild(feat);
