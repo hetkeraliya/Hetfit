@@ -511,6 +511,7 @@
     const iv = setInterval(() => { n--; if (n <= 0) { clearInterval(iv); cd.classList.remove('open'); go(); } else cd.textContent = n; }, 1000);
   }
 
+  window.kestrelOpenLive = function () { try { openLive(false); } catch (e) {} };
   function openLive(fresh) {
     const o = overlay('rn-live', 'rn-live');
     o.classList.add('open');
