@@ -206,7 +206,7 @@ object KestrelWidgetManager {
     }
 
     fun saveLife(context: Context, waterMl: Int, waterGoal: Int, moodScore: Int, moodLabel: String) {
-        prefs(context).edit()
+        getPrefs(context).edit()
             .putInt(KEY_WATER, waterMl.coerceAtLeast(0))
             .putInt(KEY_WATER_GOAL, waterGoal.coerceAtLeast(500))
             .putInt(KEY_MOOD, moodScore.coerceIn(0, 5))
@@ -216,7 +216,7 @@ object KestrelWidgetManager {
     }
 
     fun readLife(context: Context): org.json.JSONObject {
-        val p = prefs(context)
+        val p = getPrefs(context)
         return org.json.JSONObject()
             .put("waterMl", p.getInt(KEY_WATER, 0))
             .put("waterGoal", p.getInt(KEY_WATER_GOAL, 2500))
@@ -225,10 +225,10 @@ object KestrelWidgetManager {
             .put("sleepMin", p.getInt(KEY_SLEEP, 0))
     }
 
-    fun waterMl(context: Context) = prefs(context).getInt(KEY_WATER, 0)
-    fun waterGoal(context: Context) = prefs(context).getInt(KEY_WATER_GOAL, 2500)
-    fun moodScore(context: Context) = prefs(context).getInt(KEY_MOOD, 0)
-    fun moodLabel(context: Context) = prefs(context).getString(KEY_MOOD_LABEL, "") ?: ""
+    fun waterMl(context: Context) = getPrefs(context).getInt(KEY_WATER, 0)
+    fun waterGoal(context: Context) = getPrefs(context).getInt(KEY_WATER_GOAL, 2500)
+    fun moodScore(context: Context) = getPrefs(context).getInt(KEY_MOOD, 0)
+    fun moodLabel(context: Context) = getPrefs(context).getString(KEY_MOOD_LABEL, "") ?: ""
 
     fun refreshLifeWidgets(context: Context) {
         val mgr = AppWidgetManager.getInstance(context)
