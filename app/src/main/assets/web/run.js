@@ -237,55 +237,69 @@
   function renderHome(stack) {
     const acts = activities();
     const live = lastState && lastState.active;
-    const hero = h('div', 'glass-card rn-hero');
-    hero.innerHTML = '<div class="rn-eyebrow">' + (live ? 'Recording in progress' : 'Ready when you are') + '</div>' +
-      '<div class="rn-hero-row"><div><h2 class="rn-title">' + (live ? 'Resume ' + codeType(lastState.type).label.toLowerCase() : 'Start ' + codeType(codeOf(prefs.type)).label.toLowerCase()) + '</h2>' +
-      '<p class="rn-sub">Records GPS on the phone and heart rate from your band. No internet needed.</p></div>' +
-      '<button type="button" class="rn-start" id="rn-start-btn" aria-label="Start">' + (live ? '▶' : '▶') + '</button></div>';
+    const typeLabel = codeType(codeOf(prefs.type)).label;
+
+    // 1) Minimal start card
+    const hero = h('div', 'glass-card rn-hero rn-hero-clean');
+    hero.innerHTML =
+      '<div class="rn-hero-row">' +
+        '<div class="rn-hero-copy">' +
+          '<h2 class="rn-title">' + (live ? 'Resume' : 'Start') + ' ' + typeLabel.toLowerCase() + '</h2>' +
+          '<p class="rn-sub">' + (live ? 'Recording now — tap to open' : 'GPS + band HR · offline') + '</p>' +
+        '</div>' +
+        '<button type="button" class="rn-start" id="rn-start-btn" aria-label="Start">▶</button>' +
+      '</div>';
     const chips = h('div', 'rn-chips');
     TYPES.forEach((t) => {
-      const c = h('button', 'rn-chip' + (prefs.type === t.key ? ' active' : ''), t.icon + ' ' + t.label);
+      const c = h('button', 'rn-chip' + (prefs.type === t.key ? ' active' : ''), t.label);
       c.type = 'button';
       c.onclick = () => { prefs.type = t.key; savePrefs(); renderRun(); };
       chips.appendChild(c);
     });
     hero.appendChild(chips);
-    const opts = h('div', 'rn-opts');
-    opts.innerHTML = '<label><input type="checkbox" id="rn-o-voice" ' + (prefs.voice ? 'checked' : '') + '> Voice cue every km</label>' +
-      '<label><input type="checkbox" id="rn-o-cd" ' + (prefs.countdown ? 'checked' : '') + '> 3-2-1 countdown</label>';
+    // compact options as single quiet row
+    const opts = h('div', 'rn-opts rn-opts-compact');
+    opts.innerHTML =
+      '<label><input type="checkbox" id="rn-o-voice" ' + (prefs.voice ? 'checked' : '') + '> Voice</label>' +
+      '<label><input type="checkbox" id="rn-o-cd" ' + (prefs.countdown ? 'checked' : '') + '> Countdown</label>';
     hero.appendChild(opts);
     stack.appendChild(hero);
     hero.querySelector('#rn-start-btn').onclick = () => (live ? openLive() : startActivity());
     hero.querySelector('#rn-o-voice').onchange = (e) => { prefs.voice = e.target.checked; savePrefs(); };
     hero.querySelector('#rn-o-cd').onchange = (e) => { prefs.countdown = e.target.checked; savePrefs(); };
 
-    // this week (Sunday start)
+    // 2) One compact week strip (stats + days in one card)
     const now = new Date();
     const ws = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay()).getTime();
     const week = acts.filter((a) => a.startMs >= ws);
     const km = week.reduce((s, a) => s + a.dist, 0);
     const mv = week.reduce((s, a) => s + (a.dist > 50 ? a.moving : 0), 0);
     const dd = week.reduce((s, a) => s + (a.dist > 50 ? a.dist : 0), 0);
-    stack.appendChild(h('div', 'rn-h', 'This week'));
-    stack.appendChild(h('div', 'rn-grid3',
-      '<div class="rn-tile"><b>' + (km / 1000).toFixed(1) + '</b><span>km</span></div>' +
-      '<div class="rn-tile"><b>' + fmtPace(dd > 50 ? mv / (dd / 1000) : 0) + '</b><span>avg pace</span></div>' +
-      '<div class="rn-tile"><b>' + week.length + '</b><span>activities</span></div>'));
-    const wk = h('div', 'rn-week');
     const days = {}; acts.forEach((a) => (days[dayKey(a.startMs)] = true));
+    const st = streak(days);
+
+    const weekCard = h('div', 'glass-card rn-week-card');
+    weekCard.innerHTML =
+      '<div class="rn-week-stats">' +
+        '<div><b>' + (km / 1000).toFixed(1) + '</b><span>km</span></div>' +
+        '<div><b>' + fmtPace(dd > 50 ? mv / (dd / 1000) : 0) + '</b><span>pace</span></div>' +
+        '<div><b>' + week.length + '</b><span>runs</span></div>' +
+        '<div><b>' + st.cur + '</b><span>streak</span></div>' +
+      '</div>';
+    const wk = h('div', 'rn-week');
     for (let i = 0; i < 7; i++) {
       const d = new Date(ws + i * 86400000);
       const k = dayKey(d.getTime());
-      const t = new Date();
-      wk.appendChild(h('div', 'rn-day' + (k === dayKey(t.getTime()) ? ' today' : '') + (days[k] ? ' has' : ''), '<span>' + 'SMTWTFS'[i] + '</span><i>' + d.getDate() + '</i><u></u>'));
+      const tdy = dayKey(now.getTime());
+      wk.appendChild(h('div', 'rn-day' + (k === tdy ? ' today' : '') + (days[k] ? ' has' : ''),
+        '<span>' + 'SMTWTFS'[i] + '</span><i>' + d.getDate() + '</i>'));
     }
-    stack.appendChild(wk);
+    weekCard.appendChild(wk);
+    stack.appendChild(weekCard);
 
-    const st = streak(days);
-    stack.appendChild(h('div', 'rn-streak', '<div><div class="t">' + st.cur + '-day streak</div><div class="s">Best ' + st.best + ' · any activity counts</div></div><b>' + st.cur + '</b>'));
-
+    // 3) Recent — only top 3, cleaner empty state
     stack.appendChild(h('div', 'rn-h', 'Recent'));
-    stack.appendChild(listEl(acts.slice(0, 5)));
+    stack.appendChild(listEl(acts.slice(0, 3)));
   }
   const codeOf = (key) => (TYPES.find((t) => t.key === key) || TYPES[0]).key;
   function streak(days) {
