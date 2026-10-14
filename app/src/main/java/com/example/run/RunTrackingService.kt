@@ -202,9 +202,14 @@ class RunTrackingService : Service(), LocationListener {
     if (Build.VERSION.SDK_INT >= 26) {
       val nm = getSystemService(NotificationManager::class.java)
       if (nm.getNotificationChannel(CHANNEL_ID) == null) {
-        val ch = NotificationChannel(CHANNEL_ID, "Activity recording", NotificationManager.IMPORTANCE_LOW)
+        val ch = NotificationChannel(CHANNEL_ID, "Activity recording", NotificationManager.IMPORTANCE_DEFAULT)
         ch.setShowBadge(false)
+        ch.lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+        ch.setSound(null, null)
+        ch.enableVibration(false)
         nm.createNotificationChannel(ch)
+        // Migrate older LOW channel so lock screen shows stats
+        try { nm.deleteNotificationChannel(CHANNEL_ID + "_legacy") } catch (_: Exception) {}
       }
     }
   }
@@ -463,18 +468,52 @@ class RunTrackingService : Service(), LocationListener {
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
     val open = PendingIntent.getActivity(
-      this, 0, Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+      this, 0,
+      Intent(this, MainActivity::class.java)
+        .setAction("com.example.action.OPEN_LIVE")
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
-    val km = String.format(Locale.getDefault(), "%.2f km", distanceM / 1000.0)
+    val distKm = distanceM / 1000.0
+    val km = String.format(Locale.getDefault(), "%.2f", distKm)
     val time = String.format(Locale.getDefault(), "%d:%02d", elapsed / 60, elapsed % 60)
+    val paceStr = if (distKm >= 0.05 && elapsed > 0) {
+      val secPerKm = (elapsed / distKm).toInt().coerceAtLeast(0)
+      String.format(Locale.getDefault(), "%d:%02d /km", secPerKm / 60, secPerKm % 60)
+    } else "— /km"
+    val hrStr = if (hrCount > 0) {
+      val avg = (hrSum / hrCount).toInt()
+      "♥ $avg bpm"
+    } else ""
+    val status = if (paused) "PAUSED" else "RUN"
+
+    // Compact (status bar / collapsed)
+    val compact = android.widget.RemoteViews(packageName, com.example.R.layout.notification_run_compact)
+    compact.setTextViewText(com.example.R.id.nr_c_title, if (paused) "Paused" else "Recording")
+    compact.setTextViewText(com.example.R.id.nr_c_stats, "$km km · $time")
+
+    // Expanded / lock-screen card
+    val big = android.widget.RemoteViews(packageName, com.example.R.layout.notification_run_lock)
+    big.setTextViewText(com.example.R.id.nr_title, status)
+    big.setTextViewText(com.example.R.id.nr_distance, "$km km")
+    big.setTextViewText(com.example.R.id.nr_time, time)
+    big.setTextViewText(com.example.R.id.nr_pace, paceStr)
+    big.setTextViewText(com.example.R.id.nr_hr, hrStr)
+
     val b = NotificationCompat.Builder(this, CHANNEL_ID)
       .setSmallIcon(android.R.drawable.ic_menu_mylocation)
-      .setContentTitle(if (paused) "Paused · $km" else "Recording · $km")
-      .setContentText("$time elapsed")
+      .setContentTitle(if (paused) "Paused · $km km" else "Recording · $km km")
+      .setContentText("$time · $paceStr" + if (hrStr.isNotEmpty()) " · $hrStr" else "")
+      .setCustomContentView(compact)
+      .setCustomBigContentView(big)
+      .setStyle(NotificationCompat.DecoratedCustomViewStyle())
       .setContentIntent(open)
-      .setOngoing(true).setOnlyAlertOnce(true).setShowWhen(false)
+      .setOngoing(true)
+      .setOnlyAlertOnce(true)
+      .setShowWhen(false)
+      .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
       .setCategory(NotificationCompat.CATEGORY_WORKOUT)
+      .setPriority(NotificationCompat.PRIORITY_DEFAULT)
     if (paused) b.addAction(0, "Resume", pi(ACTION_RESUME, 31)) else b.addAction(0, "Pause", pi(ACTION_PAUSE, 30))
     b.addAction(0, "Finish", pi(ACTION_FINISH, 32))
     return b.build()
