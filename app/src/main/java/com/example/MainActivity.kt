@@ -24,6 +24,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -129,10 +130,14 @@ class MainActivity : ComponentActivity() {
   }
 
   override fun onCreate(savedInstanceState: Bundle?) {
+    installSplashScreen()
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
 
     miBandManager = MiBandManager.get(applicationContext)
+    try { com.example.work.BandReconcileWorker.schedule(applicationContext) } catch (_: Exception) {}
+    try { com.example.notify.KestrelCoachNotifications.schedule(applicationContext) } catch (_: Exception) {}
+    handleShortcutIntent(intent)
 
     setContent {
       MyApplicationTheme {
@@ -160,6 +165,44 @@ class MainActivity : ComponentActivity() {
   }
 
   // The band connection now lives in BandSyncService, so closing the UI must NOT disconnect it.
+
+  override fun onNewIntent(intent: Intent) {
+    super.onNewIntent(intent)
+    setIntent(intent)
+    handleShortcutIntent(intent)
+  }
+
+  private fun handleShortcutIntent(intent: Intent?) {
+    when (intent?.action) {
+      "com.example.action.START_RUN" -> {
+        com.example.run.RunTrackingService.send(this, com.example.run.RunTrackingService.ACTION_START, type = 1, voice = false)
+        // WebView may not be ready yet; OPEN_LIVE also handled when page loads
+        companionWebView?.post {
+          companionWebView?.evaluateJavascript(
+            "try{window.kestrelOpenLive&&window.kestrelOpenLive()}catch(e){}",
+            null
+          )
+        }
+      }
+      "com.example.action.SYNC_BAND" -> {
+        try { miBandManager.syncNow() } catch (_: Exception) {}
+        Toast.makeText(this, "Syncing band…", Toast.LENGTH_SHORT).show()
+      }
+      "com.example.action.OPEN_LIVE" -> {
+        companionWebView?.post {
+          companionWebView?.evaluateJavascript(
+            "try{window.kestrelOpenLive&&window.kestrelOpenLive()}catch(e){}",
+            null
+          )
+        }
+      }
+    }
+  }
+
+  companion object {
+    @JvmField @Volatile
+    var companionWebView: WebView? = null
+  }
 }
 
 @SuppressLint("SetJavaScriptEnabled")
@@ -400,6 +443,7 @@ fun KestrelMainScreen(
         factory = { ctx ->
           WebView(ctx).apply {
             webViewInstance = this
+            MainActivity.companionWebView = this
             setBackgroundColor(android.graphics.Color.parseColor("#D9DCE5"))
 
             settings.apply {
@@ -923,4 +967,63 @@ class KestrelAndroidBridge(
     }
     return ShareHelper.saveTextFile(context, "band_minutes.csv", "text/csv", sb.toString())
   }
+
+  // ---------------- Zepp / Health Connect import ----------------
+
+  @JavascriptInterface
+  fun updatePlanProgress(json: String) {
+    com.example.notify.KestrelCoachNotifications.savePlanProgress(context, json)
+  }
+
+  @JavascriptInterface
+  fun requestCoachNotification(): String {
+    return try {
+      com.example.notify.KestrelCoachNotifications.buildAndNotify(context)
+      "ok"
+    } catch (e: Exception) {
+      e.message ?: "failed"
+    }
+  }
+
+  @JavascriptInterface
+  fun getHealthConnectStatus(): String =
+    com.example.ble.ZeppHealthConnectImporter.status(context)
+
+  @JavascriptInterface
+  fun openHealthConnectSettings() {
+    try {
+      val i = com.example.ble.ZeppHealthConnectImporter.permissionContractIntent(context)
+        ?: android.content.Intent(android.content.Intent.ACTION_VIEW,
+          android.net.Uri.parse("market://details?id=com.google.android.apps.healthdata"))
+      i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+      context.startActivity(i)
+    } catch (e: Exception) {
+      android.widget.Toast.makeText(context, "Cannot open Health Connect: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+    }
+  }
+
+  @JavascriptInterface
+  fun importFromZepp(): String {
+    val msg = try {
+      kotlinx.coroutines.runBlocking {
+        com.example.ble.ZeppHealthConnectImporter.importLastDays(context, 14)
+      }
+    } catch (e: Exception) {
+      e.message ?: "Import failed"
+    }
+    try {
+      val wv = MainActivity.companionWebView
+      val store = com.example.ble.BandSampleStore.get(context)
+      val state = com.example.ble.MiBandManager.get(context).uiState.value
+      wv?.post {
+        com.example.ble.MiBandDataSyncEngine.pushToWebView(wv, store, state, fullHistory = true)
+        wv.evaluateJavascript(
+          "try{window.kestrelReload&&window.kestrelReload()}catch(e){}",
+          null
+        )
+      }
+    } catch (_: Exception) {}
+    return msg
+  }
+
 }
