@@ -575,3 +575,35 @@ button:active, .rn-btn:active, .rn-chip:active, .rn-pill:active,
 #band-root .fx-conn #cn-body { font-size: 13.5px; line-height: 1.4; margin-bottom: 10px; }
 #band-root .sheet-stack,
 #band-root { display: flex; flex-direction: column; gap: 10px; }
+
+/* Plan progress */
+.plan-progress-card { padding: 14px 16px !important; margin-bottom: 4px; }
+.plan-progress-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  margin-bottom: 8px;
+}
+.plan-progress-title { font-size: 13px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--muted, #8A93A6); }
+.plan-progress-pct { font-size: 20px; font-weight: 800; color: var(--ink, #454B5C); letter-spacing: -0.02em; }
+.plan-bar {
+  height: 8px; border-radius: 999px;
+  background: rgba(69,75,92,.12);
+  overflow: hidden;
+}
+.plan-bar > i {
+  display: block; height: 100%; width: 0%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #A7B0C4, #454B5C);
+  transition: width .45s cubic-bezier(0.16,1,0.3,1);
+}
+.plan-bar-sm { height: 5px; margin: 4px 0; }
+.plan-progress-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+  margin-top: 12px;
+}
+.plan-mini span {
+  display: block; font-size: 10px; font-weight: 750;
+  letter-spacing: .06em; text-transform: uppercase; color: var(--muted, #8A93A6);
+}
+.plan-mini b {
+  display: block; font-size: 12px; font-weight: 800; color: var(--ink, #454B5C); margin-top: 2px;
+}
