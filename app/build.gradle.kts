@@ -114,6 +114,8 @@ dependencies {
   implementation(libs.firebase.appcheck.recaptcha)
   implementation(libs.firebase.appcheck.debug)
   implementation(libs.kotlinx.coroutines.android)
+  implementation("androidx.work:work-runtime-ktx:2.9.1")
+  implementation("androidx.core:core-splashscreen:1.0.1")
   implementation(libs.kotlinx.coroutines.core)
   // Read steps / HR / sleep that Zepp (and other apps) write on this phone
   implementation("androidx.health.connect:connect-client:1.1.0-alpha11")
