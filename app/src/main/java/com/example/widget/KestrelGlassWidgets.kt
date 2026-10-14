@@ -144,3 +144,53 @@ class KestrelBandWidgetProvider : GlassWidgetProvider() {
         v.setOnClickPendingIntent(R.id.tv_action, pi)
     }
 }
+
+class KestrelWaterWidgetProvider : AppWidgetProvider() {
+    override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
+        val ml = KestrelWidgetManager.waterMl(context)
+        val goal = KestrelWidgetManager.waterGoal(context)
+        val pct = if (goal > 0) ((ml * 100) / goal).coerceIn(0, 100) else 0
+        for (id in appWidgetIds) {
+            val v = RemoteViews(context.packageName, R.layout.widget_glass_water)
+            v.setTextViewText(R.id.tv_label, "WATER")
+            v.setTextViewText(R.id.tv_value, "$ml")
+            v.setTextViewText(R.id.tv_sub, "of $goal ml")
+            v.setProgressBar(R.id.pb_bar, 100, pct, false)
+            v.setOnClickPendingIntent(R.id.glass_root, KestrelWidgetManager.buildLaunchIntent(context))
+            appWidgetManager.updateAppWidget(id, v)
+        }
+    }
+}
+
+class KestrelMoodWidgetProvider : AppWidgetProvider() {
+    override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
+        val score = KestrelWidgetManager.moodScore(context)
+        val label = KestrelWidgetManager.moodLabel(context).ifBlank {
+            when (score) {
+                1 -> "Low"
+                2 -> "Low"
+                3 -> "OK"
+                4 -> "Good"
+                5 -> "Great"
+                else -> "Log mood"
+            }
+        }
+        val face = when (score) {
+            1 -> "1/5"
+            2 -> "2/5"
+            3 -> "3/5"
+            4 -> "4/5"
+            5 -> "5/5"
+            else -> "—"
+        }
+        for (id in appWidgetIds) {
+            val v = RemoteViews(context.packageName, R.layout.widget_glass_mood)
+            v.setTextViewText(R.id.tv_label, "MOOD")
+            v.setTextViewText(R.id.tv_value, face)
+            v.setTextViewText(R.id.tv_sub, label)
+            v.setTextViewText(R.id.tv_foot, if (score > 0) "Today" else "Open app to log")
+            v.setOnClickPendingIntent(R.id.glass_root, KestrelWidgetManager.buildLaunchIntent(context))
+            appWidgetManager.updateAppWidget(id, v)
+        }
+    }
+}
