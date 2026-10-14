@@ -119,6 +119,8 @@ dependencies {
   implementation(libs.kotlinx.coroutines.core)
   // Read steps / HR / sleep that Zepp (and other apps) write on this phone
   implementation("androidx.health.connect:connect-client:1.1.0-alpha11")
+  // On-device SLM (Gemma via MediaPipe GenAI) — no API key after model is on phone
+  implementation("com.google.mediapipe:tasks-genai:0.10.27")
   implementation(libs.logging.interceptor)
   implementation(libs.moshi.kotlin)
   implementation(libs.okhttp)
