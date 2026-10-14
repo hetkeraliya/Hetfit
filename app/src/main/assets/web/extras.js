@@ -202,27 +202,31 @@
     st.alarms = Array.isArray(st.alarms) ? st.alarms : [];
     for (let i = 0; i < 5; i++) if (!st.alarms[i]) st.alarms[i] = { slot: i, enabled: false, hour: 7, minute: 0, days: 0 };
     st.inactivity = st.inactivity || { enabled: false, threshold: 60, startHour: 8, endHour: 21 };
-    const chk = (id, label, on) => '<label style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;font-weight:600"><span>' + label + '</span><input type="checkbox" id="' + id + '" ' + (on ? 'checked' : '') + ' style="width:22px;height:22px;accent-color:var(--accent)"></label>';
+    const chk = (id, label, on) => '<label class="st-check"><span>' + label + '</span><input type="checkbox" id="' + id + '" ' + (on ? 'checked' : '') + '></label>';
     const sel = (id, opts, cur) => '<select id="' + id + '" class="mo-input" style="width:auto">' + opts.map((o) => '<option value="' + o[0] + '"' + (String(o[0]) === String(cur) ? ' selected' : '') + '>' + o[1] + '</option>').join('') + '</select>';
 
-    // Gadgetbridge-style quick actions
-    const feat = h('div', 'rn-card');
-    feat.innerHTML = '<h4>Band features</h4>' +
-      '<p class="mo-note" style="margin-top:0">Same building blocks Gadgetbridge / Zepp / Mi Fit use: find device, clock, goal, weather, GPS, alerts.</p>' +
-      '<div class="mo-btns" style="flex-wrap:wrap">' +
-      '<button type="button" class="primary" id="bf-find">Find band</button>' +
-      '<button type="button" id="bf-stop">Stop find</button>' +
-      '<button type="button" id="bf-time">Sync time</button>' +
-      '<button type="button" id="bf-hr">Measure HR</button>' +
-      '<button type="button" id="bf-weather">Send weather</button>' +
-      '<button type="button" id="bf-music">Push now playing</button>' +
-      '<button type="button" class="primary" id="bf-zepp">Import from Zepp</button>' +
-      '<button type="button" id="bf-hc">Health Connect</button>' +
+    // Quick actions — compact, no wall of text
+    const feat = h('div', 'rn-card st-card');
+    feat.innerHTML =
+      '<h4>Actions</h4>' +
+      '<div class="st-actions">' +
+        '<button type="button" class="primary" id="bf-find">Find</button>' +
+        '<button type="button" id="bf-stop">Stop</button>' +
+        '<button type="button" id="bf-time">Time</button>' +
+        '<button type="button" id="bf-hr">HR</button>' +
+        '<button type="button" id="bf-weather">Weather</button>' +
+        '<button type="button" id="bf-music">Music</button>' +
       '</div>' +
-      '<p class="mo-note" id="bf-zepp-status" style="margin-top:8px">Pulls steps, HR, sleep &amp; workouts that Zepp already saved on this phone (via Health Connect).</p>' +
-      '<div style="display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap;font-weight:600">' +
-      '<span>Step goal</span><input type="number" id="bf-goal" class="mo-input" style="width:100px" value="' + (st.stepGoal || 8000) + '" min="1000" max="100000" step="500">' +
-      '<button type="button" id="bf-goal-save">Set on band</button></div>';
+      '<div class="st-row">' +
+        '<span class="st-label">Step goal</span>' +
+        '<input type="number" id="bf-goal" class="mo-input st-input" value="' + (st.stepGoal || 8000) + '" min="1000" max="100000" step="500">' +
+        '<button type="button" id="bf-goal-save" class="st-mini">Set</button>' +
+      '</div>' +
+      '<div class="st-row st-row-gap">' +
+        '<button type="button" class="primary st-flex" id="bf-zepp">Import Health Connect</button>' +
+        '<button type="button" class="st-mini" id="bf-hc">Settings</button>' +
+      '</div>' +
+      '<p class="mo-note st-status" id="bf-zepp-status">Health Connect</p>';
     stack.appendChild(feat);
     const go = (fn, msg) => () => { try { toast(fn() || msg); } catch (e) { toast('Failed'); } };
     if (feat.querySelector('#bf-find')) feat.querySelector('#bf-find').onclick = go(() => A.findBand && A.findBand(), 'Finding…');
@@ -243,22 +247,36 @@
     if (A.getHealthConnectStatus && zeppStatus) {
       try {
         const st = JSON.parse(A.getHealthConnectStatus() || '{}');
-        zeppStatus.textContent = (st.message || '') +
-          (st.zeppInstalled ? ' · Zepp detected on phone' : ' · Zepp app not found — install Zepp / Zepp Life') +
-          (st.available ? '' : ' · Health Connect missing');
+        zeppStatus.textContent = (st.message || 'Health Connect') +
+          (st.gadgetbridgeInstalled ? ' · Gadgetbridge detected' : '') +
+          (st.zeppInstalled ? ' · Zepp detected' : '') +
+          (!st.gadgetbridgeInstalled && !st.zeppInstalled ? ' · No Gadgetbridge/Zepp found' : '') +
+          (st.available ? '' : ' · Install/update Health Connect');
       } catch (e) {}
     }
     if (feat.querySelector('#bf-zepp')) feat.querySelector('#bf-zepp').onclick = () => {
-      if (!A.importFromZepp) { toast('Update the app binary'); return; }
-      toast(A.importFromZepp());
+      const bridge = window.KestrelAndroidBridge;
+      if (!bridge || typeof bridge.importFromZepp !== 'function') {
+        toast('This build is missing Health Connect import. Rebuild the APK with the latest MainActivity.kt.');
+        return;
+      }
+      toast('Importing from Health Connect…');
+      try {
+        const msg = bridge.importFromZepp();
+        toast(msg || 'Import finished');
+        if (zeppStatus) zeppStatus.textContent = msg || 'Import finished';
+        try { if (typeof window.kestrelReload === 'function') window.kestrelReload(); } catch (e) {}
+      } catch (e) {
+        toast('Import failed: ' + (e && e.message ? e.message : e));
+      }
     };
     if (feat.querySelector('#bf-hc')) feat.querySelector('#bf-hc').onclick = () => {
-      if (A.openHealthConnectSettings) A.openHealthConnectSettings();
-      else toast('Open Health Connect in system settings');
+      if (A && typeof A.openHealthConnectSettings === 'function') A.openHealthConnectSettings();
+      else toast('Open Health Connect in system settings and allow Sleep (and Steps/HR if available)');
     };
 
     const set = h('div', 'rn-card');
-    set.innerHTML = '<h4>Band settings</h4>' +
+    set.innerHTML = '<h4>Preferences</h4>' +
       '<div style="display:flex;justify-content:space-between;align-items:center;font-weight:600;padding:6px 0"><span>Heart-rate check every</span>' + sel('bs-hr', [[0, 'Off'], [1, '1 min'], [5, '5 min'], [10, '10 min'], [30, '30 min']], st.hrInterval == null ? 5 : st.hrInterval) + '</div>' +
       chk('bs-sleephr', 'Heart rate during sleep', st.sleepHr !== false) + chk('bs-lift', 'Raise wrist to wake screen', st.lift !== false) + chk('bs-goal', 'Notify when step goal is reached', st.goalNotify !== false) +
       chk('bs-runbuzz', 'Buzz band when I start / finish a run and every km', st.runBuzz !== false) + chk('bs-mirror', 'Ask to track on phone (GPS map + band HR) when I start a workout on the band', st.mirrorWorkout !== false) + chk('bs-gpsband', 'Send phone GPS to band during workouts (speed & distance on band)', st.sendGpsToBand !== false) +
@@ -301,7 +319,7 @@
     stack.appendChild(rem);
 
     const al = h('div', 'rn-card');
-    al.innerHTML = '<h4>Band alarms</h4>' +
+    al.innerHTML = '<h4>Alarms</h4>' +
       '<div class="mo-btns" style="margin-bottom:12px"><button type="button" id="al-phone-sync" class="primary">Sync phone alarm → band</button></div>' +
       '<p class="mo-note" style="margin-top:0">Pulls your next Clock-app alarm and writes it to band slot 1. Android only exposes the next alarm, not the full list.</p>' +
       st.alarms.slice(0, 5).map((a, i) =>
@@ -355,9 +373,9 @@
     let nc = { enabled: false, all: false, packages: [], access: false };
     try { nc = JSON.parse(A.getNotifyConfig()); } catch (e) {}
     const nf = h('div', 'rn-card');
-    nf.innerHTML = '<h4>Phone notifications on band</h4>' + chk('nf-on', 'Show phone notifications on the band', nc.enabled) + chk('nf-all', 'All apps', nc.all) +
+    nf.innerHTML = '<h4>Notifications</h4>' + chk('nf-on', 'Show phone notifications on the band', nc.enabled) + chk('nf-all', 'All apps', nc.all) +
       '<div id="nf-apps" style="' + (nc.all ? 'opacity:.4;pointer-events:none' : '') + '">' + NOTIFY_APPS.map((a) => chk('nf-' + a[0].replace(/\./g, '_'), a[1], nc.packages.indexOf(a[0]) >= 0)).join('') + '</div>' +
-      '<p class="mo-note">' + (nc.access ? 'Notification access is granted.' : 'Android needs you to allow “Notification access” for Kestrel once.') + '</p>' +
+      '<p class="mo-note st-status">' + (nc.access ? 'Access granted' : 'Allow notification access once') + '</p>' +
       '<div class="mo-btns"><button class="primary" id="nf-save">Save</button>' + (nc.access ? '' : '<button id="nf-grant">Allow access</button>') + '<button id="nf-test">Send test</button></div>';
     stack.appendChild(nf);
     nf.querySelector('#nf-all').onchange = (e) => { nf.querySelector('#nf-apps').style.cssText = e.target.checked ? 'opacity:.4;pointer-events:none' : ''; };
@@ -377,7 +395,7 @@
   function renderBackup(stack) {
     const c = h('div', 'rn-card');
     c.innerHTML = '<h4>Export</h4><div class="mo-btns"><button id="bk-csv">Daily CSV</button><button id="bk-json">Daily JSON</button>' + (A && A.exportSamplesCsv ? '<button id="bk-min">Band minutes CSV</button>' : '') + '</div>' +
-      '<p class="mo-note">Files are saved to Downloads/Kestrel.</p>';
+      '<p class="mo-note st-status">Saved to Downloads/Kestrel</p>';
     stack.appendChild(c);
     const fire = (id) => { const b = $(id); if (b) b.click(); };
     c.querySelector('#bk-csv').onclick = () => fire('export-csv');
@@ -385,7 +403,7 @@
     const mn = c.querySelector('#bk-min'); if (mn) mn.onclick = () => toast(A.exportSamplesCsv());
 
     const b = h('div', 'rn-card');
-    b.innerHTML = '<h4>Full backup</h4><p class="mo-note" style="margin-top:0">Everything in the app: days, workouts, notes, water, mood, settings and run records.</p>' +
+    b.innerHTML = '<h4>Backup</h4><p class="mo-note st-status">Days, workouts, notes, water, mood, settings, runs</p>' +
       '<div class="mo-btns"><button class="primary" id="bk-save">Create backup</button><button id="bk-restore">Restore backup…</button></div><input type="file" id="bk-file" accept=".json,application/json" class="hidden">';
     stack.appendChild(b);
     b.querySelector('#bk-save').onclick = () => {
@@ -419,13 +437,13 @@
   function renderConn(stack) {
     const c = h('div', 'rn-card fx-conn');
     c.innerHTML =
-      '<h4>Band connection</h4>' +
+      '<h4>Connection</h4>' +
       '<div id="cn-body">Loading…</div>' +
       '<div class="mo-btns">' +
-        '<button class="primary" id="cn-connect">Connect / Pair</button>' +
-        '<button id="cn-sync">Sync now</button>' +
-        '<button id="cn-hr">Heart rate</button>' +
-        '<button id="cn-buzz">Vibrate</button>' +
+        '<button class="primary" id="cn-connect">Connect</button>' +
+        '<button id="cn-sync">Sync</button>' +
+        '<button id="cn-hr">HR</button>' +
+        '<button id="cn-buzz">Buzz</button>' +
       '</div>' +
       '<div class="fx-prog" id="cn-prog"><i></i></div>';
     stack.appendChild(c);
