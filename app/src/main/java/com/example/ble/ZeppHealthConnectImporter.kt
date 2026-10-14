@@ -41,7 +41,10 @@ object ZeppHealthConnectImporter {
   val ZEPP_PACKAGES = listOf(
     "com.huami.watch.hmwatchmanager", // Zepp
     "com.xiaomi.hm.health",           // Zepp Life / Mi Fit
-    "com.huami.midong"                // older Huami
+    "com.huami.midong",               // older Huami
+    "nodomain.freeyourgadget.gadgetbridge", // Gadgetbridge
+    "nodomain.freeyourgadget.gadgetbridge.nightly",
+    "nodomain.freeyourgadget.gadgetbridge.banglejs"
   )
 
   private val PERMISSIONS = setOf(
@@ -64,7 +67,12 @@ object ZeppHealthConnectImporter {
     }
     o.put("available", availability == HealthConnectClient.SDK_AVAILABLE)
     o.put("sdkStatus", availability)
-    o.put("zeppInstalled", ZEPP_PACKAGES.any { isInstalled(context, it) })
+    o.put("zeppInstalled", listOf("com.huami.watch.hmwatchmanager", "com.xiaomi.hm.health", "com.huami.midong").any { isInstalled(context, it) })
+    o.put("gadgetbridgeInstalled", listOf(
+      "nodomain.freeyourgadget.gadgetbridge",
+      "nodomain.freeyourgadget.gadgetbridge.nightly",
+      "nodomain.freeyourgadget.gadgetbridge.banglejs"
+    ).any { isInstalled(context, it) })
     o.put("zeppPackages", org.json.JSONArray(ZEPP_PACKAGES.filter { isInstalled(context, it) }))
     when (availability) {
       HealthConnectClient.SDK_AVAILABLE -> o.put("message", "Health Connect ready")
