@@ -607,3 +607,21 @@ button:active, .rn-btn:active, .rn-chip:active, .rn-pill:active,
 .plan-mini b {
   display: block; font-size: 12px; font-weight: 800; color: var(--ink, #454B5C); margin-top: 2px;
 }
+
+/* settings uniform buttons */
+#band-root button,
+#data-root button,
+#band-root .mo-btns button,
+#band-root .st-actions button,
+#data-root .mo-btns button {
+  background: rgba(255,255,255,.72) !important;
+  color: #454B5C !important;
+  border: 1px solid rgba(69,75,92,.12) !important;
+  box-shadow: none !important;
+  font-weight: 700 !important;
+}
+#band-root button:active,
+#data-root button:active {
+  background: rgba(69,75,92,.12) !important;
+  transform: scale(0.97);
+}
