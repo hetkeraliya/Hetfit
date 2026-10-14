@@ -1,6 +1,7 @@
 <resources>
     <string name="app_name">Kestrel</string>
     <string name="widget_dashboard_name">Kestrel Health Dashboard</string>
+    <string name="widget_health_desc">Real-time steps, heart rate, calories, workouts and streak</string>
     <string name="widget_dashboard_desc">Real-time steps, heart rate, calories, workouts and streak</string>
     <string name="widget_quick_name">Kestrel Quick Health</string>
     <string name="widget_quick_desc">Compact step counter, goal progress and heart rate</string>
