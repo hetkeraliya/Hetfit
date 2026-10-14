@@ -291,3 +291,287 @@ button:active { transform: scale(.97); }
 .mo-mood button .mood-ico { color: #454B5C; }
 .mo-mood button.active { background: rgba(69,75,92,.12) !important; border-color: #454B5C !important; }
 .fx-conn #cn-body b { margin-right: 6px; }
+
+/* ============================================================
+   Premium native motion (GPU-only: transform + opacity)
+   Feels like Material / iOS: soft, short, purposeful
+   ============================================================ */
+:root {
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.3, 0.64, 1);
+  --ease-std: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-fast: .18s;
+  --dur-med: .32s;
+  --dur-slow: .48s;
+}
+
+/* Smooth scrolling + native overscroll feel */
+html { scroll-behavior: smooth; }
+body, .tab-page, .sheet-stack, .rn-share {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
+
+/* Page enter — Material-like slide + fade */
+.tab-pages.dir-fwd .tab-page.active  {
+  animation: pg-fwd var(--dur-med) var(--ease-out) both !important;
+}
+.tab-pages.dir-back .tab-page.active {
+  animation: pg-back var(--dur-med) var(--ease-out) both !important;
+}
+@keyframes pg-fwd {
+  from { opacity: 0; transform: translate3d(18px, 0, 0); }
+  to   { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+@keyframes pg-back {
+  from { opacity: 0; transform: translate3d(-18px, 0, 0); }
+  to   { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+/* Staggered card reveal on tab open */
+.tab-page.active .glass-card,
+.tab-page.active .rn-card,
+.tab-page.active .health-block,
+.tab-page.active .metric-card,
+.tab-page.active .today-card {
+  animation: card-rise var(--dur-slow) var(--ease-out) both !important;
+}
+.tab-page.active .glass-card:nth-child(1),
+.tab-page.active .rn-card:nth-child(1),
+.tab-page.active .health-block:nth-child(1) { animation-delay: .02s !important; }
+.tab-page.active .glass-card:nth-child(2),
+.tab-page.active .rn-card:nth-child(2),
+.tab-page.active .health-block:nth-child(2) { animation-delay: .06s !important; }
+.tab-page.active .glass-card:nth-child(3),
+.tab-page.active .rn-card:nth-child(3),
+.tab-page.active .health-block:nth-child(3) { animation-delay: .10s !important; }
+.tab-page.active .glass-card:nth-child(4),
+.tab-page.active .rn-card:nth-child(4),
+.tab-page.active .health-block:nth-child(4) { animation-delay: .14s !important; }
+.tab-page.active .glass-card:nth-child(n+5),
+.tab-page.active .rn-card:nth-child(n+5),
+.tab-page.active .health-block:nth-child(n+5) { animation-delay: .16s !important; }
+
+@keyframes card-rise {
+  from { opacity: 0; transform: translate3d(0, 12px, 0); }
+  to   { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+/* Bottom nav — pill indicator + icon pop */
+.tab-strip, .bottom-nav, nav.tabs {
+  transition: box-shadow var(--dur-med) ease;
+}
+.tab-indicator {
+  transition: transform .38s var(--ease-out), width .38s var(--ease-out) !important;
+}
+.tab-strip-btn, .bottom-nav button, .nav-item {
+  transition: color var(--dur-fast) ease, background var(--dur-fast) ease !important;
+}
+.tab-strip-btn svg, .bottom-nav button svg, .nav-item svg {
+  transition: transform .3s var(--ease-spring) !important;
+}
+.tab-strip-btn.active svg,
+.bottom-nav button.active svg,
+.nav-item.active svg {
+  transform: scale(1.12) !important;
+}
+
+/* Buttons — press scale + soft color */
+button, .rn-btn, .rn-chip, .rn-pill, .chip, .sub-tab-btn,
+.mo-btns button, .range-btn, .group-chips .chip {
+  transition:
+    transform var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) ease,
+    color var(--dur-fast) ease,
+    border-color var(--dur-fast) ease,
+    box-shadow var(--dur-fast) ease !important;
+  -webkit-tap-highlight-color: transparent;
+}
+button:active, .rn-btn:active, .rn-chip:active, .rn-pill:active,
+.chip:active, .sub-tab-btn:active, .mo-btns button:active {
+  transform: scale(0.96) !important;
+}
+.rn-start:active {
+  transform: scale(0.92) !important;
+}
+
+/* Cards — light lift on press */
+.glass-card, .rn-card, .metric-card, .rn-item, .rn-pr {
+  transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-med) ease !important;
+}
+.rn-item:active, .rn-pr:active {
+  transform: scale(0.985) !important;
+}
+
+/* Sub-tabs */
+.sub-tab-btn {
+  transition: background var(--dur-fast) ease, color var(--dur-fast) ease, transform var(--dur-fast) ease !important;
+}
+.sub-tab-btn.active {
+  transition: background .22s var(--ease-out), color .22s ease !important;
+}
+
+/* Overlays — sheet slide up */
+.rn-live, .rn-detail, .rn-share, .rn-overlay, .overlay {
+  transition: opacity var(--dur-med) var(--ease-out) !important;
+}
+.rn-live.open, .rn-detail.open, .rn-share.open, .rn-overlay.open, .overlay.open {
+  animation: sheet-in var(--dur-med) var(--ease-out) both;
+}
+@keyframes sheet-in {
+  from { opacity: 0; transform: translate3d(0, 24px, 0); }
+  to   { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+/* Countdown pulse */
+.rn-cd.open {
+  animation: cd-pop .45s var(--ease-spring) both;
+}
+@keyframes cd-pop {
+  from { opacity: 0; transform: scale(0.7); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* Bars / rings — grow in */
+.rn-bars em, .rn-bars i {
+  transform-origin: bottom center;
+  animation: bar-grow .55s var(--ease-out) both;
+}
+@keyframes bar-grow {
+  from { transform: scaleY(0.08); opacity: .4; }
+  to   { transform: scaleY(1); opacity: 1; }
+}
+
+/* Toast */
+.toast, #toast, .app-toast {
+  animation: toast-in .35s var(--ease-out) both;
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translate3d(0, 12px, 0); }
+  to   { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+/* Band offer bottom sheet */
+.rn-band-offer.open .rn-band-offer-card {
+  animation: sheet-up .36s var(--ease-out) both;
+}
+@keyframes sheet-up {
+  from { opacity: 0; transform: translate3d(0, 40px, 0); }
+  to   { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+/* Hero start button subtle breathe when idle */
+.rn-start {
+  transition: transform .2s var(--ease-spring), box-shadow .3s ease !important;
+}
+.rn-hero-clean .rn-start {
+  box-shadow: 0 8px 24px rgba(69, 75, 92, 0.22);
+}
+
+/* List items cascade */
+.rn-list .rn-item {
+  animation: card-rise .4s var(--ease-out) both;
+}
+.rn-list .rn-item:nth-child(1) { animation-delay: .03s; }
+.rn-list .rn-item:nth-child(2) { animation-delay: .07s; }
+.rn-list .rn-item:nth-child(3) { animation-delay: .11s; }
+.rn-list .rn-item:nth-child(4) { animation-delay: .14s; }
+.rn-list .rn-item:nth-child(5) { animation-delay: .17s; }
+
+/* Reduced motion — respect system setting */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  body::before { animation: none !important; }
+}
+
+.just-mounted { opacity: 0; transform: translate3d(0, 10px, 0); }
+.just-mounted.mounted {
+  opacity: 1; transform: none;
+  transition: opacity .4s cubic-bezier(0.16,1,0.3,1), transform .4s cubic-bezier(0.16,1,0.3,1);
+}
+.is-pressing { transform: scale(0.97) !important; }
+
+
+/* ===== Settings declutter ===== */
+#band-root .rn-card.st-card,
+#band-root .rn-card { padding: 14px 14px 12px !important; }
+#band-root h4 { margin: 0 0 10px; font-size: 15px; font-weight: 800; letter-spacing: -0.01em; }
+#band-root .mo-note { margin: 6px 0 0; font-size: 11.5px; line-height: 1.35; opacity: 0.65; }
+#band-root .st-status { margin-top: 8px !important; }
+#band-root .st-actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+#band-root .st-actions button {
+  padding: 10px 8px !important;
+  font-size: 12.5px !important;
+  font-weight: 700 !important;
+  border-radius: 12px !important;
+  min-height: 40px;
+}
+#band-root .st-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+#band-root .st-row-gap { margin-top: 10px; }
+#band-root .st-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink, #454B5C);
+  white-space: nowrap;
+}
+#band-root .st-input {
+  width: 88px !important;
+  flex: 0 0 auto;
+  padding: 8px 10px !important;
+  font-size: 14px !important;
+}
+#band-root .st-mini {
+  padding: 8px 12px !important;
+  font-size: 12.5px !important;
+  font-weight: 700 !important;
+  border-radius: 12px !important;
+}
+#band-root .st-flex { flex: 1; }
+#band-root .st-check {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 7px 0;
+  font-weight: 600;
+  font-size: 13.5px;
+  gap: 12px;
+}
+#band-root .st-check input {
+  width: 20px;
+  height: 20px;
+  accent-color: #454B5C;
+  flex-shrink: 0;
+}
+#band-root .mo-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+#band-root .mo-btns button {
+  padding: 9px 12px !important;
+  font-size: 12.5px !important;
+  border-radius: 12px !important;
+}
+#band-root select.mo-input {
+  padding: 6px 10px !important;
+  font-size: 13px !important;
+  min-height: 36px;
+}
+/* Tighter connection card */
+#band-root .fx-conn #cn-body { font-size: 13.5px; line-height: 1.4; margin-bottom: 10px; }
+#band-root .sheet-stack,
+#band-root { display: flex; flex-direction: column; gap: 10px; }
