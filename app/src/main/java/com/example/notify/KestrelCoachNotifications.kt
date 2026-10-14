@@ -103,7 +103,7 @@ object KestrelCoachNotifications {
     val st = MiBandManager.get(ctx).uiState.value
     val steps = st.liveSteps
     val hr = st.liveHeartRate
-    val battery = st.battery
+    val battery = st.batteryPercent
 
     val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
     val title: String
