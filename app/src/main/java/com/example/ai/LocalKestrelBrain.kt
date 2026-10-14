@@ -14,6 +14,12 @@ import org.json.JSONObject
 object LocalKestrelBrain {
 
   fun answer(context: Context, question: String): String {
+    // Prefer real on-device SLM when model is present
+    if (OnDeviceSlm.isModelPresent(context) || OnDeviceSlm.statusJson(context).contains("\"loaded\":true")) {
+      val ctxBlock = buildContextBlock(context)
+      val slm = OnDeviceSlm.coach(context, question, ctxBlock)
+      if (slm.isNotBlank() && !slm.startsWith("SLM not ready")) return slm
+    }
     val q = question.lowercase()
     val st = MiBandManager.get(context).uiState.value
     val plan = KestrelCoachNotifications.planProgress(context)
@@ -45,6 +51,22 @@ object LocalKestrelBrain {
       else ->
         daySummary(steps, hr, water, waterGoal, mood, planPct, remaining) +
           "\n\nYou can ask about steps, sleep, water, mood, plan, or heart rate — all answered on this phone, offline."
+    }
+  }
+
+  private fun buildContextBlock(context: Context): String {
+    val st = com.example.ble.MiBandManager.get(context).uiState.value
+    val plan = com.example.notify.KestrelCoachNotifications.planProgress(context)
+    val life = com.example.widget.KestrelWidgetManager.readLife(context)
+    return buildString {
+      append("steps=").append(st.liveSteps).append("; ")
+      append("hr=").append(st.liveHeartRate).append("; ")
+      append("battery=").append(st.batteryPercent).append("; ")
+      append("waterMl=").append(life.optInt("waterMl")).append("; ")
+      append("waterGoal=").append(life.optInt("waterGoal", 2500)).append("; ")
+      append("mood=").append(life.optInt("moodScore")).append("; ")
+      append("planPct=").append(plan.optInt("overallPct", -1)).append("; ")
+      append("planRemaining=").append(plan.optInt("remaining", -1))
     }
   }
 
