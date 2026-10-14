@@ -138,6 +138,62 @@
   const TAGS = ['Calm', 'Happy', 'Focused', 'Tired', 'Stressed', 'Anxious', 'Sore', 'Motivated'];
   let moodDraft = { score: 0, tags: [], note: '' };
 
+
+  function appendLocalCoach(stack) {
+    const ai = h('div', 'rn-card');
+    ai.innerHTML = '<h4>On-device SLM coach</h4>' +
+      '<p class="mo-note st-status" id="slm-status">Small language model on this phone — no API key after download.</p>' +
+      '<div class="st-actions" style="margin-top:8px">' +
+      '<button type="button" id="slm-dl">Download model</button>' +
+      '<button type="button" id="slm-load">Load model</button>' +
+      '<button type="button" data-q="How am I today? Give a short health summary.">Today</button>' +
+      '<button type="button" data-q="Advise me on water and hydration today.">Water</button>' +
+      '<button type="button" data-q="Advise me on mood and stress today.">Mood</button>' +
+      '<button type="button" data-q="What should I finish on my plan today?">Plan</button>' +
+      '</div><p class="mo-note" id="local-coach-out" style="margin-top:10px"></p>';
+    stack.appendChild(ai);
+    const out = ai.querySelector('#local-coach-out');
+    const stEl = ai.querySelector('#slm-status');
+    const refreshSlm = () => {
+      try {
+        if (A && typeof A.getOnDeviceModelStatus === 'function') {
+          const s = JSON.parse(A.getOnDeviceModelStatus() || '{}');
+          const mb = s.bytes ? Math.round(s.bytes / 1048576) + ' MB' : '—';
+          stEl.textContent = (s.loaded ? 'Model loaded' : (s.present ? 'Model on disk (' + mb + ') — tap Load' : 'Model not downloaded')) +
+            (s.downloadProgress >= 0 && s.downloadProgress <= 100 ? ' · download ' + s.downloadProgress + '%' : '') +
+            (s.lastError && s.lastError !== null ? ' · ' + s.lastError : '');
+        }
+      } catch (e) {}
+    };
+    refreshSlm();
+    const dl = ai.querySelector('#slm-dl');
+    if (dl) dl.onclick = () => {
+      if (!A || typeof A.downloadOnDeviceModel !== 'function') { out.textContent = 'Rebuild app for SLM download.'; return; }
+      out.textContent = A.downloadOnDeviceModel();
+      refreshSlm();
+    };
+    const ld = ai.querySelector('#slm-load');
+    if (ld) ld.onclick = () => {
+      if (!A || typeof A.loadOnDeviceModel !== 'function') { out.textContent = 'Rebuild app.'; return; }
+      out.textContent = A.loadOnDeviceModel();
+      refreshSlm();
+    };
+    ai.querySelectorAll('button[data-q]').forEach((b) => {
+      b.onclick = () => {
+        pushLifeWidgets();
+        out.textContent = 'Thinking on-device…';
+        setTimeout(() => {
+          if (A && typeof A.askLocalCoach === 'function') {
+            out.textContent = A.askLocalCoach(b.getAttribute('data-q') || 'summary');
+          } else {
+            out.textContent = 'Rebuild the app binary to enable on-device coach.';
+          }
+          refreshSlm();
+        }, 50);
+      };
+    });
+  }
+
   function renderLife(stack) {
     const w = load(WATER, { goal: 2500, days: {} });
     const key = todayKey();
@@ -189,6 +245,7 @@
     const mean = (x) => x.reduce((s, v) => s + v, 0) / x.length;
     if (good.length >= 3 && bad.length >= 3) tr.innerHTML += '<p class="mo-note">On nights with 7h+ sleep your mood averaged ' + mean(good).toFixed(1) + '/5, otherwise ' + mean(bad).toFixed(1) + '/5.</p>';
     stack.appendChild(tr);
+    try { appendLocalCoach(stack); } catch (e) {}
   }
 
   // ---------------- Band: PAI, settings, alarms, phone notifications ----------------
@@ -196,61 +253,6 @@
     ['com.google.android.gm', 'Gmail'], ['com.google.android.apps.messaging', 'Messages'], ['com.google.android.dialer', 'Phone (missed calls)'], ['com.twitter.android', 'X / Twitter'], ['com.snapchat.android', 'Snapchat']];
   const DAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
-
-    // On-device coach (no API key)
-    const ai = h('div', 'rn-card');
-    ai.innerHTML = '<h4>On-device SLM coach</h4>' +
-      '<p class="mo-note st-status" id="slm-status">Small language model on this phone — no API key after download.</p>' +
-      '<div class="st-actions" style="margin-top:8px">' +
-      '<button type="button" id="slm-dl">Download model</button>' +
-      '<button type="button" id="slm-load">Load model</button>' +
-      '<button type="button" data-q="How am I today? Give a short health summary.">Today</button>' +
-      '<button type="button" data-q="Advise me on water and hydration today.">Water</button>' +
-      '<button type="button" data-q="Advise me on mood and stress today.">Mood</button>' +
-      '<button type="button" data-q="What should I finish on my plan today?">Plan</button>' +
-      '</div><p class="mo-note" id="local-coach-out" style="margin-top:10px"></p>';
-    stack.appendChild(ai);
-    const out = ai.querySelector('#local-coach-out');
-    const stEl = ai.querySelector('#slm-status');
-    const refreshSlm = () => {
-      try {
-        if (A && typeof A.getOnDeviceModelStatus === 'function') {
-          const s = JSON.parse(A.getOnDeviceModelStatus() || '{}');
-          const mb = s.bytes ? Math.round(s.bytes / 1048576) + ' MB' : '—';
-          stEl.textContent = (s.loaded ? 'Model loaded' : (s.present ? 'Model on disk (' + mb + ') — tap Load' : 'Model not downloaded')) +
-            (s.downloadProgress >= 0 && s.downloadProgress <= 100 ? ' · download ' + s.downloadProgress + '%' : '') +
-            (s.lastError && s.lastError !== null ? ' · ' + s.lastError : '');
-        }
-      } catch (e) {}
-    };
-    refreshSlm();
-    setInterval(refreshSlm, 2000);
-    const dl = ai.querySelector('#slm-dl');
-    if (dl) dl.onclick = () => {
-      if (!A || typeof A.downloadOnDeviceModel !== 'function') { out.textContent = 'Rebuild app for SLM download.'; return; }
-      out.textContent = A.downloadOnDeviceModel();
-      refreshSlm();
-    };
-    const ld = ai.querySelector('#slm-load');
-    if (ld) ld.onclick = () => {
-      if (!A || typeof A.loadOnDeviceModel !== 'function') { out.textContent = 'Rebuild app.'; return; }
-      out.textContent = A.loadOnDeviceModel();
-      refreshSlm();
-    };
-    ai.querySelectorAll('button[data-q]').forEach((b) => {
-      b.onclick = () => {
-        pushLifeWidgets();
-        out.textContent = 'Thinking on-device…';
-        setTimeout(() => {
-          if (A && typeof A.askLocalCoach === 'function') {
-            out.textContent = A.askLocalCoach(b.getAttribute('data-q') || 'summary');
-          } else {
-            out.textContent = 'Rebuild the app binary to enable on-device coach.';
-          }
-          refreshSlm();
-        }, 50);
-      };
-    });
 
   function renderPai(stack) {
     // PAI
@@ -458,6 +460,7 @@
     };
     const gr = nf.querySelector('#nf-grant'); if (gr) gr.onclick = () => A.openNotificationAccess();
     nf.querySelector('#nf-test').onclick = () => toast(A.sendTestNotification() ? 'Sent to band' : 'Connect the band first');
+    try { appendLocalCoach(stack); } catch (e) {}
   }
 
   // ---------------- Backup ----------------
