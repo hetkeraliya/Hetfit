@@ -716,12 +716,7 @@
   }
 
   function mountAiChat() {
-    window.kestrelOpenAiChat = window.kestrelOpenAiChat || function () {
-      var s = document.getElementById('kestrel-ai-sheet');
-      if (!s) return;
-      s.classList.remove('hidden');
-      s.style.display = 'block';
-    };
+    /* AI chat is fully owned by index.html inline script */
   }
 
   if (document.readyState === 'loading') {
