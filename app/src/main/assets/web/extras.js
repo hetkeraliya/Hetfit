@@ -716,36 +716,45 @@
   }
 
   function mountAiChat() {
-    if (document.getElementById('kestrel-ai-sheet')) return;
-
-    const sheet = document.createElement('div');
-    sheet.id = 'kestrel-ai-sheet';
-    sheet.className = 'hidden';
-    sheet.innerHTML =
-      '<div class="ai-sheet-backdrop" id="ai-sheet-backdrop"></div>' +
-      '<div class="ai-sheet">' +
-        '<div class="ai-sheet-head">' +
-          '<div class="ai-sheet-title"><span class="ai-dot"></span><b>Kestrel chat</b></div>' +
-          '<div class="ai-sheet-tabs">' +
-            '<button type="button" class="ai-tab active" data-tab="chat">Chat</button>' +
-            '<button type="button" class="ai-tab" data-tab="todos">Todos</button>' +
+    let sheet = document.getElementById('kestrel-ai-sheet');
+    if (!sheet) {
+      sheet = document.createElement('div');
+      sheet.id = 'kestrel-ai-sheet';
+      sheet.className = 'hidden';
+      sheet.innerHTML =
+        '<div class="ai-sheet-backdrop" id="ai-sheet-backdrop"></div>' +
+        '<div class="ai-sheet">' +
+          '<div class="ai-sheet-head">' +
+            '<div class="ai-sheet-title"><span class="ai-dot"></span><b>Kestrel chat</b></div>' +
+            '<div class="ai-sheet-tabs">' +
+              '<button type="button" class="ai-tab active" data-tab="chat">Chat</button>' +
+              '<button type="button" class="ai-tab" data-tab="todos">Todos</button>' +
+            '</div>' +
+            '<button type="button" class="ai-sheet-close" id="ai-sheet-close" aria-label="Close">✕</button>' +
           '</div>' +
-          '<button type="button" class="ai-sheet-close" id="ai-sheet-close" aria-label="Close">✕</button>' +
-        '</div>' +
-        '<p class="mo-note ai-sheet-status" id="ai-sheet-status"></p>' +
-        '<div class="ai-sheet-body" id="ai-sheet-chat"></div>' +
-        '<div class="ai-sheet-body hidden" id="ai-sheet-todos"></div>' +
-        '<div class="ai-sheet-suggest" id="ai-sheet-suggest">' +
-          '<button type="button" data-q="How am I today?">Today</button>' +
-          '<button type="button" data-q="Make a todo list for tomorrow based on a normal school day with math and coding.">Tomorrow todos</button>' +
-          '<button type="button" data-q="Water and steps advice.">Health</button>' +
-        '</div>' +
-        '<form class="ai-sheet-input" id="ai-sheet-form">' +
-          '<input type="text" id="ai-sheet-input" placeholder="Message Kestrel…" autocomplete="off" enterkeyhint="send" />' +
-          '<button type="submit" id="ai-sheet-send">Send</button>' +
-        '</form>' +
-      '</div>';
-    document.body.appendChild(sheet);
+          '<p class="mo-note ai-sheet-status" id="ai-sheet-status"></p>' +
+          '<div class="ai-sheet-body" id="ai-sheet-chat"></div>' +
+          '<div class="ai-sheet-body hidden" id="ai-sheet-todos"></div>' +
+          '<div class="ai-sheet-suggest" id="ai-sheet-suggest">' +
+            '<button type="button" data-q="How am I today?">Today</button>' +
+            '<button type="button" data-q="Make a todo list for tomorrow based on a normal school day with math and coding.">Tomorrow todos</button>' +
+            '<button type="button" data-q="Water and steps advice.">Health</button>' +
+          '</div>' +
+          '<form class="ai-sheet-input" id="ai-sheet-form">' +
+            '<input type="text" id="ai-sheet-input" placeholder="Message Kestrel…" autocomplete="off" enterkeyhint="send" />' +
+            '<button type="submit" id="ai-sheet-send">Send</button>' +
+          '</form>' +
+        '</div>';
+      document.body.appendChild(sheet);
+    }
+    if (sheet.dataset.wired === '1') {
+      window.kestrelOpenAiChat = function() {
+        sheet.classList.remove('hidden');
+        sheet.style.display = 'block';
+      };
+      return;
+    }
+    sheet.dataset.wired = '1';
 
     const chatEl = () => sheet.querySelector('#ai-sheet-chat');
     const todosEl = () => sheet.querySelector('#ai-sheet-todos');
@@ -801,6 +810,8 @@
 
     function openSheet() {
       sheet.classList.remove('hidden');
+      sheet.style.display = 'block';
+      sheet.setAttribute('aria-hidden', 'false');
       ui.renderMessages();
       ui.renderTodos();
       try {
@@ -811,7 +822,11 @@
       } catch (e) {}
       setTimeout(() => { const inp = sheet.querySelector('#ai-sheet-input'); if (inp) inp.focus(); }, 200);
     }
-    function closeSheet() { sheet.classList.add('hidden'); }
+    function closeSheet() {
+      sheet.classList.add('hidden');
+      sheet.style.display = 'none';
+      sheet.setAttribute('aria-hidden', 'true');
+    }
 
     sheet.querySelector('#ai-sheet-close').onclick = closeSheet;
     sheet.querySelector('#ai-sheet-backdrop').onclick = closeSheet;
