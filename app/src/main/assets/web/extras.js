@@ -245,7 +245,6 @@
     const mean = (x) => x.reduce((s, v) => s + v, 0) / x.length;
     if (good.length >= 3 && bad.length >= 3) tr.innerHTML += '<p class="mo-note">On nights with 7h+ sleep your mood averaged ' + mean(good).toFixed(1) + '/5, otherwise ' + mean(bad).toFixed(1) + '/5.</p>';
     stack.appendChild(tr);
-    try { appendLocalCoach(stack); } catch (e) {}
   }
 
   // ---------------- Band: PAI, settings, alarms, phone notifications ----------------
@@ -574,4 +573,72 @@
   }
   window.kestrelMoreRender = render;
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else setTimeout(init, 50);
+
+  // Floating AI menu (between content and bottom nav)
+  function mountAiFab() {
+    if (document.getElementById('kestrel-ai-fab')) return;
+    const fab = document.createElement('button');
+    fab.id = 'kestrel-ai-fab';
+    fab.type = 'button';
+    fab.setAttribute('aria-label', 'AI coach');
+    fab.innerHTML = '<span>AI</span>';
+    const panel = document.createElement('div');
+    panel.id = 'kestrel-ai-panel';
+    panel.className = 'hidden';
+    panel.innerHTML =
+      '<div class="ai-panel-card">' +
+        '<div class="ai-panel-head"><b>Kestrel AI</b><button type="button" id="ai-panel-close">✕</button></div>' +
+        '<p class="mo-note st-status" id="ai-panel-status">On-device coach</p>' +
+        '<div class="st-actions">' +
+          '<button type="button" data-q="How am I today? Give a short health summary.">Today</button>' +
+          '<button type="button" data-q="Advise me on water and hydration today.">Water</button>' +
+          '<button type="button" data-q="Advise me on mood and stress today.">Mood</button>' +
+          '<button type="button" data-q="What should I finish on my plan today?">Plan</button>' +
+          '<button type="button" data-q="Steps and activity advice for today.">Steps</button>' +
+          '<button type="button" data-q="Sleep recovery advice.">Sleep</button>' +
+        '</div>' +
+        '<p class="mo-note" id="ai-panel-out" style="margin-top:10px;max-height:120px;overflow:auto"></p>' +
+        '<p class="mo-note st-status">Model download is only in Settings → Band</p>' +
+      '</div>';
+    document.body.appendChild(fab);
+    document.body.appendChild(panel);
+    const out = () => panel.querySelector('#ai-panel-out');
+    const st = () => panel.querySelector('#ai-panel-status');
+    const refresh = () => {
+      try {
+        if (A && typeof A.getOnDeviceModelStatus === 'function') {
+          const s = JSON.parse(A.getOnDeviceModelStatus() || '{}');
+          const mb = s.bytes ? Math.round(s.bytes / 1048576) + ' MB' : '—';
+          st().textContent = s.loaded ? 'SLM loaded' :
+            (s.present ? 'Model on disk (' + mb + ')' : 'Rule-based coach (download model in Settings)');
+        }
+      } catch (e) {}
+    };
+    fab.onclick = () => {
+      panel.classList.toggle('hidden');
+      refresh();
+    };
+    panel.querySelector('#ai-panel-close').onclick = () => panel.classList.add('hidden');
+    panel.querySelectorAll('button[data-q]').forEach((b) => {
+      b.onclick = () => {
+        pushLifeWidgets();
+        out().textContent = 'Thinking…';
+        setTimeout(() => {
+          if (A && typeof A.askLocalCoach === 'function') {
+            out().textContent = A.askLocalCoach(b.getAttribute('data-q') || 'summary');
+          } else {
+            out().textContent = 'Rebuild the app for on-device coach.';
+          }
+          refresh();
+        }, 40);
+      };
+    });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', mountAiFab);
+  } else {
+    mountAiFab();
+  }
+
+
 })();
