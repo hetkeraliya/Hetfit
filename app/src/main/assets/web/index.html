@@ -586,19 +586,22 @@
         <div class="sheet-stack chat-page-stack">
           <div class="chat-page-card">
             <div class="chat-page-head">
-              <strong>Kestrel AI</strong>
+              <button type="button" id="chat-new-btn" class="chat-icon-btn" title="New chat">+</button>
+              <button type="button" id="chat-list-btn" class="chat-icon-btn" title="Chats">=</button>
+              <strong id="chat-title">New chat</strong>
               <span class="chat-page-tabs">
                 <button type="button" class="chat-page-tab on" id="chat-tab-chat">Chat</button>
                 <button type="button" class="chat-page-tab" id="chat-tab-todos">Todos</button>
               </span>
             </div>
-            <p class="chat-page-status" id="chat-page-status">On-device coach</p>
+            <div id="chat-list-panel" class="chat-list-panel" style="display:none;"></div>
+            <p class="chat-page-status" id="chat-page-status">Uses your band + app data on this phone</p>
             <div class="chat-page-messages" id="chat-page-messages"></div>
             <div class="chat-page-todos" id="chat-page-todos" style="display:none;"></div>
             <div class="chat-page-chips" id="chat-page-chips">
-              <button type="button" data-chat-q="How am I today?">Today</button>
-              <button type="button" data-chat-q="Make a todo list for tomorrow for study and health.">Tomorrow todos</button>
-              <button type="button" data-chat-q="Water and steps advice.">Health</button>
+              <button type="button" data-chat-q="How am I today based on all my health data?">Today</button>
+              <button type="button" data-chat-q="Using my steps, sleep, water and plan, make a todo list for tomorrow with study and health.">Tomorrow plan</button>
+              <button type="button" data-chat-q="What should I change in my todos based on how today went?">Revise todos</button>
             </div>
             <form class="chat-page-form" id="chat-page-form">
               <input id="chat-page-input" type="text" placeholder="Message Kestrel…" autocomplete="off" enterkeyhint="send" />
@@ -745,7 +748,7 @@
 
 <script>
 (function () {
-  var CHAT_KEY = 'kestrel.ai.chat.v1';
+  var STORE_KEY = 'kestrel.ai.store.v2';
   var TODO_KEY = 'kestrel.todos.v1';
 
   function $(id) { return document.getElementById(id); }
@@ -755,20 +758,104 @@
   function save(k, v) {
     try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {}
   }
+  function uid() { return 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
   function tomorrowKey() {
     var d = new Date(Date.now() + 86400000);
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   }
 
-  function renderChat() {
+  function defaultStore() {
+    var id = uid();
+    return { activeId: id, chats: [{ id: id, title: 'New chat', messages: [], updated: Date.now() }] };
+  }
+  function getStore() {
+    var s = load(STORE_KEY, null);
+    if (!s || !s.chats || !s.chats.length) {
+      var old = load('kestrel.ai.chat.v1', []);
+      s = defaultStore();
+      if (Array.isArray(old) && old.length) {
+        s.chats[0].messages = old;
+        s.chats[0].title = titleFromMessages(old);
+      }
+      save(STORE_KEY, s);
+    }
+    return s;
+  }
+  function activeChat(s) {
+    s = s || getStore();
+    return s.chats.find(function (x) { return x.id === s.activeId; }) || s.chats[0];
+  }
+  function titleFromMessages(msgs) {
+    var u = (msgs || []).find(function (m) { return m.role === 'user'; });
+    if (!u) return 'New chat';
+    var t = String(u.text || '').trim().replace(/\s+/g, ' ');
+    return t.length > 36 ? t.slice(0, 36) + '...' : t;
+  }
+
+  function renderChatList() {
+    var panel = $('chat-list-panel');
+    if (!panel) return;
+    var s = getStore();
+    panel.innerHTML = s.chats.slice().sort(function (a, b) { return (b.updated || 0) - (a.updated || 0); }).map(function (c) {
+      return '<button type="button" class="chat-list-item' + (c.id === s.activeId ? ' on' : '') + '" data-cid="' + c.id + '">' +
+        '<span>' + String(c.title || 'Chat').replace(/</g, '&lt;') + '</span>' +
+        '<i data-del="' + c.id + '">X</i></button>';
+    }).join('') + '<button type="button" class="chat-list-new" id="chat-list-new">+ New chat</button>';
+
+    panel.querySelectorAll('[data-cid]').forEach(function (btn) {
+      btn.onclick = function (e) {
+        if (e.target && e.target.getAttribute('data-del')) return;
+        var st = getStore();
+        st.activeId = btn.getAttribute('data-cid');
+        save(STORE_KEY, st);
+        panel.style.display = 'none';
+        renderAll();
+      };
+    });
+    panel.querySelectorAll('[data-del]').forEach(function (x) {
+      x.onclick = function (e) {
+        e.stopPropagation();
+        var id = x.getAttribute('data-del');
+        var st = getStore();
+        if (st.chats.length <= 1) {
+          st.chats[0].messages = [];
+          st.chats[0].title = 'New chat';
+          st.chats[0].updated = Date.now();
+        } else {
+          st.chats = st.chats.filter(function (c) { return c.id !== id; });
+          if (st.activeId === id) st.activeId = st.chats[0].id;
+        }
+        save(STORE_KEY, st);
+        renderChatList();
+        renderAll();
+      };
+    });
+    var nn = $('chat-list-new');
+    if (nn) nn.onclick = function () { newChat(); panel.style.display = 'none'; };
+  }
+
+  function newChat() {
+    var s = getStore();
+    var id = uid();
+    s.chats.unshift({ id: id, title: 'New chat', messages: [], updated: Date.now() });
+    s.activeId = id;
+    s.chats = s.chats.slice(0, 30);
+    save(STORE_KEY, s);
+    renderAll();
+  }
+
+  function renderMessages() {
     var box = $('chat-page-messages');
     if (!box) return;
-    var msgs = load(CHAT_KEY, []);
-    if (!Array.isArray(msgs) || !msgs.length) {
-      box.innerHTML = '<div class="chat-bubble bot">Hi — I run on your phone. Ask about health, or describe your day and request <b>tomorrow\'s todos</b>.</div>';
+    var chat = activeChat();
+    var title = $('chat-title');
+    if (title) title.textContent = chat.title || 'New chat';
+    var msgs = chat.messages || [];
+    if (!msgs.length) {
+      box.innerHTML = '<div class="chat-bubble bot">New chat. I can see your <b>steps, heart rate, sleep, water, mood, plan, and band</b> on this phone. Ask anything or request a todo list for tomorrow.</div>';
       return;
     }
-    box.innerHTML = msgs.slice(-50).map(function (m) {
+    box.innerHTML = msgs.slice(-80).map(function (m) {
       return '<div class="chat-bubble ' + (m.role === 'user' ? 'user' : 'bot') + '">' +
         String(m.text || '').replace(/</g, '&lt;').replace(/\n/g, '<br>') + '</div>';
     }).join('');
@@ -778,115 +865,163 @@
   function renderTodos() {
     var box = $('chat-page-todos');
     if (!box) return;
-    var items = (load(TODO_KEY, { items: [] }).items || []).slice(-40);
+    var items = (load(TODO_KEY, { items: [] }).items || []);
     if (!items.length) {
-      box.innerHTML = '<p class="chat-empty">No todos yet. Ask in Chat for a tomorrow list.</p>';
+      box.innerHTML = '<p class="chat-empty">No todos. Ask in Chat for a tomorrow list.</p>';
       return;
     }
     box.innerHTML = items.map(function (t) {
-      return '<label class="chat-todo-item' + (t.done ? ' done' : '') + '">' +
-        '<input type="checkbox" data-tid="' + t.id + '" ' + (t.done ? 'checked' : '') + '/>' +
-        '<span><i>' + (t.tag || '') + '</i> ' + String(t.text || '').replace(/</g, '&lt;') + '</span></label>';
-    }).join('');
-    box.querySelectorAll('input[data-tid]').forEach(function (cb) {
+      return '<div class="chat-todo-row' + (t.done ? ' done' : '') + '" data-tid="' + t.id + '">' +
+        '<label><input type="checkbox" ' + (t.done ? 'checked' : '') + '/> ' +
+        '<span><i>' + (t.tag || '') + '</i> ' + String(t.text || '').replace(/</g, '&lt;') + '</span></label>' +
+        '<button type="button" class="chat-todo-del" data-del="' + t.id + '">X</button></div>';
+    }).join('') +
+      '<div class="chat-todo-actions">' +
+      '<button type="button" id="todo-clear-done">Clear done</button>' +
+      '<button type="button" id="todo-clear-all">Clear all</button></div>';
+
+    box.querySelectorAll('input[type=checkbox]').forEach(function (cb) {
       cb.onchange = function () {
+        var id = cb.closest('[data-tid]').getAttribute('data-tid');
         var o = load(TODO_KEY, { items: [] });
-        (o.items || []).forEach(function (x) { if (x.id === cb.getAttribute('data-tid')) x.done = cb.checked; });
+        (o.items || []).forEach(function (x) { if (x.id === id) x.done = cb.checked; });
         save(TODO_KEY, o);
         renderTodos();
       };
     });
+    box.querySelectorAll('[data-del]').forEach(function (btn) {
+      btn.onclick = function () {
+        var id = btn.getAttribute('data-del');
+        var o = load(TODO_KEY, { items: [] });
+        o.items = (o.items || []).filter(function (x) { return x.id !== id; });
+        save(TODO_KEY, o);
+        renderTodos();
+      };
+    });
+    var cd = $('todo-clear-done');
+    if (cd) cd.onclick = function () {
+      var o = load(TODO_KEY, { items: [] });
+      o.items = (o.items || []).filter(function (x) { return !x.done; });
+      save(TODO_KEY, o);
+      renderTodos();
+    };
+    var ca = $('todo-clear-all');
+    if (ca) ca.onclick = function () {
+      if (!confirm('Clear all todos?')) return;
+      save(TODO_KEY, { items: [] });
+      renderTodos();
+    };
   }
 
-  function genTodos(text) {
-    var low = (text || '').toLowerCase();
-    var items = [];
-    function push(tag, t) {
-      items.push({ id: 't' + Date.now() + Math.random().toString(36).slice(2, 5), text: t, tag: tag, done: false, forDate: tomorrowKey(), created: Date.now() });
-    }
-    if (/exam|test|study|homework|math|code|coding|chapter/.test(low)) {
-      push('study', 'Review notes 25 min');
-      push('study', 'Practice problems / flashcards');
-    } else push('study', 'Focused study block 25–40 min');
-    push('health', 'Walk or hit step goal');
-    push('health', 'Drink water to daily goal');
-    push('life', 'Prep bag / materials tonight');
-    if (/tired|sleep|late/.test(low)) push('health', 'Earlier lights-out by 30 min');
-    return items.slice(0, 8);
+  function parseTodoLines(reply) {
+    var out = [];
+    String(reply || '').split(/\n+/).forEach(function (line) {
+      var s = line.replace(/^[\s\-*•\d.\)\]]+/, '').trim();
+      if (s.length < 4 || s.length > 140) return;
+      if (/^(here|sure|okay|ok|tomorrow|based|i |you )/i.test(s)) return;
+      var tag = 'general';
+      var low = s.toLowerCase();
+      var tm = s.match(/^\[(study|health|life|general)\]\s*/i);
+      if (tm) { tag = tm[1].toLowerCase(); s = s.replace(tm[0], ''); }
+      else if (/study|read|notes|exam|homework|math|code|chapter/.test(low)) tag = 'study';
+      else if (/walk|sleep|water|run|workout|health|stretch|hydrate/.test(low)) tag = 'health';
+      else if (/call|email|buy|clean|prep|bag/.test(low)) tag = 'life';
+      out.push({ id: 't' + Date.now() + Math.random().toString(36).slice(2, 6), text: s, tag: tag, done: false, forDate: tomorrowKey(), created: Date.now() });
+    });
+    return out.slice(0, 12);
+  }
+
+  function formatTodosCtx() {
+    var items = (load(TODO_KEY, { items: [] }).items || []).filter(function (t) { return !t.done; }).slice(0, 15);
+    if (!items.length) return 'No open todos.';
+    return items.map(function (t, i) { return (i + 1) + '. [' + (t.tag || '') + '] ' + t.text; }).join('\n');
   }
 
   function ask(text) {
     var A = window.KestrelAndroidBridge;
+    var health = '';
+    try { if (A && typeof A.getHealthContext === 'function') health = A.getHealthContext(); } catch (e) {}
+    var prompt = 'Open todos on phone:\n' + formatTodosCtx() + '\n\n' +
+      (health ? ('Health JSON: ' + health + '\n\n') : '') +
+      'User message: ' + text;
     if (A && typeof A.askLocalCoach === 'function') {
-      try { return A.askLocalCoach('You are Kestrel, concise on-device coach.\nUser: ' + text); } catch (e) {}
+      try { return A.askLocalCoach(prompt); } catch (e) {}
     }
-    var low = text.toLowerCase();
-    if (/todo|to-do|task|tomorrow|schedule/.test(low)) {
-      var g = genTodos(text);
-      return 'Here is a todo list for tomorrow:\n' + g.map(function (t, i) {
-        return (i + 1) + '. [' + t.tag + '] ' + t.text;
-      }).join('\n');
-    }
-    return 'Tell me about your day and ask for tomorrow\'s todos, or ask about steps, water, mood, sleep, or plan.';
+    return 'Coach unavailable - rebuild the app binary.';
   }
 
   function send(text) {
     text = (text || '').trim();
     if (!text) return;
-    var msgs = load(CHAT_KEY, []);
-    if (!Array.isArray(msgs)) msgs = [];
-    msgs.push({ role: 'user', text: text, t: Date.now() });
-    save(CHAT_KEY, msgs);
-    renderChat();
+    var s = getStore();
+    var chat = activeChat(s);
+    chat.messages = chat.messages || [];
+    chat.messages.push({ role: 'user', text: text, t: Date.now() });
+    if (!chat.title || chat.title === 'New chat') chat.title = titleFromMessages(chat.messages);
+    chat.updated = Date.now();
+    save(STORE_KEY, s);
+    renderMessages();
     var st = $('chat-page-status');
-    if (st) st.textContent = 'Thinking…';
+    if (st) st.textContent = 'Thinking with your health data...';
+
     setTimeout(function () {
       var reply = ask(text);
       var low = text.toLowerCase();
-      if (/todo|to-do|task|tomorrow|schedule/.test(low)) {
-        var items = genTodos(text);
+      if (/clear all todos|delete all todos/.test(low)) {
+        save(TODO_KEY, { items: [] });
+        reply = 'Cleared all todos.';
+      } else if (/clear done/.test(low)) {
         var o = load(TODO_KEY, { items: [] });
-        o.items = (o.items || []).concat(items);
+        o.items = (o.items || []).filter(function (x) { return !x.done; });
         save(TODO_KEY, o);
-        reply += '\n\n✓ Saved ' + items.length + ' todos. Open Todos tab.';
+        reply = 'Cleared completed todos.';
+      } else if (/todo|to-do|task list|for tomorrow|schedule|revise todo|change todo|update todo/.test(low)) {
+        var items = parseTodoLines(reply);
+        if (items.length) {
+          var o2 = load(TODO_KEY, { items: [] });
+          if (/revise|replace|change|update|new list/.test(low)) o2.items = items;
+          else o2.items = (o2.items || []).concat(items);
+          save(TODO_KEY, o2);
+          reply += '\n\nTodos updated (' + items.length + '). Open Todos to remove any item.';
+        }
       }
       var add = text.match(/add todo[:\s]+(.+)/i);
       if (add) {
-        var o2 = load(TODO_KEY, { items: [] });
-        o2.items.push({ id: 't' + Date.now(), text: add[1].trim(), tag: 'general', done: false, forDate: tomorrowKey(), created: Date.now() });
-        save(TODO_KEY, o2);
+        var o3 = load(TODO_KEY, { items: [] });
+        o3.items = o3.items || [];
+        o3.items.push({ id: 't' + Date.now(), text: add[1].trim(), tag: 'general', done: false, forDate: tomorrowKey(), created: Date.now() });
+        save(TODO_KEY, o3);
         reply = 'Added todo: ' + add[1].trim();
       }
-      var m2 = load(CHAT_KEY, []);
-      m2.push({ role: 'assistant', text: reply, t: Date.now() });
-      save(CHAT_KEY, m2);
-      renderChat();
+      var s2 = getStore();
+      var ch = activeChat(s2);
+      ch.messages.push({ role: 'assistant', text: reply, t: Date.now() });
+      ch.updated = Date.now();
+      save(STORE_KEY, s2);
+      renderMessages();
       renderTodos();
-      if (st) st.textContent = 'On-device coach';
+      if (st) st.textContent = 'Uses band + app data on this phone';
     }, 40);
   }
 
-  function showChatTab() {
-    var m = $('chat-page-messages'), t = $('chat-page-todos'), c = $('chat-page-chips'), f = $('chat-page-form');
-    if (m) m.style.display = 'block';
-    if (t) t.style.display = 'none';
-    if (c) c.style.display = 'flex';
-    if (f) f.style.display = 'flex';
-    var a = $('chat-tab-chat'), b = $('chat-tab-todos');
-    if (a) a.classList.add('on');
-    if (b) b.classList.remove('on');
+  function showChat() {
+    $('chat-page-messages').style.display = 'block';
+    $('chat-page-todos').style.display = 'none';
+    $('chat-page-chips').style.display = 'flex';
+    $('chat-page-form').style.display = 'flex';
+    $('chat-tab-chat').classList.add('on');
+    $('chat-tab-todos').classList.remove('on');
   }
-  function showTodosTab() {
-    var m = $('chat-page-messages'), t = $('chat-page-todos'), c = $('chat-page-chips'), f = $('chat-page-form');
-    if (m) m.style.display = 'none';
-    if (t) t.style.display = 'block';
-    if (c) c.style.display = 'none';
-    if (f) f.style.display = 'none';
-    var a = $('chat-tab-chat'), b = $('chat-tab-todos');
-    if (b) b.classList.add('on');
-    if (a) a.classList.remove('on');
+  function showTodos() {
+    $('chat-page-messages').style.display = 'none';
+    $('chat-page-todos').style.display = 'block';
+    $('chat-page-chips').style.display = 'none';
+    $('chat-page-form').style.display = 'none';
+    $('chat-tab-todos').classList.add('on');
+    $('chat-tab-chat').classList.remove('on');
     renderTodos();
   }
+  function renderAll() { renderMessages(); renderTodos(); renderChatList(); }
 
   function refreshStatus() {
     var st = $('chat-page-status');
@@ -895,46 +1030,48 @@
       var A = window.KestrelAndroidBridge;
       if (A && A.getOnDeviceModelStatus) {
         var s = JSON.parse(A.getOnDeviceModelStatus() || '{}');
-        st.textContent = s.loaded ? 'On-device SLM ready' : (s.present ? 'Model on disk — load in Settings' : 'Rule-based coach');
+        st.textContent = s.loaded ? 'SLM + full health context' : (s.present ? 'Model on disk - load in Settings' : 'Smart on-device coach - full app data');
         return;
       }
     } catch (e) {}
-    st.textContent = 'Rule-based coach';
+    st.textContent = 'Smart on-device coach - full app data';
   }
 
-  function onChatVisible() {
-    renderChat();
-    renderTodos();
-    refreshStatus();
-  }
-
-  // When user opens Chat tab via navbar
-  window.kestrelOnChatOpen = onChatVisible;
+  window.kestrelOnChatOpen = function () { renderAll(); refreshStatus(); };
 
   function wire() {
-    var tabC = $('chat-tab-chat'), tabT = $('chat-tab-todos');
-    if (tabC) tabC.onclick = showChatTab;
-    if (tabT) tabT.onclick = showTodosTab;
+    var nb = $('chat-new-btn');
+    if (nb) nb.onclick = function () { newChat(); };
+    var lb = $('chat-list-btn');
+    if (lb) lb.onclick = function () {
+      var p = $('chat-list-panel');
+      if (!p) return;
+      p.style.display = (p.style.display === 'none' || !p.style.display) ? 'block' : 'none';
+      if (p.style.display === 'block') renderChatList();
+    };
+    var tc = $('chat-tab-chat'), tt = $('chat-tab-todos');
+    if (tc) tc.onclick = showChat;
+    if (tt) tt.onclick = showTodos;
     var form = $('chat-page-form');
-    if (form) {
-      form.onsubmit = function (e) {
-        e.preventDefault();
-        var inp = $('chat-page-input');
-        var v = inp ? inp.value : '';
-        if (inp) inp.value = '';
-        send(v);
-      };
-    }
-    document.querySelectorAll('#chat-page-chips button[data-chat-q]').forEach(function (btn) {
-      btn.onclick = function () { send(btn.getAttribute('data-chat-q')); };
+    if (form) form.onsubmit = function (e) {
+      e.preventDefault();
+      var inp = $('chat-page-input');
+      var v = inp ? inp.value : '';
+      if (inp) inp.value = '';
+      send(v);
+    };
+    document.querySelectorAll('#chat-page-chips [data-chat-q]').forEach(function (b) {
+      b.onclick = function () { send(b.getAttribute('data-chat-q')); };
     });
-    onChatVisible();
+    renderAll();
+    refreshStatus();
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire);
   else wire();
 })();
 </script>
+
 
 </body>
 </html>
