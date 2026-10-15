@@ -625,3 +625,79 @@ button:active, .rn-btn:active, .rn-chip:active, .rn-pill:active,
   background: rgba(69,75,92,.12) !important;
   transform: scale(0.97);
 }
+
+/* Floating AI button — sits above bottom tab strip */
+#kestrel-ai-fab {
+  position: fixed;
+  right: 16px;
+  bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+  z-index: 80;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: 1px solid rgba(69,75,92,.15);
+  background: rgba(255,255,255,.88);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  color: #454B5C;
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: .04em;
+  box-shadow: 0 8px 24px rgba(45,50,60,.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+#kestrel-ai-fab:active { transform: scale(0.94); }
+
+#kestrel-ai-panel {
+  position: fixed;
+  right: 12px;
+  bottom: calc(132px + env(safe-area-inset-bottom, 0px));
+  z-index: 81;
+  width: min(320px, calc(100vw - 24px));
+}
+#kestrel-ai-panel.hidden { display: none !important; }
+#kestrel-ai-panel .ai-panel-card {
+  background: rgba(255,255,255,.92);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(69,75,92,.12);
+  border-radius: 18px;
+  padding: 14px;
+  box-shadow: 0 16px 40px rgba(45,50,60,.2);
+  color: #454B5C;
+}
+#kestrel-ai-panel .ai-panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+#kestrel-ai-panel .ai-panel-head b {
+  font-size: 15px;
+  font-weight: 800;
+}
+#kestrel-ai-panel .ai-panel-head button {
+  border: none;
+  background: transparent;
+  font-size: 16px;
+  color: #8A93A6;
+  padding: 4px 8px;
+}
+#kestrel-ai-panel .st-actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 8px;
+}
+#kestrel-ai-panel .st-actions button {
+  padding: 10px 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  border-radius: 12px;
+  border: 1px solid rgba(69,75,92,.12);
+  background: rgba(255,255,255,.75);
+  color: #454B5C;
+}
