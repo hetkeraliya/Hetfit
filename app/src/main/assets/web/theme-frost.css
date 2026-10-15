@@ -1020,3 +1020,149 @@ button:active, .rn-btn:active, .rn-chip:active, .rn-pill:active,
   visibility: visible !important;
   opacity: 1 !important;
 }
+
+
+/* ===== Kestrel AI full panel (simple, always visible) ===== */
+#kestrel-ai-sheet.hidden { display: none !important; }
+#kestrel-ai-sheet:not(.hidden) {
+  display: block !important;
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 99999 !important;
+}
+#kestrel-ai-sheet .kai-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(20, 24, 32, 0.55);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0;
+}
+#kestrel-ai-sheet .kai-card {
+  width: 100%;
+  height: 78vh;
+  max-height: 780px;
+  background: #F2F3F7;
+  color: #2A3040;
+  border-radius: 22px 22px 0 0;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 -12px 40px rgba(0,0,0,0.3);
+  overflow: hidden;
+}
+#kestrel-ai-sheet .kai-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 14px 8px;
+  background: #F2F3F7;
+  flex-shrink: 0;
+}
+#kestrel-ai-sheet .kai-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  color: #2A3040;
+}
+#kestrel-ai-sheet .kai-title strong { font-weight: 800; color: #2A3040; }
+#kestrel-ai-sheet .kai-dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: #6B7C9C;
+  box-shadow: 0 0 0 3px rgba(107,124,156,0.25);
+}
+#kestrel-ai-sheet .kai-tabs { margin-left: auto; display: flex; gap: 4px; }
+#kestrel-ai-sheet .kai-tab {
+  border: 0; background: transparent;
+  font-size: 13px; font-weight: 750; color: #8A93A6;
+  padding: 7px 12px; border-radius: 999px;
+}
+#kestrel-ai-sheet .kai-tab.on {
+  background: rgba(42,48,64,0.1);
+  color: #2A3040;
+}
+#kestrel-ai-sheet .kai-x {
+  width: 36px; height: 36px; border: 0; border-radius: 50%;
+  background: rgba(42,48,64,0.08); color: #2A3040; font-size: 16px;
+}
+#kestrel-ai-sheet .kai-status {
+  margin: 0 14px 6px; font-size: 12px; color: #6B7385; flex-shrink: 0;
+}
+#kestrel-ai-sheet .kai-scroll {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 8px 14px 12px;
+  background: #F2F3F7;
+  min-height: 0;
+}
+#kestrel-ai-sheet .kai-scroll.hidden { display: none !important; }
+#kestrel-ai-sheet .kai-bubble {
+  max-width: 90%;
+  padding: 11px 13px;
+  border-radius: 14px;
+  font-size: 14px;
+  line-height: 1.4;
+  margin-bottom: 8px;
+}
+#kestrel-ai-sheet .kai-bubble.bot {
+  background: #fff;
+  border: 1px solid rgba(42,48,64,0.1);
+  color: #2A3040;
+  border-bottom-left-radius: 4px;
+}
+#kestrel-ai-sheet .kai-bubble.user {
+  margin-left: auto;
+  background: #3A4254;
+  color: #E8EBF2;
+  border-bottom-right-radius: 4px;
+}
+#kestrel-ai-sheet .kai-chips {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  padding: 0 14px 8px; flex-shrink: 0; background: #F2F3F7;
+}
+#kestrel-ai-sheet .kai-chips.hidden { display: none !important; }
+#kestrel-ai-sheet .kai-chips button {
+  font-size: 12px; font-weight: 700;
+  padding: 7px 12px; border-radius: 999px;
+  border: 1px solid rgba(42,48,64,0.12);
+  background: #fff; color: #2A3040;
+}
+#kestrel-ai-sheet .kai-compose {
+  display: flex; gap: 8px;
+  padding: 10px 14px calc(12px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid rgba(42,48,64,0.1);
+  background: #F2F3F7; flex-shrink: 0;
+}
+#kestrel-ai-sheet .kai-compose.hidden { display: none !important; }
+#kestrel-ai-sheet .kai-compose input {
+  flex: 1; border-radius: 14px;
+  border: 1px solid rgba(42,48,64,0.16);
+  padding: 12px 14px; font-size: 15px;
+  background: #fff; color: #2A3040;
+}
+#kestrel-ai-sheet .kai-compose button {
+  border: 0; border-radius: 14px; padding: 0 18px;
+  font-weight: 800; font-size: 14px;
+  background: #3A4254; color: #E8EBF2;
+}
+#kestrel-ai-sheet .kai-todo { list-style: none; padding: 0; margin: 0; }
+#kestrel-ai-sheet .kai-todo li {
+  padding: 10px 0; border-bottom: 1px solid rgba(42,48,64,0.08);
+  font-size: 14px; color: #2A3040;
+}
+#kestrel-ai-sheet .kai-todo li.done { opacity: 0.5; text-decoration: line-through; }
+#kestrel-ai-sheet .kai-todo label { display: flex; gap: 8px; align-items: flex-start; }
+#kestrel-ai-sheet .kai-todo .tag {
+  font-size: 10px; font-weight: 800; text-transform: uppercase; color: #8A93A6;
+}
+#kestrel-ai-sheet .kai-clear, #kestrel-ai-sheet .kai-empty {
+  margin-top: 12px; color: #6B7385;
+}
+#kestrel-ai-sheet .kai-clear {
+  width: 100%; padding: 10px; border-radius: 12px;
+  border: 1px solid rgba(42,48,64,0.12); background: #fff;
+  font-weight: 700; color: #2A3040;
+}
+#ai-chat-btn { display: inline-flex !important; visibility: visible !important; }
