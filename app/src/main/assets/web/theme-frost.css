@@ -1166,3 +1166,26 @@ button:active, .rn-btn:active, .rn-chip:active, .rn-pill:active,
   font-weight: 700; color: #2A3040;
 }
 #ai-chat-btn { display: inline-flex !important; visibility: visible !important; }
+
+.nav-ai-fab {
+  position: fixed !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  bottom: calc(72px + env(safe-area-inset-bottom, 0px)) !important;
+  z-index: 90 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 12px 20px !important;
+  border: 1px solid rgba(69,75,92,0.14) !important;
+  border-radius: 999px !important;
+  background: rgba(255,255,255,0.94) !important;
+  color: #2A3040 !important;
+  font-weight: 800 !important;
+  font-size: 14px !important;
+  box-shadow: 0 10px 28px rgba(20,24,32,0.18) !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+.nav-ai-fab:active { transform: translateX(-50%) scale(0.96) !important; }
