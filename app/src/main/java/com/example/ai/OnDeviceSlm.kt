@@ -11,24 +11,28 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 
 /**
- * On-device SLM via MediaPipe GenAI (reflection-based so the project still compiles
- * if the tasks-genai API surface differs slightly across versions).
- *
- * No API key for inference. Model is downloaded once into app storage.
+ * On-device SLM via MediaPipe GenAI (reflection-based).
+ * No API key for inference after the model file is on the phone.
  */
 object OnDeviceSlm {
   private const val TAG = "OnDeviceSlm"
   private const val MODEL_FILE = "gemma3-1b-it-int4.task"
-  private const val DEFAULT_MODEL_URL =
-    "https://huggingface.co/litert-community/Gemma3-1B-IT/resolve/main/gemma3-1b-it-int4.task?download=true"
+
+  /** Public mirrors (gated HF repos return 401 without accepting license). */
+  private val MODEL_URLS = listOf(
+    "https://huggingface.co/MiCkSoftware/Gemma3-1B-IT-LiteRT/resolve/main/gemma3-1b-it-int4.task?download=true",
+    "https://huggingface.co/MiCkSoftware/Gemma3-1B-IT-LiteRT/resolve/main/gemma3-1b-it-int4.task",
+    "https://huggingface.co/ravikadam/running-coach-gemma3-1b-LiteRT/resolve/main/running-coach-gemma3-1b.task?download=true"
+  )
 
   private val http = OkHttpClient.Builder()
     .connectTimeout(60, TimeUnit.SECONDS)
-    .readTimeout(600, TimeUnit.SECONDS)
+    .readTimeout(900, TimeUnit.SECONDS)
     .writeTimeout(60, TimeUnit.SECONDS)
+    .followRedirects(true)
+    .followSslRedirects(true)
     .build()
 
-  /** Holds MediaPipe LlmInference instance (typed as Any to avoid hard API coupling). */
   private val engine = AtomicReference<Any?>(null)
   @Volatile private var lastError: String? = null
   @Volatile private var downloadProgress: Int = -1
@@ -38,18 +42,18 @@ object OnDeviceSlm {
 
   fun statusJson(ctx: Context): String {
     val f = modelFile(ctx)
-    val o = JSONObject()
-    o.put("modelFile", f.absolutePath)
-    o.put("present", f.exists() && f.length() > 50_000_000L)
-    o.put("bytes", if (f.exists()) f.length() else 0L)
-    o.put("ready", engine.get() != null || (f.exists() && f.length() > 50_000_000L))
-    o.put("loaded", engine.get() != null)
-    o.put("downloadProgress", downloadProgress)
-    o.put("lastError", lastError ?: JSONObject.NULL)
-    o.put("engine", "mediapipe-tasks-genai")
-    o.put("modelName", "Gemma-class SLM (int4)")
-    o.put("mediapipeAvailable", isMediaPipePresent())
-    return o.toString()
+    return JSONObject()
+      .put("modelFile", f.absolutePath)
+      .put("present", f.exists() && f.length() > 50_000_000L)
+      .put("bytes", if (f.exists()) f.length() else 0L)
+      .put("ready", engine.get() != null || (f.exists() && f.length() > 50_000_000L))
+      .put("loaded", engine.get() != null)
+      .put("downloadProgress", downloadProgress)
+      .put("lastError", lastError ?: JSONObject.NULL)
+      .put("engine", "mediapipe-tasks-genai")
+      .put("modelName", "Gemma 3 1B int4")
+      .put("mediapipeAvailable", isMediaPipePresent())
+      .toString()
   }
 
   fun isModelPresent(ctx: Context): Boolean {
@@ -64,21 +68,44 @@ object OnDeviceSlm {
     false
   }
 
-  fun downloadModel(ctx: Context, url: String = DEFAULT_MODEL_URL): String {
+  /** Try each mirror until one succeeds. */
+  fun downloadModel(ctx: Context, url: String? = null): String {
+    val urls = if (!url.isNullOrBlank()) listOf(url) else MODEL_URLS
+    var lastFail = "No URL tried"
+    for (u in urls) {
+      val result = downloadOne(ctx, u)
+      if (result.startsWith("Model saved")) return result
+      lastFail = result
+      Log.w(TAG, "mirror failed: $u → $result")
+    }
+    return lastFail
+  }
+
+  private fun downloadOne(ctx: Context, url: String): String {
     val dest = modelFile(ctx)
     val tmp = File(dest.absolutePath + ".part")
     return try {
       downloadProgress = 0
       lastError = null
-      val req = Request.Builder().url(url).get().build()
+      val req = Request.Builder()
+        .url(url)
+        .header("User-Agent", "KestrelAndroid/1.0 (Android; on-device SLM)")
+        .header("Accept", "*/*")
+        .get()
+        .build()
       http.newCall(req).execute().use { resp ->
         if (!resp.isSuccessful) {
-          lastError = "Download failed HTTP ${resp.code}"
+          val code = resp.code
+          lastError = when (code) {
+            401, 403 -> "HTTP $code — model needs a public mirror (gated repo). Trying next…"
+            404 -> "HTTP 404 — file not found on this mirror"
+            else -> "HTTP $code — ${resp.message}"
+          }
           downloadProgress = -1
           return lastError!!
         }
         val body = resp.body ?: run {
-          lastError = "Empty body"
+          lastError = "Empty response body"
           downloadProgress = -1
           return lastError!!
         }
@@ -93,10 +120,19 @@ object OnDeviceSlm {
               sum += read
               if (total > 0) {
                 downloadProgress = ((sum * 100) / total).toInt().coerceIn(0, 99)
+              } else if (sum > 0) {
+                // unknown length — pulse progress based on MB
+                downloadProgress = ((sum / (1024 * 1024)) % 90).toInt()
               }
             }
             out.flush()
           }
+        }
+        if (tmp.length() < 50_000_000L) {
+          lastError = "Download too small (${tmp.length()} bytes) — not a real model file"
+          downloadProgress = -1
+          tmp.delete()
+          return lastError!!
         }
       }
       if (dest.exists()) dest.delete()
@@ -116,6 +152,24 @@ object OnDeviceSlm {
     }
   }
 
+  /** Copy a user-picked .task file into model storage (path from FileProvider / absolute). */
+  fun importFromPath(ctx: Context, path: String): String {
+    return try {
+      val src = File(path)
+      if (!src.exists() || src.length() < 50_000_000L) {
+        return "Invalid model file"
+      }
+      val dest = modelFile(ctx)
+      src.copyTo(dest, overwrite = true)
+      close()
+      downloadProgress = 100
+      "Imported (${dest.length() / (1024 * 1024)} MB). Tap Load model."
+    } catch (e: Exception) {
+      lastError = e.message
+      "Import failed: ${e.message}"
+    }
+  }
+
   @Synchronized
   fun ensureLoaded(ctx: Context): Boolean {
     if (engine.get() != null) return true
@@ -130,18 +184,14 @@ object OnDeviceSlm {
     }
     return try {
       val llmClass = Class.forName("com.google.mediapipe.tasks.genai.llminference.LlmInference")
-      // Prefer nested LlmInferenceOptions, else top-level LlmInferenceOptions
       val optionsClass = try {
         Class.forName("com.google.mediapipe.tasks.genai.llminference.LlmInference\$LlmInferenceOptions")
       } catch (_: Throwable) {
         Class.forName("com.google.mediapipe.tasks.genai.llminference.LlmInferenceOptions")
       }
-      val builderMethod = optionsClass.getMethod("builder")
-      val builder = builderMethod.invoke(null)
+      val builder = optionsClass.getMethod("builder").invoke(null)
       val bClass = builder.javaClass
-      // Required
       bClass.getMethod("setModelPath", String::class.java).invoke(builder, f.absolutePath)
-      // Optional knobs — ignore if missing
       tryInvoke(builder, "setMaxTokens", 512)
       tryInvoke(builder, "setMaxTopK", 64)
       tryInvoke(builder, "setTopK", 40)
@@ -150,8 +200,7 @@ object OnDeviceSlm {
       val create = llmClass.methods.first {
         it.name == "createFromOptions" && it.parameterTypes.size == 2
       }
-      val llm = create.invoke(null, ctx, options)
-      engine.set(llm)
+      engine.set(create.invoke(null, ctx, options))
       lastError = null
       downloadProgress = 101
       true
@@ -171,9 +220,7 @@ object OnDeviceSlm {
         else -> value.javaClass
       }
       builder.javaClass.getMethod(name, cls).invoke(builder, value)
-    } catch (_: Throwable) {
-      // optional
-    }
+    } catch (_: Throwable) {}
   }
 
   fun generate(ctx: Context, prompt: String): String? {
@@ -184,8 +231,7 @@ object OnDeviceSlm {
         it.name == "generateResponse" && it.parameterTypes.size == 1 &&
           it.parameterTypes[0] == String::class.java
       }
-      val result = m.invoke(llm, prompt)
-      (result as? String)?.trim()?.ifBlank { null }
+      (m.invoke(llm, prompt) as? String)?.trim()?.ifBlank { null }
     } catch (e: Exception) {
       Log.e(TAG, "generate", e)
       lastError = e.message
