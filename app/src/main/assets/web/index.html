@@ -717,84 +717,232 @@
   });
 </script>
 
+
+
+
 <div id="kestrel-ai-sheet" class="hidden" aria-hidden="true">
-  <div class="ai-sheet-backdrop" id="ai-sheet-backdrop"></div>
-  <div class="ai-sheet" role="dialog" aria-label="Kestrel chat">
-    <div class="ai-sheet-head">
-      <div class="ai-sheet-title"><span class="ai-dot"></span><b>Kestrel chat</b></div>
-      <div class="ai-sheet-tabs">
-        <button type="button" class="ai-tab active" data-tab="chat">Chat</button>
-        <button type="button" class="ai-tab" data-tab="todos">Todos</button>
+  <div class="kai-overlay">
+    <div class="kai-card">
+      <div class="kai-header">
+        <div class="kai-title">
+          <span class="kai-dot"></span>
+          <strong>Kestrel AI</strong>
+        </div>
+        <div class="kai-tabs">
+          <button type="button" class="kai-tab on" data-kai-tab="chat">Chat</button>
+          <button type="button" class="kai-tab" data-kai-tab="todos">Todos</button>
+        </div>
+        <button type="button" class="kai-x" id="kai-close" aria-label="Close">✕</button>
       </div>
-      <button type="button" class="ai-sheet-close" id="ai-sheet-close" aria-label="Close">✕</button>
+      <p class="kai-status" id="kai-status">On-device coach</p>
+      <div class="kai-scroll" id="kai-chat"></div>
+      <div class="kai-scroll hidden" id="kai-todos"></div>
+      <div class="kai-chips" id="kai-chips">
+        <button type="button" data-kai-q="How am I today?">Today</button>
+        <button type="button" data-kai-q="Make a todo list for tomorrow for study and health.">Tomorrow todos</button>
+        <button type="button" data-kai-q="Water and steps advice.">Health</button>
+      </div>
+      <form class="kai-compose" id="kai-form">
+        <input id="kai-input" type="text" placeholder="Message Kestrel…" autocomplete="off" enterkeyhint="send" />
+        <button type="submit">Send</button>
+      </form>
     </div>
-    <p class="mo-note ai-sheet-status" id="ai-sheet-status"></p>
-    <div class="ai-sheet-body" id="ai-sheet-chat"></div>
-    <div class="ai-sheet-body hidden" id="ai-sheet-todos"></div>
-    <div class="ai-sheet-suggest" id="ai-sheet-suggest">
-      <button type="button" data-q="How am I today?">Today</button>
-      <button type="button" data-q="Make a todo list for tomorrow based on a normal school day with math and coding.">Tomorrow todos</button>
-      <button type="button" data-q="Water and steps advice.">Health</button>
-    </div>
-    <form class="ai-sheet-input" id="ai-sheet-form">
-      <input type="text" id="ai-sheet-input" placeholder="Message Kestrel…" autocomplete="off" enterkeyhint="send" />
-      <button type="submit" id="ai-sheet-send">Send</button>
-    </form>
   </div>
 </div>
-
-
 <script>
-(function(){
-  function openAi() {
-    var sheet = document.getElementById('kestrel-ai-sheet');
-    if (!sheet) return;
-    sheet.classList.remove('hidden');
-    sheet.style.cssText = 'display:block!important;position:fixed!important;inset:0!important;z-index:99999!important;visibility:visible!important;';
-    sheet.setAttribute('aria-hidden', 'false');
-    var panel = sheet.querySelector('.ai-sheet');
-    if (panel) {
-      panel.style.cssText = 'display:flex!important;flex-direction:column!important;position:absolute!important;left:0!important;right:0!important;bottom:0!important;width:100%!important;min-height:58vh!important;max-height:88vh!important;background:#F4F5F8!important;color:#2D3340!important;border-radius:22px 22px 0 0!important;z-index:2!important;opacity:1!important;visibility:visible!important;box-shadow:0 -16px 48px rgba(0,0,0,.28)!important;';
-    }
-    var bd = sheet.querySelector('.ai-sheet-backdrop');
-    if (bd) bd.style.cssText = 'position:absolute!important;inset:0!important;background:rgba(20,24,32,.55)!important;z-index:1!important;';
-    if (window.kestrelOpenAiChat) {
-      try { window.kestrelOpenAiChat(); } catch(e) {}
-    }
+(function () {
+  var CHAT_KEY = 'kestrel.ai.chat.v1';
+  var TODO_KEY = 'kestrel.todos.v1';
+
+  function $(id) { return document.getElementById(id); }
+  function load(k, d) {
+    try { var v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch (e) { return d; }
   }
-  function closeAi() {
-    var sheet = document.getElementById('kestrel-ai-sheet');
-    if (!sheet) return;
-    sheet.classList.add('hidden');
-    sheet.style.display = 'none';
-    sheet.setAttribute('aria-hidden', 'true');
+  function save(k, v) {
+    try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {}
   }
-  document.addEventListener('click', function(e) {
+  function tomorrowKey() {
+    var d = new Date(Date.now() + 86400000);
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+
+  function openSheet() {
+    var s = $('kestrel-ai-sheet');
+    if (!s) return;
+    s.classList.remove('hidden');
+    s.style.display = 'block';
+    s.setAttribute('aria-hidden', 'false');
+    renderChat();
+    renderTodos();
+    try {
+      var A = window.KestrelAndroidBridge;
+      if (A && A.getOnDeviceModelStatus) {
+        var st = JSON.parse(A.getOnDeviceModelStatus() || '{}');
+        $('kai-status').textContent = st.loaded ? 'On-device SLM ready' :
+          (st.present ? 'Model on disk — load in Settings' : 'Rule-based coach · model in Settings');
+      }
+    } catch (e) {}
+    setTimeout(function () { var i = $('kai-input'); if (i) i.focus(); }, 150);
+  }
+  function closeSheet() {
+    var s = $('kestrel-ai-sheet');
+    if (!s) return;
+    s.classList.add('hidden');
+    s.style.display = 'none';
+    s.setAttribute('aria-hidden', 'true');
+  }
+  window.kestrelOpenAiChat = openSheet;
+
+  function renderChat() {
+    var box = $('kai-chat');
+    if (!box) return;
+    var msgs = load(CHAT_KEY, []);
+    if (!Array.isArray(msgs) || !msgs.length) {
+      box.innerHTML = '<div class="kai-bubble bot">Hi — chat about health, or describe your day and ask for <b>tomorrow\'s todos</b>.</div>';
+      return;
+    }
+    box.innerHTML = msgs.slice(-40).map(function (m) {
+      return '<div class="kai-bubble ' + (m.role === 'user' ? 'user' : 'bot') + '">' +
+        String(m.text || '').replace(/</g, '&lt;').replace(/\n/g, '<br>') + '</div>';
+    }).join('');
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function renderTodos() {
+    var box = $('kai-todos');
+    if (!box) return;
+    var o = load(TODO_KEY, { items: [] });
+    var items = (o.items || []).slice(-30);
+    if (!items.length) {
+      box.innerHTML = '<p class="kai-empty">No todos yet. Ask in Chat for a tomorrow list.</p>';
+      return;
+    }
+    box.innerHTML = '<ul class="kai-todo">' + items.map(function (t) {
+      return '<li class="' + (t.done ? 'done' : '') + '" data-id="' + t.id + '">' +
+        '<label><input type="checkbox" ' + (t.done ? 'checked' : '') + '/> ' +
+        '<span class="tag">' + (t.tag || '') + '</span> ' +
+        String(t.text || '').replace(/</g, '&lt;') + '</label></li>';
+    }).join('') + '</ul><button type="button" class="kai-clear" id="kai-clear-done">Clear done</button>';
+    box.querySelectorAll('input[type=checkbox]').forEach(function (cb) {
+      cb.onchange = function () {
+        var id = cb.closest('li').getAttribute('data-id');
+        var o2 = load(TODO_KEY, { items: [] });
+        (o2.items || []).forEach(function (x) { if (x.id === id) x.done = cb.checked; });
+        save(TODO_KEY, o2);
+        renderTodos();
+      };
+    });
+    var clr = $('kai-clear-done');
+    if (clr) clr.onclick = function () {
+      var o2 = load(TODO_KEY, { items: [] });
+      o2.items = (o2.items || []).filter(function (x) { return !x.done; });
+      save(TODO_KEY, o2);
+      renderTodos();
+    };
+  }
+
+  function genTodos(text) {
+    var low = (text || '').toLowerCase();
+    var items = [];
+    function push(tag, t) {
+      items.push({ id: 't' + Date.now() + Math.random().toString(36).slice(2, 6), text: t, tag: tag, done: false, forDate: tomorrowKey(), created: Date.now() });
+    }
+    if (/exam|test|study|homework|math|code|coding|chapter/.test(low)) {
+      push('study', 'Review notes 25 min');
+      push('study', 'Practice problems / flashcards');
+    } else {
+      push('study', 'Focused study block 25–40 min');
+    }
+    push('health', 'Walk or hit step goal');
+    push('health', 'Drink water to daily goal');
+    push('life', 'Prep bag / materials tonight');
+    if (/tired|sleep|late/.test(low)) push('health', 'Earlier lights-out by 30 min');
+    return items.slice(0, 8);
+  }
+
+  function ask(text) {
+    var A = window.KestrelAndroidBridge;
+    var prompt = 'You are Kestrel, concise on-device coach.\nUser: ' + text;
+    if (A && typeof A.askLocalCoach === 'function') {
+      try { return A.askLocalCoach(prompt); } catch (e) {}
+    }
+    var low = text.toLowerCase();
+    if (/todo|to-do|task|tomorrow|schedule/.test(low)) {
+      var g = genTodos(text);
+      return 'Here is a todo list for tomorrow:\n' + g.map(function (t, i) { return (i + 1) + '. [' + t.tag + '] ' + t.text; }).join('\n');
+    }
+    return 'Tell me about your day and ask for tomorrow\'s todos, or ask about steps, water, mood, sleep, or plan.';
+  }
+
+  function send(text) {
+    text = (text || '').trim();
+    if (!text) return;
+    var msgs = load(CHAT_KEY, []);
+    if (!Array.isArray(msgs)) msgs = [];
+    msgs.push({ role: 'user', text: text, t: Date.now() });
+    save(CHAT_KEY, msgs);
+    renderChat();
+    $('kai-status').textContent = 'Thinking…';
+    setTimeout(function () {
+      var reply = ask(text);
+      var low = text.toLowerCase();
+      if (/todo|to-do|task|tomorrow|schedule/.test(low)) {
+        var items = genTodos(text);
+        var o = load(TODO_KEY, { items: [] });
+        o.items = (o.items || []).concat(items);
+        save(TODO_KEY, o);
+        reply += '\n\n✓ Saved ' + items.length + ' todos. Open Todos tab.';
+      }
+      var add = text.match(/add todo[:\s]+(.+)/i);
+      if (add) {
+        var o2 = load(TODO_KEY, { items: [] });
+        o2.items.push({ id: 't' + Date.now(), text: add[1].trim(), tag: 'general', done: false, forDate: tomorrowKey(), created: Date.now() });
+        save(TODO_KEY, o2);
+        reply = 'Added todo: ' + add[1].trim();
+      }
+      var m2 = load(CHAT_KEY, []);
+      m2.push({ role: 'assistant', text: reply, t: Date.now() });
+      save(CHAT_KEY, m2);
+      renderChat();
+      renderTodos();
+      $('kai-status').textContent = '';
+    }, 40);
+  }
+
+  document.addEventListener('click', function (e) {
     var t = e.target;
     if (!t) return;
     if (t.id === 'ai-chat-btn' || (t.closest && t.closest('#ai-chat-btn'))) {
       e.preventDefault();
       e.stopPropagation();
-      openAi();
+      openSheet();
+      return;
     }
-    if (t.id === 'ai-sheet-close' || t.id === 'ai-sheet-backdrop') {
-      closeAi();
+    if (t.id === 'kai-close') { closeSheet(); return; }
+    if (t.classList && t.classList.contains('kai-overlay') && t === e.target) { closeSheet(); return; }
+    if (t.getAttribute && t.getAttribute('data-kai-tab')) {
+      var tab = t.getAttribute('data-kai-tab');
+      document.querySelectorAll('.kai-tab').forEach(function (x) { x.classList.toggle('on', x === t); });
+      $('kai-chat').classList.toggle('hidden', tab !== 'chat');
+      $('kai-todos').classList.toggle('hidden', tab !== 'todos');
+      $('kai-chips').classList.toggle('hidden', tab !== 'chat');
+      $('kai-form').classList.toggle('hidden', tab !== 'chat');
+      if (tab === 'todos') renderTodos();
+    }
+    if (t.getAttribute && t.getAttribute('data-kai-q')) {
+      send(t.getAttribute('data-kai-q'));
     }
   }, true);
-  // Also direct bind when DOM ready
-  function bind() {
-    var btn = document.getElementById('ai-chat-btn');
-    if (btn) {
-      btn.style.display = 'inline-flex';
-      btn.style.visibility = 'visible';
-      btn.style.opacity = '1';
-      btn.onclick = function(e){ e.preventDefault(); openAi(); };
+
+  document.addEventListener('submit', function (e) {
+    if (e.target && e.target.id === 'kai-form') {
+      e.preventDefault();
+      var inp = $('kai-input');
+      var v = inp ? inp.value : '';
+      if (inp) inp.value = '';
+      send(v);
     }
-  }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind);
-  else bind();
-  setTimeout(bind, 500);
-  setTimeout(bind, 1500);
+  }, true);
 })();
 </script>
 
