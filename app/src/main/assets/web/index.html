@@ -70,7 +70,8 @@
           <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M12 2s3 4 3 7a3 3 0 1 1-6 0c0-1 1-3 3-7zm-5 12c0-2.5 2-4.5 4.2-5.4C10.4 10.4 9 12.2 9 14.2c0 2 1.6 3.6 3.6 3.6.6 0 1.1-.1 1.6-.4A4.5 4.5 0 0 1 7 14z"/></svg>
           <span id="flame-count">0</span>
         </span>
-        <button id="ai-chat-btn" class="round-icon-btn ai-chat-launch" title="Chat with Kestrel AI" aria-label="AI chat">
+        <button id="ai-chat-btn" class="round-icon-btn ai-chat-launch" type="button" title="Chat with Kestrel AI" aria-label="AI chat"
+          onclick="window.__openKestrelAi&&window.__openKestrelAi();return false;">
           <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/></svg>
         </button>
         <button id="ble-dash-btn" class="round-icon-btn" title="Mi Band 5 Live Connect" aria-label="Bluetooth">
@@ -719,34 +720,29 @@
 
 
 
-
-<div id="kestrel-ai-sheet" class="hidden" aria-hidden="true">
-  <div class="kai-overlay">
-    <div class="kai-card">
-      <div class="kai-header">
-        <div class="kai-title">
-          <span class="kai-dot"></span>
-          <strong>Kestrel AI</strong>
-        </div>
-        <div class="kai-tabs">
-          <button type="button" class="kai-tab on" data-kai-tab="chat">Chat</button>
-          <button type="button" class="kai-tab" data-kai-tab="todos">Todos</button>
-        </div>
-        <button type="button" class="kai-x" id="kai-close" aria-label="Close">✕</button>
-      </div>
-      <p class="kai-status" id="kai-status">On-device coach</p>
-      <div class="kai-scroll" id="kai-chat"></div>
-      <div class="kai-scroll hidden" id="kai-todos"></div>
-      <div class="kai-chips" id="kai-chips">
-        <button type="button" data-kai-q="How am I today?">Today</button>
-        <button type="button" data-kai-q="Make a todo list for tomorrow for study and health.">Tomorrow todos</button>
-        <button type="button" data-kai-q="Water and steps advice.">Health</button>
-      </div>
-      <form class="kai-compose" id="kai-form">
-        <input id="kai-input" type="text" placeholder="Message Kestrel…" autocomplete="off" enterkeyhint="send" />
-        <button type="submit">Send</button>
-      </form>
+<div id="kestrel-ai-sheet" style="display:none;position:fixed;inset:0;z-index:2147483646;background:rgba(20,24,32,0.55);">
+  <div id="kestrel-ai-panel" style="position:absolute;left:0;right:0;bottom:0;height:78vh;max-height:800px;background:#F2F3F7;color:#2A3040;border-radius:22px 22px 0 0;display:flex;flex-direction:column;box-shadow:0 -12px 40px rgba(0,0,0,0.35);overflow:hidden;">
+    <div style="display:flex;align-items:center;gap:10px;padding:14px;flex-shrink:0;">
+      <strong style="font-size:16px;font-weight:800;color:#2A3040;">Kestrel AI</strong>
+      <span style="margin-left:auto;display:flex;gap:4px;">
+        <button type="button" id="kai-tab-chat" style="border:0;border-radius:999px;padding:7px 12px;font-weight:750;background:rgba(42,48,64,0.1);color:#2A3040;">Chat</button>
+        <button type="button" id="kai-tab-todos" style="border:0;border-radius:999px;padding:7px 12px;font-weight:750;background:transparent;color:#8A93A6;">Todos</button>
+      </span>
+      <button type="button" id="kai-close" style="width:36px;height:36px;border:0;border-radius:50%;background:rgba(42,48,64,0.08);color:#2A3040;font-size:16px;">✕</button>
     </div>
+    <p id="kai-status" style="margin:0 14px 6px;font-size:12px;color:#6B7385;"></p>
+    <div id="kai-chat" style="flex:1;overflow-y:auto;padding:8px 14px;min-height:0;-webkit-overflow-scrolling:touch;"></div>
+    <div id="kai-todos" style="flex:1;overflow-y:auto;padding:8px 14px;min-height:0;display:none;"></div>
+    <div id="kai-chips" style="display:flex;flex-wrap:wrap;gap:6px;padding:0 14px 8px;flex-shrink:0;">
+      <button type="button" data-q="How am I today?" style="font-size:12px;font-weight:700;padding:7px 12px;border-radius:999px;border:1px solid rgba(42,48,64,0.12);background:#fff;color:#2A3040;">Today</button>
+      <button type="button" data-q="Make a todo list for tomorrow for study and health." style="font-size:12px;font-weight:700;padding:7px 12px;border-radius:999px;border:1px solid rgba(42,48,64,0.12);background:#fff;color:#2A3040;">Tomorrow todos</button>
+      <button type="button" data-q="Water and steps advice." style="font-size:12px;font-weight:700;padding:7px 12px;border-radius:999px;border:1px solid rgba(42,48,64,0.12);background:#fff;color:#2A3040;">Health</button>
+    </div>
+    <form id="kai-form" style="display:flex;gap:8px;padding:10px 14px 16px;border-top:1px solid rgba(42,48,64,0.1);flex-shrink:0;background:#F2F3F7;">
+      <input id="kai-input" type="text" placeholder="Message Kestrel…" autocomplete="off" enterkeyhint="send"
+        style="flex:1;border-radius:14px;border:1px solid rgba(42,48,64,0.16);padding:12px 14px;font-size:15px;background:#fff;color:#2A3040;" />
+      <button type="submit" style="border:0;border-radius:14px;padding:0 18px;font-weight:800;font-size:14px;background:#3A4254;color:#E8EBF2;">Send</button>
+    </form>
   </div>
 </div>
 <script>
@@ -754,7 +750,7 @@
   var CHAT_KEY = 'kestrel.ai.chat.v1';
   var TODO_KEY = 'kestrel.todos.v1';
 
-  function $(id) { return document.getElementById(id); }
+  function el(id) { return document.getElementById(id); }
   function load(k, d) {
     try { var v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch (e) { return d; }
   }
@@ -766,86 +762,96 @@
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   }
 
-  function openSheet() {
-    var s = $('kestrel-ai-sheet');
-    if (!s) return;
-    s.classList.remove('hidden');
+  function openAi() {
+    var s = el('kestrel-ai-sheet');
+    if (!s) {
+      alert('AI panel missing — reinstall app assets');
+      return;
+    }
     s.style.display = 'block';
-    s.setAttribute('aria-hidden', 'false');
+    s.style.visibility = 'visible';
+    s.style.opacity = '1';
+    s.style.zIndex = '2147483646';
+    s.className = '';
     renderChat();
     renderTodos();
     try {
       var A = window.KestrelAndroidBridge;
       if (A && A.getOnDeviceModelStatus) {
         var st = JSON.parse(A.getOnDeviceModelStatus() || '{}');
-        $('kai-status').textContent = st.loaded ? 'On-device SLM ready' :
-          (st.present ? 'Model on disk — load in Settings' : 'Rule-based coach · model in Settings');
+        el('kai-status').textContent = st.loaded ? 'On-device SLM ready' :
+          (st.present ? 'Model on disk — load in Settings' : 'Rule-based coach');
+      } else {
+        el('kai-status').textContent = 'Rule-based coach';
       }
-    } catch (e) {}
-    setTimeout(function () { var i = $('kai-input'); if (i) i.focus(); }, 150);
+    } catch (e) {
+      el('kai-status').textContent = 'Rule-based coach';
+    }
   }
-  function closeSheet() {
-    var s = $('kestrel-ai-sheet');
-    if (!s) return;
-    s.classList.add('hidden');
-    s.style.display = 'none';
-    s.setAttribute('aria-hidden', 'true');
+
+  function closeAi() {
+    var s = el('kestrel-ai-sheet');
+    if (s) {
+      s.style.display = 'none';
+      s.className = 'hidden';
+    }
   }
-  window.kestrelOpenAiChat = openSheet;
+
+  window.__openKestrelAi = openAi;
+  window.kestrelOpenAiChat = openAi;
 
   function renderChat() {
-    var box = $('kai-chat');
+    var box = el('kai-chat');
     if (!box) return;
     var msgs = load(CHAT_KEY, []);
     if (!Array.isArray(msgs) || !msgs.length) {
-      box.innerHTML = '<div class="kai-bubble bot">Hi — chat about health, or describe your day and ask for <b>tomorrow\'s todos</b>.</div>';
+      box.innerHTML = '<div style="max-width:90%;padding:11px 13px;border-radius:14px;background:#fff;border:1px solid rgba(42,48,64,0.1);color:#2A3040;font-size:14px;margin-bottom:8px;">Hi — chat about health, or ask for <b>tomorrow\'s todos</b>.</div>';
       return;
     }
     box.innerHTML = msgs.slice(-40).map(function (m) {
-      return '<div class="kai-bubble ' + (m.role === 'user' ? 'user' : 'bot') + '">' +
+      var isUser = m.role === 'user';
+      var st = isUser
+        ? 'margin-left:auto;background:#3A4254;color:#E8EBF2;border-bottom-right-radius:4px;'
+        : 'background:#fff;border:1px solid rgba(42,48,64,0.1);color:#2A3040;border-bottom-left-radius:4px;';
+      return '<div style="max-width:90%;padding:11px 13px;border-radius:14px;font-size:14px;line-height:1.4;margin-bottom:8px;' + st + '">' +
         String(m.text || '').replace(/</g, '&lt;').replace(/\n/g, '<br>') + '</div>';
     }).join('');
     box.scrollTop = box.scrollHeight;
   }
 
   function renderTodos() {
-    var box = $('kai-todos');
+    var box = el('kai-todos');
     if (!box) return;
     var o = load(TODO_KEY, { items: [] });
-    var items = (o.items || []).slice(-30);
+    var items = o.items || [];
     if (!items.length) {
-      box.innerHTML = '<p class="kai-empty">No todos yet. Ask in Chat for a tomorrow list.</p>';
+      box.innerHTML = '<p style="color:#6B7385;font-size:13px;">No todos yet. Ask in Chat for a tomorrow list.</p>';
       return;
     }
-    box.innerHTML = '<ul class="kai-todo">' + items.map(function (t) {
-      return '<li class="' + (t.done ? 'done' : '') + '" data-id="' + t.id + '">' +
-        '<label><input type="checkbox" ' + (t.done ? 'checked' : '') + '/> ' +
-        '<span class="tag">' + (t.tag || '') + '</span> ' +
-        String(t.text || '').replace(/</g, '&lt;') + '</label></li>';
-    }).join('') + '</ul><button type="button" class="kai-clear" id="kai-clear-done">Clear done</button>';
-    box.querySelectorAll('input[type=checkbox]').forEach(function (cb) {
+    box.innerHTML = items.slice(-30).map(function (t) {
+      return '<label style="display:flex;gap:8px;padding:10px 0;border-bottom:1px solid rgba(42,48,64,0.08);font-size:14px;color:#2A3040;' +
+        (t.done ? 'opacity:0.5;text-decoration:line-through;' : '') + '">' +
+        '<input type="checkbox" data-tid="' + t.id + '" ' + (t.done ? 'checked' : '') + '/>' +
+        '<span><span style="font-size:10px;font-weight:800;text-transform:uppercase;color:#8A93A6;">' + (t.tag || '') + '</span> ' +
+        String(t.text || '').replace(/</g, '&lt;') + '</span></label>';
+    }).join('');
+    box.querySelectorAll('input[data-tid]').forEach(function (cb) {
       cb.onchange = function () {
-        var id = cb.closest('li').getAttribute('data-id');
         var o2 = load(TODO_KEY, { items: [] });
-        (o2.items || []).forEach(function (x) { if (x.id === id) x.done = cb.checked; });
+        (o2.items || []).forEach(function (x) {
+          if (x.id === cb.getAttribute('data-tid')) x.done = cb.checked;
+        });
         save(TODO_KEY, o2);
         renderTodos();
       };
     });
-    var clr = $('kai-clear-done');
-    if (clr) clr.onclick = function () {
-      var o2 = load(TODO_KEY, { items: [] });
-      o2.items = (o2.items || []).filter(function (x) { return !x.done; });
-      save(TODO_KEY, o2);
-      renderTodos();
-    };
   }
 
   function genTodos(text) {
     var low = (text || '').toLowerCase();
     var items = [];
     function push(tag, t) {
-      items.push({ id: 't' + Date.now() + Math.random().toString(36).slice(2, 6), text: t, tag: tag, done: false, forDate: tomorrowKey(), created: Date.now() });
+      items.push({ id: 't' + Date.now() + Math.random().toString(36).slice(2, 5), text: t, tag: tag, done: false, forDate: tomorrowKey(), created: Date.now() });
     }
     if (/exam|test|study|homework|math|code|coding|chapter/.test(low)) {
       push('study', 'Review notes 25 min');
@@ -862,14 +868,15 @@
 
   function ask(text) {
     var A = window.KestrelAndroidBridge;
-    var prompt = 'You are Kestrel, concise on-device coach.\nUser: ' + text;
     if (A && typeof A.askLocalCoach === 'function') {
-      try { return A.askLocalCoach(prompt); } catch (e) {}
+      try { return A.askLocalCoach('You are Kestrel, concise on-device coach.\nUser: ' + text); } catch (e) {}
     }
     var low = text.toLowerCase();
     if (/todo|to-do|task|tomorrow|schedule/.test(low)) {
       var g = genTodos(text);
-      return 'Here is a todo list for tomorrow:\n' + g.map(function (t, i) { return (i + 1) + '. [' + t.tag + '] ' + t.text; }).join('\n');
+      return 'Here is a todo list for tomorrow:\n' + g.map(function (t, i) {
+        return (i + 1) + '. [' + t.tag + '] ' + t.text;
+      }).join('\n');
     }
     return 'Tell me about your day and ask for tomorrow\'s todos, or ask about steps, water, mood, sleep, or plan.';
   }
@@ -882,7 +889,7 @@
     msgs.push({ role: 'user', text: text, t: Date.now() });
     save(CHAT_KEY, msgs);
     renderChat();
-    $('kai-status').textContent = 'Thinking…';
+    el('kai-status').textContent = 'Thinking…';
     setTimeout(function () {
       var reply = ask(text);
       var low = text.toLowerCase();
@@ -905,44 +912,79 @@
       save(CHAT_KEY, m2);
       renderChat();
       renderTodos();
-      $('kai-status').textContent = '';
-    }, 40);
+      el('kai-status').textContent = '';
+    }, 30);
   }
 
-  document.addEventListener('click', function (e) {
-    var t = e.target;
-    if (!t) return;
-    if (t.id === 'ai-chat-btn' || (t.closest && t.closest('#ai-chat-btn'))) {
-      e.preventDefault();
-      e.stopPropagation();
-      openSheet();
-      return;
-    }
-    if (t.id === 'kai-close') { closeSheet(); return; }
-    if (t.classList && t.classList.contains('kai-overlay') && t === e.target) { closeSheet(); return; }
-    if (t.getAttribute && t.getAttribute('data-kai-tab')) {
-      var tab = t.getAttribute('data-kai-tab');
-      document.querySelectorAll('.kai-tab').forEach(function (x) { x.classList.toggle('on', x === t); });
-      $('kai-chat').classList.toggle('hidden', tab !== 'chat');
-      $('kai-todos').classList.toggle('hidden', tab !== 'todos');
-      $('kai-chips').classList.toggle('hidden', tab !== 'chat');
-      $('kai-form').classList.toggle('hidden', tab !== 'chat');
-      if (tab === 'todos') renderTodos();
-    }
-    if (t.getAttribute && t.getAttribute('data-kai-q')) {
-      send(t.getAttribute('data-kai-q'));
-    }
-  }, true);
+  function showChat() {
+    el('kai-chat').style.display = 'block';
+    el('kai-todos').style.display = 'none';
+    el('kai-chips').style.display = 'flex';
+    el('kai-form').style.display = 'flex';
+    el('kai-tab-chat').style.background = 'rgba(42,48,64,0.1)';
+    el('kai-tab-chat').style.color = '#2A3040';
+    el('kai-tab-todos').style.background = 'transparent';
+    el('kai-tab-todos').style.color = '#8A93A6';
+  }
+  function showTodos() {
+    el('kai-chat').style.display = 'none';
+    el('kai-todos').style.display = 'block';
+    el('kai-chips').style.display = 'none';
+    el('kai-form').style.display = 'none';
+    el('kai-tab-todos').style.background = 'rgba(42,48,64,0.1)';
+    el('kai-tab-todos').style.color = '#2A3040';
+    el('kai-tab-chat').style.background = 'transparent';
+    el('kai-tab-chat').style.color = '#8A93A6';
+    renderTodos();
+  }
 
-  document.addEventListener('submit', function (e) {
-    if (e.target && e.target.id === 'kai-form') {
-      e.preventDefault();
-      var inp = $('kai-input');
-      var v = inp ? inp.value : '';
-      if (inp) inp.value = '';
-      send(v);
+  document.addEventListener('DOMContentLoaded', function () {
+    var b = el('ai-chat-btn');
+    if (b) {
+      b.onclick = function (e) {
+        if (e) { e.preventDefault(); e.stopPropagation(); }
+        openAi();
+        return false;
+      };
     }
-  }, true);
+    var c = el('kai-close');
+    if (c) c.onclick = function () { closeAi(); };
+    var sheet = el('kestrel-ai-sheet');
+    if (sheet) {
+      sheet.addEventListener('click', function (e) {
+        if (e.target === sheet) closeAi();
+      });
+    }
+    var tabC = el('kai-tab-chat');
+    var tabT = el('kai-tab-todos');
+    if (tabC) tabC.onclick = showChat;
+    if (tabT) tabT.onclick = showTodos;
+    var form = el('kai-form');
+    if (form) {
+      form.onsubmit = function (e) {
+        e.preventDefault();
+        var inp = el('kai-input');
+        var v = inp ? inp.value : '';
+        if (inp) inp.value = '';
+        send(v);
+      };
+    }
+    document.querySelectorAll('#kai-chips button[data-q]').forEach(function (btn) {
+      btn.onclick = function () { send(btn.getAttribute('data-q')); };
+    });
+  });
+
+  // Also bind immediately if DOM already ready
+  if (document.readyState !== 'loading') {
+    var b2 = el('ai-chat-btn');
+    if (b2) {
+      b2.onclick = function (e) {
+        if (e) { e.preventDefault(); e.stopPropagation(); }
+        openAi();
+        return false;
+      };
+    }
+  }
 })();
 </script>
 
