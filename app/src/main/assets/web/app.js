@@ -2267,8 +2267,8 @@
   // ---------------- Tab navigation: 5 grouped pages ----------------
   // Vitals (steps / heart / calories / sleep) · Wellness (scores, strain, PAI, mood, journal)
   // Activity (run + workouts) · Plan · Settings (band, alarms, notifications, backup)
-  const GROUP_TITLES = { vitals: 'Vitals', wellness: 'Wellness', activity: 'Activity', plan: 'Plan', settings: 'Settings' };
-  const GROUP_ORDER = ['vitals', 'wellness', 'activity', 'plan', 'settings'];
+  const GROUP_TITLES = { vitals: 'Vitals', wellness: 'Wellness', activity: 'Activity', plan: 'Plan', settings: 'Settings', chat: 'Chat' };
+  const GROUP_ORDER = ['vitals', 'wellness', 'activity', 'plan', 'settings', 'chat'];
   let currentGroup = 'vitals';
   const tabStrip = $('tab-strip');
 
@@ -2361,6 +2361,9 @@
     if (bleBtn) { bleBtn.classList.remove('hidden'); bleBtn.style.display = 'inline-flex'; }
     buildChips(group);
     moveTabIndicator();
+    if (group === 'chat' && typeof window.kestrelOnChatOpen === 'function') {
+      try { window.kestrelOnChatOpen(); } catch (e) {}
+    }
     if (!silent) window.scrollTo({ top: 0, behavior: 'auto' });
     renderGroup(group);
     countUpAll();
