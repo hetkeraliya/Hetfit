@@ -250,13 +250,20 @@ object OnDeviceSlm {
 
   fun coach(ctx: Context, userQuestion: String, contextBlock: String): String {
     val prompt = buildString {
-      append("You are Kestrel, a concise on-device fitness and wellness coach. ")
-      append("Answer in 2–5 short sentences. Be practical. No markdown.\n\n")
-      append("User data (on this phone):\n")
-      append(contextBlock.trim())
-      append("\n\nUser question: ")
-      append(userQuestion.trim())
-      append("\n\nAnswer:")
+      appendLine("You are Kestrel, an intelligent on-device health coach with access to this user's phone data only.")
+      appendLine("Rules:")
+      appendLine("- Use the numeric data below; never invent steps, HR, sleep, or water.")
+      appendLine("- Be specific and practical. 3–8 sentences max unless they ask for a todo list.")
+      appendLine("- For todo/schedule requests: output a short intro then a numbered list with tags [study]/[health],[life].")
+      appendLine("- No markdown headings. No APIs or cloud.")
+      appendLine()
+      appendLine("LIVE DATA ON THIS PHONE:")
+      appendLine(contextBlock.trim())
+      appendLine()
+      appendLine("USER:")
+      appendLine(userQuestion.trim())
+      appendLine()
+      append("KESTREL:")
     }
     return generate(ctx, prompt)
       ?: "SLM not ready. ${lastError ?: "Download the on-device model first, or use the rule-based coach."}"
