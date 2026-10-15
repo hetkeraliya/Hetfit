@@ -810,8 +810,12 @@
 
     function openSheet() {
       sheet.classList.remove('hidden');
-      sheet.style.display = 'block';
+      sheet.style.cssText = 'display:block!important;position:fixed!important;inset:0!important;z-index:99999!important;visibility:visible!important;';
       sheet.setAttribute('aria-hidden', 'false');
+      var panel = sheet.querySelector('.ai-sheet');
+      if (panel) {
+        panel.style.cssText = 'display:flex!important;flex-direction:column!important;position:absolute!important;left:0!important;right:0!important;bottom:0!important;width:100%!important;min-height:58vh!important;max-height:88vh!important;background:#F4F5F8!important;color:#2D3340!important;border-radius:22px 22px 0 0!important;z-index:2!important;opacity:1!important;visibility:visible!important;box-shadow:0 -16px 48px rgba(0,0,0,.28)!important;';
+      }
       ui.renderMessages();
       ui.renderTodos();
       try {
