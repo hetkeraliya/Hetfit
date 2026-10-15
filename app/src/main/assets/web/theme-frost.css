@@ -805,3 +805,20 @@ button:active, .rn-btn:active, .rn-chip:active, .rn-pill:active,
   border: 1px solid rgba(69,75,92,.12);
   background: rgba(255,255,255,.8); font-weight: 700; color: #454B5C;
 }
+
+/* AI launch button always visible in top bar */
+#ai-chat-btn, .ai-chat-launch {
+  display: inline-flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  position: relative;
+  z-index: 50;
+}
+#kestrel-ai-sheet {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 9999 !important;
+}
+#kestrel-ai-sheet:not(.hidden) {
+  display: block !important;
+}
