@@ -980,6 +980,10 @@ class KestrelAndroidBridge(
     com.example.ai.LocalKestrelBrain.answer(context, question)
 
   @JavascriptInterface
+  fun getHealthContext(): String =
+    com.example.ai.LocalKestrelBrain.contextJson(context)
+
+  @JavascriptInterface
   fun getOnDeviceModelStatus(): String =
     com.example.ai.OnDeviceSlm.statusJson(context)
 
