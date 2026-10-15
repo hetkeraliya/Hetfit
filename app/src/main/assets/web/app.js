@@ -2389,8 +2389,14 @@
 
   if (tabStrip) {
     tabStrip.addEventListener('click', (e) => {
+      if (e.target.closest('#nav-ai-btn')) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (window.__openKestrelAi) window.__openKestrelAi();
+        return;
+      }
       const btn = e.target.closest('.tab-strip-btn');
-      if (!btn) return;
+      if (!btn || !btn.dataset.group) return;
       goToGroup(btn.dataset.group);
     });
     setTimeout(() => { buildChips('vitals'); moveTabIndicator(); }, 60);
