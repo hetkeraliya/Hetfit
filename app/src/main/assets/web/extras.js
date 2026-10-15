@@ -574,71 +574,284 @@
   window.kestrelMoreRender = render;
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else setTimeout(init, 50);
 
-  // Floating AI menu (between content and bottom nav)
-  function mountAiFab() {
-    if (document.getElementById('kestrel-ai-fab')) return;
-    const fab = document.createElement('button');
-    fab.id = 'kestrel-ai-fab';
-    fab.type = 'button';
-    fab.setAttribute('aria-label', 'AI coach');
-    fab.innerHTML = '<span>AI</span>';
-    const panel = document.createElement('div');
-    panel.id = 'kestrel-ai-panel';
-    panel.className = 'hidden';
-    panel.innerHTML =
-      '<div class="ai-panel-card">' +
-        '<div class="ai-panel-head"><b>Kestrel AI</b><button type="button" id="ai-panel-close">✕</button></div>' +
-        '<p class="mo-note st-status" id="ai-panel-status">On-device coach</p>' +
-        '<div class="st-actions">' +
-          '<button type="button" data-q="How am I today? Give a short health summary.">Today</button>' +
-          '<button type="button" data-q="Advise me on water and hydration today.">Water</button>' +
-          '<button type="button" data-q="Advise me on mood and stress today.">Mood</button>' +
-          '<button type="button" data-q="What should I finish on my plan today?">Plan</button>' +
-          '<button type="button" data-q="Steps and activity advice for today.">Steps</button>' +
-          '<button type="button" data-q="Sleep recovery advice.">Sleep</button>' +
-        '</div>' +
-        '<p class="mo-note" id="ai-panel-out" style="margin-top:10px;max-height:120px;overflow:auto"></p>' +
-        '<p class="mo-note st-status">Model download is only in Settings → Band</p>' +
-      '</div>';
-    document.body.appendChild(fab);
-    document.body.appendChild(panel);
-    const out = () => panel.querySelector('#ai-panel-out');
-    const st = () => panel.querySelector('#ai-panel-status');
-    const refresh = () => {
-      try {
-        if (A && typeof A.getOnDeviceModelStatus === 'function') {
-          const s = JSON.parse(A.getOnDeviceModelStatus() || '{}');
-          const mb = s.bytes ? Math.round(s.bytes / 1048576) + ' MB' : '—';
-          st().textContent = s.loaded ? 'SLM loaded' :
-            (s.present ? 'Model on disk (' + mb + ')' : 'Rule-based coach (download model in Settings)');
-        }
-      } catch (e) {}
-    };
-    fab.onclick = () => {
-      panel.classList.toggle('hidden');
-      refresh();
-    };
-    panel.querySelector('#ai-panel-close').onclick = () => panel.classList.add('hidden');
-    panel.querySelectorAll('button[data-q]').forEach((b) => {
-      b.onclick = () => {
-        pushLifeWidgets();
-        out().textContent = 'Thinking…';
-        setTimeout(() => {
-          if (A && typeof A.askLocalCoach === 'function') {
-            out().textContent = A.askLocalCoach(b.getAttribute('data-q') || 'summary');
-          } else {
-            out().textContent = 'Rebuild the app for on-device coach.';
-          }
-          refresh();
-        }, 40);
-      };
-    });
+
+  // ---------- AI chat + todos ----------
+  const CHAT_KEY = 'kestrel.ai.chat.v1';
+  const TODO_KEY = 'kestrel.todos.v1';
+
+  function loadChat() {
+    const arr = load(CHAT_KEY, []);
+    return Array.isArray(arr) ? arr.slice(-40) : [];
   }
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', mountAiFab);
-  } else {
-    mountAiFab();
+  function saveChat(msgs) { save(CHAT_KEY, msgs.slice(-40)); }
+
+  function loadTodos() {
+    const o = load(TODO_KEY, { items: [] });
+    if (!o.items) o.items = [];
+    return o;
+  }
+  function saveTodos(o) { save(TODO_KEY, o); }
+
+  function tomorrowKey() {
+    return keyOf(new Date(Date.now() + 86400000));
   }
 
+  function formatTodosForPrompt() {
+    const o = loadTodos();
+    const open = o.items.filter((t) => !t.done).slice(0, 12);
+    if (!open.length) return 'No open todos.';
+    return open.map((t, i) => (i + 1) + '. [' + (t.tag || 'general') + '] ' + t.text).join('\n');
+  }
+
+  /** Rule-based todo generation when SLM is unavailable or as structured fallback. */
+  function generateTodosFromDay(text) {
+    const lower = (text || '').toLowerCase();
+    const items = [];
+    const push = (tag, t) => items.push({ id: 't' + Date.now() + Math.random().toString(36).slice(2, 6), text: t, tag: tag, done: false, forDate: tomorrowKey(), created: Date.now() });
+
+    // Study
+    if (/exam|test|study|homework|assignment|chapter|math|physics|chem|code|coding|lecture/.test(lower)) {
+      push('study', 'Review notes from today for 25 minutes');
+      push('study', 'Practice 10 problems or flashcards');
+      if (/exam|test/.test(lower)) push('study', 'Past paper / mock questions for 20 minutes');
+    } else {
+      push('study', 'One focused study block (25–40 min) on weakest subject');
+    }
+    // Health / recovery
+    if (/tired|sleep|exhausted|late/.test(lower)) {
+      push('health', 'Aim for lights-out 30 minutes earlier');
+      push('health', 'Short walk + water after waking');
+    } else {
+      push('health', 'Hit step goal or 20-minute walk');
+      push('health', 'Drink water to daily goal');
+    }
+    // Life / admin
+    if (/busy|meeting|work|class/.test(lower)) {
+      push('life', 'Block calendar for deep work / study');
+    }
+    push('life', 'Prep bag / materials the night before');
+    if (/stress|anxious|overwhelm/.test(lower)) {
+      push('health', '5-minute breath or stretch break midday');
+    }
+    // Dedup-ish limit
+    return items.slice(0, 8);
+  }
+
+  function parseTodoLinesFromAi(reply) {
+    const lines = String(reply || '').split(/\n+/);
+    const out = [];
+    lines.forEach((line) => {
+      let s = line.replace(/^[\s\-*•\d.\)\]]+/, '').trim();
+      if (s.length < 4 || s.length > 120) return;
+      if (/^(here|sure|okay|ok|i |you |tomorrow|based)/i.test(s)) return;
+      let tag = 'general';
+      const low = s.toLowerCase();
+      if (/study|read|notes|exam|homework|math|code|chapter/.test(low)) tag = 'study';
+      else if (/walk|sleep|water|run|workout|health|stretch/.test(low)) tag = 'health';
+      else if (/call|email|buy|clean|prep|bag/.test(low)) tag = 'life';
+      out.push({ id: 't' + Date.now() + Math.random().toString(36).slice(2, 6), text: s, tag: tag, done: false, forDate: tomorrowKey(), created: Date.now() });
+    });
+    return out.slice(0, 10);
+  }
+
+  function askAi(userText) {
+    pushLifeWidgets();
+    const todosCtx = formatTodosForPrompt();
+    const prompt =
+      'You are Kestrel, a helpful on-device coach. Be concise.\n' +
+      'Open todos:\n' + todosCtx + '\n\n' +
+      'User: ' + userText + '\n\n' +
+      'If they ask for a todo list or plan for tomorrow, reply with a short intro then a numbered list of concrete tasks (one per line).';
+    if (A && typeof A.askLocalCoach === 'function') {
+      try { return A.askLocalCoach(prompt); } catch (e) { /* fall through */ }
+    }
+    // Offline rule coach
+    const low = userText.toLowerCase();
+    if (/todo|to-do|task list|plan tomorrow|schedule|generate.*list/.test(low)) {
+      const gen = generateTodosFromDay(userText);
+      return 'Here is a todo list for tomorrow:\n' + gen.map((t, i) => (i + 1) + '. [' + t.tag + '] ' + t.text).join('\n');
+    }
+    if (A && typeof A.askLocalCoach === 'function') return A.askLocalCoach(userText);
+    return 'Describe your day and ask me to make tomorrow\'s todos, or ask about steps, water, mood, sleep, or plan.';
+  }
+
+  function handleChatSend(text, ui) {
+    text = (text || '').trim();
+    if (!text) return;
+    const msgs = loadChat();
+    msgs.push({ role: 'user', text: text, t: Date.now() });
+    saveChat(msgs);
+    ui.renderMessages();
+    ui.setStatus('Thinking…');
+    setTimeout(() => {
+      let reply = askAi(text);
+      const low = text.toLowerCase();
+      // Auto-save todos when user asked for a list
+      if (/todo|to-do|task|plan tomorrow|for tomorrow|schedule/.test(low)) {
+        let items = parseTodoLinesFromAi(reply);
+        if (!items.length) items = generateTodosFromDay(text);
+        if (items.length) {
+          const o = loadTodos();
+          // replace tomorrow's open generated ones optional — append
+          o.items = (o.items || []).concat(items);
+          saveTodos(o);
+          reply += '\n\n✓ Saved ' + items.length + ' todos for tomorrow. Open the Todos tab in this chat.';
+        }
+      }
+      // Explicit "add todo: ..."
+      const addMatch = text.match(/add todo[:\s]+(.+)/i);
+      if (addMatch) {
+        const o = loadTodos();
+        o.items.push({ id: 't' + Date.now(), text: addMatch[1].trim(), tag: 'general', done: false, forDate: tomorrowKey(), created: Date.now() });
+        saveTodos(o);
+        reply = 'Added todo: ' + addMatch[1].trim();
+      }
+      const msgs2 = loadChat();
+      msgs2.push({ role: 'assistant', text: reply, t: Date.now() });
+      saveChat(msgs2);
+      ui.renderMessages();
+      ui.renderTodos();
+      ui.setStatus('');
+    }, 60);
+  }
+
+  function mountAiChat() {
+    if (document.getElementById('kestrel-ai-sheet')) return;
+
+    const sheet = document.createElement('div');
+    sheet.id = 'kestrel-ai-sheet';
+    sheet.className = 'hidden';
+    sheet.innerHTML =
+      '<div class="ai-sheet-backdrop" id="ai-sheet-backdrop"></div>' +
+      '<div class="ai-sheet">' +
+        '<div class="ai-sheet-head">' +
+          '<div class="ai-sheet-title"><span class="ai-dot"></span><b>Kestrel chat</b></div>' +
+          '<div class="ai-sheet-tabs">' +
+            '<button type="button" class="ai-tab active" data-tab="chat">Chat</button>' +
+            '<button type="button" class="ai-tab" data-tab="todos">Todos</button>' +
+          '</div>' +
+          '<button type="button" class="ai-sheet-close" id="ai-sheet-close" aria-label="Close">✕</button>' +
+        '</div>' +
+        '<p class="mo-note ai-sheet-status" id="ai-sheet-status"></p>' +
+        '<div class="ai-sheet-body" id="ai-sheet-chat"></div>' +
+        '<div class="ai-sheet-body hidden" id="ai-sheet-todos"></div>' +
+        '<div class="ai-sheet-suggest" id="ai-sheet-suggest">' +
+          '<button type="button" data-q="How am I today?">Today</button>' +
+          '<button type="button" data-q="Make a todo list for tomorrow based on a normal school day with math and coding.">Tomorrow todos</button>' +
+          '<button type="button" data-q="Water and steps advice.">Health</button>' +
+        '</div>' +
+        '<form class="ai-sheet-input" id="ai-sheet-form">' +
+          '<input type="text" id="ai-sheet-input" placeholder="Message Kestrel…" autocomplete="off" enterkeyhint="send" />' +
+          '<button type="submit" id="ai-sheet-send">Send</button>' +
+        '</form>' +
+      '</div>';
+    document.body.appendChild(sheet);
+
+    const chatEl = () => sheet.querySelector('#ai-sheet-chat');
+    const todosEl = () => sheet.querySelector('#ai-sheet-todos');
+    const statusEl = () => sheet.querySelector('#ai-sheet-status');
+
+    const ui = {
+      setStatus(s) { statusEl().textContent = s || ''; },
+      renderMessages() {
+        const box = chatEl();
+        const msgs = loadChat();
+        if (!msgs.length) {
+          box.innerHTML = '<div class="ai-bubble ai-bubble-bot">Hi — I run on your phone. Chat about health, or describe your day and ask for <b>tomorrow\'s todos</b> (study, health, life).</div>';
+          return;
+        }
+        box.innerHTML = msgs.map((m) =>
+          '<div class="ai-bubble ' + (m.role === 'user' ? 'ai-bubble-user' : 'ai-bubble-bot') + '">' +
+          String(m.text).replace(/</g, '&lt;').replace(/\n/g, '<br>') + '</div>'
+        ).join('');
+        box.scrollTop = box.scrollHeight;
+      },
+      renderTodos() {
+        const box = todosEl();
+        const o = loadTodos();
+        const items = (o.items || []).filter((t) => t.forDate === tomorrowKey() || !t.done).slice(-30);
+        if (!items.length) {
+          box.innerHTML = '<p class="mo-note">No todos yet. In Chat, describe your day and ask for a todo list for tomorrow.</p>';
+          return;
+        }
+        box.innerHTML = '<ul class="ai-todo-list">' + items.map((t) =>
+          '<li class="' + (t.done ? 'done' : '') + '" data-id="' + t.id + '">' +
+          '<label><input type="checkbox" ' + (t.done ? 'checked' : '') + '/> ' +
+          '<span class="ai-todo-tag">' + (t.tag || '') + '</span> ' +
+          String(t.text).replace(/</g, '&lt;') + '</label></li>'
+        ).join('') + '</ul>' +
+          '<button type="button" class="ai-todo-clear" id="ai-todo-clear-done">Clear done</button>';
+        box.querySelectorAll('input[type=checkbox]').forEach((cb) => {
+          cb.onchange = () => {
+            const id = cb.closest('li').dataset.id;
+            const o2 = loadTodos();
+            const it = (o2.items || []).find((x) => x.id === id);
+            if (it) { it.done = cb.checked; saveTodos(o2); ui.renderTodos(); }
+          };
+        });
+        const clr = box.querySelector('#ai-todo-clear-done');
+        if (clr) clr.onclick = () => {
+          const o2 = loadTodos();
+          o2.items = (o2.items || []).filter((x) => !x.done);
+          saveTodos(o2);
+          ui.renderTodos();
+        };
+      }
+    };
+
+    function openSheet() {
+      sheet.classList.remove('hidden');
+      ui.renderMessages();
+      ui.renderTodos();
+      try {
+        if (A && A.getOnDeviceModelStatus) {
+          const s = JSON.parse(A.getOnDeviceModelStatus() || '{}');
+          statusEl().textContent = s.loaded ? 'On-device SLM ready' : (s.present ? 'Model on disk — load in Settings' : 'Rule-based coach · download SLM in Settings');
+        }
+      } catch (e) {}
+      setTimeout(() => { const inp = sheet.querySelector('#ai-sheet-input'); if (inp) inp.focus(); }, 200);
+    }
+    function closeSheet() { sheet.classList.add('hidden'); }
+
+    sheet.querySelector('#ai-sheet-close').onclick = closeSheet;
+    sheet.querySelector('#ai-sheet-backdrop').onclick = closeSheet;
+    sheet.querySelectorAll('.ai-tab').forEach((tab) => {
+      tab.onclick = () => {
+        sheet.querySelectorAll('.ai-tab').forEach((x) => x.classList.toggle('active', x === tab));
+        const which = tab.dataset.tab;
+        chatEl().classList.toggle('hidden', which !== 'chat');
+        todosEl().classList.toggle('hidden', which !== 'todos');
+        sheet.querySelector('#ai-sheet-suggest').classList.toggle('hidden', which !== 'chat');
+        sheet.querySelector('#ai-sheet-form').classList.toggle('hidden', which !== 'chat');
+        if (which === 'todos') ui.renderTodos();
+      };
+    });
+    sheet.querySelector('#ai-sheet-form').onsubmit = (e) => {
+      e.preventDefault();
+      const inp = sheet.querySelector('#ai-sheet-input');
+      const v = inp.value;
+      inp.value = '';
+      handleChatSend(v, ui);
+    };
+    sheet.querySelectorAll('#ai-sheet-suggest button').forEach((b) => {
+      b.onclick = () => handleChatSend(b.getAttribute('data-q'), ui);
+    });
+
+    // Header button (preferred) — remove old FAB if present
+    const oldFab = document.getElementById('kestrel-ai-fab');
+    if (oldFab) oldFab.remove();
+    const oldPanel = document.getElementById('kestrel-ai-panel');
+    if (oldPanel) oldPanel.remove();
+
+    const hdr = document.getElementById('ai-chat-btn');
+    if (hdr) hdr.addEventListener('click', openSheet);
+    window.kestrelOpenAiChat = openSheet;
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', mountAiChat);
+  } else {
+    mountAiChat();
+  }
 
 })();
