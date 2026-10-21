@@ -16,7 +16,8 @@
 <link rel="stylesheet" href="styles.css" />
 <link rel="stylesheet" href="run.css" />
 <link rel="stylesheet" href="theme-frost.css" />
-<link rel="stylesheet" href="specular-theme.css" />
+<!-- specular-theme disabled: restore full feature UI -->
+<!-- <link rel="stylesheet" href="specular-theme.css" /> -->
 <script src="vendor/jszip.min.js"></script>
 <script src="vendor/sql-wasm.js"></script>
 <script src="vendor/aes-js.min.js"></script>
@@ -85,21 +86,21 @@
 
     <nav class="tab-strip" id="tab-strip">
       <span class="tab-indicator" id="tab-indicator"></span>
-      <button class="tab-strip-btn active" data-group="vitals" data-page="chart" type="button" aria-label="Home">
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10.5 12 3l9 7.5V21a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>
-        <span>Home</span>
+      <button class="tab-strip-btn active" data-group="vitals" data-page="chart" type="button">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>
+        <span>Vitals</span>
       </button>
-      <button class="tab-strip-btn" data-group="activity" data-page="workouts" type="button" aria-label="Train">
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M6.5 6.5h11v11h-11z"/><path d="M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3"/></svg>
-        <span>Train</span>
+      <button class="tab-strip-btn" data-group="wellness" data-page="wellness" type="button">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.4-9.3-9A5.3 5.3 0 0 1 12 6a5.3 5.3 0 0 1 9.3 6c-2.3 4.6-9.3 9-9.3 9z"/></svg>
+        <span>Wellness</span>
       </button>
-      <button class="tab-strip-btn" data-group="run" data-page="run" type="button" aria-label="Run">
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="13" cy="4" r="2"/><path d="M4 22l4-7 3 2 3-5-3-3-4 1M14 12l3 3 4 1"/></svg>
-        <span>Run</span>
+      <button class="tab-strip-btn" data-group="activity" data-page="run" type="button">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="4" r="2"/><path d="M4 22l4-7 3 2 3-5-3-3-4 1M14 12l3 3 4 1"/></svg>
+        <span>Activity</span>
       </button>
-      <button class="tab-strip-btn" data-group="settings" data-page="settings" type="button" aria-label="You">
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 5-6 8-6s6.5 2 8 6"/></svg>
-        <span>You</span>
+      <button class="tab-strip-btn" data-group="settings" data-page="settings" type="button">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1.1z"/></svg>
+        <span>Settings</span>
       </button>
     </nav>
 
@@ -495,7 +496,7 @@
       </section>
 
       
-      <section class="tab-page" data-page="run" data-group="run" data-label="Run"><div id="run-root"></div></section>
+      <section class="tab-page" data-page="run" data-group="activity" data-label="Run"><div id="run-root"></div></section>
       <section class="tab-page" data-page="workouts" data-group="activity" data-label="Workouts">
         <div class="sheet-stack">
           <div class="glass-card sync-card">
@@ -561,95 +562,6 @@
             <div class="insight-head"><span class="sparkle">⏱</span><span>Workout log</span></div>
             <div class="workout-list" id="workout-list"></div>
           </div>
-        </div>
-      </section>
-
-      <section class="tab-page" data-page="plan" data-group="plan" data-label="Plan">
-        <div class="ins-grid" id="ins-grid">
-          <div class="ins-card"><h4>Consistency</h4><b id="ins-consist">—</b></div>
-          <div class="ins-card"><h4>Volume</h4><b id="ins-vol">—</b></div>
-          <div class="ins-card"><h4>Weekly Goal</h4><b id="ins-goal">—</b></div>
-          <div class="ins-card"><h4>Training Load</h4><b id="ins-load">—</b></div>
-        </div>
-        <div class="sheet-stack">
-
-          <div class="sub-tab-row" id="plan-sub-tabs">
-            <button type="button" class="sub-tab-btn active" data-plan="workout">Workout</button>
-            <button type="button" class="sub-tab-btn" data-plan="study">Study</button>
-            <button type="button" class="sub-tab-btn" data-plan="nutrition">Nutrition</button>
-          </div>
-
-          <div class="glass-card plan-progress-card" id="plan-progress-card">
-            <div class="plan-progress-head">
-              <span class="plan-progress-title">Today's plan</span>
-              <span class="plan-progress-pct" id="plan-progress-pct">0%</span>
-            </div>
-            <div class="plan-bar"><i id="plan-progress-bar" style="width:0%"></i></div>
-            <div class="plan-progress-grid">
-              <div class="plan-mini">
-                <span>Workout</span>
-                <div class="plan-bar plan-bar-sm"><i id="plan-bar-workout" style="width:0%"></i></div>
-                <b id="plan-cnt-workout">0/0</b>
-              </div>
-              <div class="plan-mini">
-                <span>Study</span>
-                <div class="plan-bar plan-bar-sm"><i id="plan-bar-study" style="width:0%"></i></div>
-                <b id="plan-cnt-study">0/0</b>
-              </div>
-              <div class="plan-mini">
-                <span>Nutrition</span>
-                <div class="plan-bar plan-bar-sm"><i id="plan-bar-nutrition" style="width:0%"></i></div>
-                <b id="plan-cnt-nutrition">0/0</b>
-              </div>
-            </div>
-          </div>
-
-          <div class="plan-panel active" data-plan-panel="workout">
-            <div class="glass-card list-card">
-              <div class="insight-head">
-                <span class="sparkle" id="plan-workout-tag-dot">●</span>
-                <span id="plan-workout-title">Today's Workout</span>
-              </div>
-              <ul id="plan-workout-list" class="check-list"></ul>
-              <p id="plan-workout-note" class="muted"></p>
-            </div>
-            <div class="glass-card list-card">
-              <div class="insight-head"><span class="sparkle">◎</span><span>Warm-up (every session, 5 min)</span></div>
-              <ul id="plan-warmup-list" class="check-list"></ul>
-            </div>
-            <div class="glass-card list-card">
-              <div class="insight-head"><span class="sparkle">↗</span><span>Progression rule</span></div>
-              <p class="muted">Once every set at the top of the rep range feels solid with clean form, move to a harder variation instead of just adding reps — push-ups to archer push-ups to one-arm progressions, squats toward pistol squats.</p>
-            </div>
-          </div>
-
-          <div class="plan-panel" data-plan-panel="study">
-            <div class="glass-card list-card">
-              <div class="insight-head"><span class="sparkle">◷</span><span id="plan-study-title">Today's Schedule</span></div>
-              <ul id="plan-study-list" class="check-list"></ul>
-            </div>
-            <div class="glass-card list-card">
-              <div class="insight-head"><span class="sparkle">◈</span><span>Today's focus subjects</span></div>
-              <p id="plan-study-subjects" class="muted"></p>
-            </div>
-            <div class="glass-card list-card">
-              <div class="insight-head"><span class="sparkle">☑</span><span>Rules to follow</span></div>
-              <ul id="plan-study-rules" class="plain-list"></ul>
-            </div>
-          </div>
-
-          <div class="plan-panel" data-plan-panel="nutrition">
-            <div id="plan-nutrition-meals"></div>
-            <div class="glass-card list-card">
-              <div class="insight-head"><span class="sparkle">💪</span><span>Daily protein tally</span></div>
-              <p id="plan-protein-tally" class="muted"></p>
-            </div>
-            <div class="glass-card list-card">
-              <div class="insight-head"><span class="sparkle">◆</span><span>Vitamins vegetarians tend to miss</span></div>
-              <ul id="plan-vitamins" class="plain-list"></ul>
-            </div>
-          </div>
-
         </div>
       </section>
 
