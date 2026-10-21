@@ -978,7 +978,7 @@ class KestrelAndroidBridge(
   @JavascriptInterface
   fun startWorkoutSession(json: String): String {
     return try {
-      com.example.run.RunTrackingService.startWorkoutIsland(context, json)
+      com.example.run.RunTrackingService.startWorkoutIsland(context.applicationContext, json ?: "{}")
       "ok"
     } catch (e: Exception) {
       e.message ?: "error"
@@ -988,12 +988,13 @@ class KestrelAndroidBridge(
   @JavascriptInterface
   fun endWorkoutSession(): String {
     return try {
-      com.example.run.RunTrackingService.endWorkoutIsland(context)
+      com.example.run.RunTrackingService.endWorkoutIsland(context.applicationContext)
       "ok"
     } catch (e: Exception) {
       e.message ?: "error"
     }
   }
+
 
   @JavascriptInterface
   fun askLocalCoach(question: String): String =
