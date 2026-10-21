@@ -1,5 +1,5 @@
 (function () {
-  var KEY = 'kestrel.plan.v1';
+  var KEY = 'kestrel.user.plan.v1';
   function load() {
     try { return JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { return null; }
   }
@@ -7,71 +7,29 @@
     try { localStorage.setItem(KEY, JSON.stringify(v)); } catch (e) {}
   }
 
-  var step = 0;
-  var draft = { style: null, equipment: null, focus: null };
-
-  var STEPS = [
-    {
-      title: 'Build your plan',
-      sub: 'What kind of training do you want?',
-      key: 'style',
-      opts: [
-        { id: 'calisthenics', label: 'Calisthenics', desc: 'Bodyweight only' },
-        { id: 'gym', label: 'Gym', desc: 'Machines & free weights' },
-        { id: 'both', label: 'Both', desc: 'Mix bodyweight + gym' }
-      ]
-    },
-    {
-      title: 'Equipment',
-      sub: 'What do you usually have?',
-      key: 'equipment',
-      opts: [
-        { id: 'none', label: 'No weights', desc: 'Bodyweight & bands' },
-        { id: 'free', label: 'Free weights', desc: 'Dumbbells / barbell' },
-        { id: 'full', label: 'Full gym', desc: 'Machines + free weights' }
-      ]
-    },
-    {
-      title: 'Focus',
-      sub: 'Primary goal for the next weeks',
-      key: 'focus',
-      opts: [
-        { id: 'strength', label: 'Strength', desc: 'Get stronger' },
-        { id: 'hypertrophy', label: 'Hypertrophy', desc: 'Build muscle' },
-        { id: 'general', label: 'General', desc: 'Stay consistent' }
-      ]
-    }
-  ];
-
   function $(id) { return document.getElementById(id); }
 
-  function render() {
-    var s = STEPS[step];
-    if (!s) return;
-    $('ob-title').textContent = s.title;
-    $('ob-sub').textContent = s.sub;
-    var box = $('ob-opts');
-    box.innerHTML = s.opts.map(function (o) {
-      var on = draft[s.key] === o.id ? ' on' : '';
-      return '<button type="button" class="ob-opt' + on + '" data-id="' + o.id + '">' +
-        o.label + '<small>' + o.desc + '</small></button>';
-    }).join('');
-    box.querySelectorAll('.ob-opt').forEach(function (btn) {
-      btn.onclick = function () {
-        draft[s.key] = btn.getAttribute('data-id');
-        render();
-      };
-    });
-    $('ob-next').textContent = step >= STEPS.length - 1 ? 'Start training' : 'Continue';
+  function parseLines(text) {
+    return String(text || '')
+      .split(/\n+/)
+      .map(function (l) { return l.replace(/^[\s\-*•\d.\)\]]+/, '').trim(); })
+      .filter(function (l) { return l.length >= 2 && l.length < 120; })
+      .slice(0, 20)
+      .map(function (name, i) {
+        return { id: 'u' + i + '_' + name.toLowerCase().replace(/\s+/g, '-').slice(0, 24), name: name, sets: 3, reps: 10 };
+      });
   }
 
   function open() {
     var sheet = $('ob-sheet');
     if (!sheet) return;
-    step = 0;
-    draft = { style: null, equipment: null, focus: null };
+    var existing = load();
+    var ta = $('ob-plan-text');
+    if (ta) {
+      ta.value = existing && existing.raw ? existing.raw :
+        'Push-ups\nSquats\nPlank\nDumbbell curls\nLunges';
+    }
     sheet.classList.add('on');
-    render();
   }
 
   function close() {
@@ -80,40 +38,59 @@
   }
 
   function finish() {
-    if (!draft.style || !draft.equipment || !draft.focus) return;
-    var plan = {
-      style: draft.style,
-      equipment: draft.equipment,
-      focus: draft.focus,
-      created: Date.now(),
-      daysPerWeek: 4
-    };
+    var ta = $('ob-plan-text');
+    var raw = ta ? ta.value.trim() : '';
+    if (!raw) { alert('Type at least one exercise'); return; }
+    var items = parseLines(raw);
+    if (!items.length) { alert('Could not read exercises — one per line'); return; }
+    var plan = { raw: raw, items: items, updated: Date.now() };
     save(plan);
     close();
-    if (window.KestrelWorkout && window.KestrelWorkout.applyPlan) {
-      window.KestrelWorkout.applyPlan(plan);
+    if (window.KestrelWorkout && window.KestrelWorkout.applyUserPlan) {
+      window.KestrelWorkout.applyUserPlan(plan);
     }
-    if (window.kestrelGoto) window.kestrelGoto('activity');
   }
 
   function wire() {
-    var next = $('ob-next');
-    if (next) next.onclick = function () {
-      var s = STEPS[step];
-      if (!draft[s.key]) return;
-      if (step < STEPS.length - 1) { step++; render(); }
-      else finish();
-    };
-    // First open
-    if (!load()) {
-      setTimeout(open, 600);
-    } else if (window.KestrelWorkout && window.KestrelWorkout.applyPlan) {
-      window.KestrelWorkout.applyPlan(load());
+    // Rebuild panel content for full-screen text plan
+    var panel = document.querySelector('.ob-panel');
+    if (panel) {
+      panel.innerHTML =
+        '<h2>Your workout plan</h2>' +
+        '<p class="ob-sub">Type what you want to do — one exercise per line. When you start freestyle on the band, this plan opens automatically.</p>' +
+        '<textarea class="ob-textarea" id="ob-plan-text" placeholder="Push-ups&#10;Squats&#10;Plank&#10;…"></textarea>' +
+        '<p class="ob-hint">Example: 3 sets × 10 reps will be used by default. You can change sets during the session.</p>' +
+        '<div class="ob-actions">' +
+        '<button type="button" class="ob-skip" id="ob-skip">Skip</button>' +
+        '<button type="button" class="ob-next" id="ob-save">Save plan</button>' +
+        '</div>';
+    }
+    var saveBtn = $('ob-save');
+    if (saveBtn) saveBtn.onclick = finish;
+    var skip = $('ob-skip');
+    if (skip) skip.onclick = close;
+
+    // Do NOT auto-open — user builds when they want
+    var existing = load();
+    if (existing && window.KestrelWorkout && window.KestrelWorkout.applyUserPlan) {
+      window.KestrelWorkout.applyUserPlan(existing);
     }
   }
 
   window.openPlanOnboarding = open;
-  window.kestrelGetPlan = load;
+  window.kestrelGetUserPlan = load;
+
+  // Band freestyle → auto start user plan
+  window.kestrelOnBandFreestyle = function () {
+    var plan = load();
+    if (!plan || !plan.items || !plan.items.length) {
+      open();
+      return;
+    }
+    if (window.KestrelWorkout && window.KestrelWorkout.startUserPlan) {
+      window.KestrelWorkout.startUserPlan(plan);
+    }
+  };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire);
   else wire();
