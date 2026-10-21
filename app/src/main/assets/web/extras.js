@@ -269,6 +269,15 @@
   function renderBand(stack) {
     const A = window.KestrelAndroidBridge;
     const c = h('div', 'rn-card sync-card');
+    const darkOn = document.body.classList.contains('dark');
+    const dm = h('div', 'dm-row');
+    dm.innerHTML = '<span>Dark mode</span><button type="button" class="dm-switch" id="dm-toggle" aria-label="Toggle dark mode"></button>';
+    stack.appendChild(dm);
+    dm.querySelector('#dm-toggle').onclick = () => {
+      document.body.classList.toggle('dark');
+      try { localStorage.setItem('kestrel.dark', document.body.classList.contains('dark') ? '1' : '0'); } catch (e) {}
+    };
+
     c.innerHTML =
       '<h3>Band &amp; Health</h3>' +
       '<p>Sync your band or import from Health Connect / Gadgetbridge.</p>' +
