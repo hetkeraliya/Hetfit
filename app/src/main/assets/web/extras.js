@@ -267,202 +267,58 @@
   }
 
   function renderBand(stack) {
-    if (!A || !A.getBandSettings) {
-      const c = h('div', 'rn-card'); c.innerHTML = '<h4>Band controls</h4><p class="mo-note" style="margin-top:0">Settings, alarms and phone notifications are available in the Android app.</p>'; stack.appendChild(c); return;
-    }
-    let st = {}; try { st = JSON.parse(A.getBandSettings() || '{}'); } catch (e) {}
-    st.alarms = Array.isArray(st.alarms) ? st.alarms : [];
-    for (let i = 0; i < 5; i++) if (!st.alarms[i]) st.alarms[i] = { slot: i, enabled: false, hour: 7, minute: 0, days: 0 };
-    st.inactivity = st.inactivity || { enabled: false, threshold: 60, startHour: 8, endHour: 21 };
-    const chk = (id, label, on) => '<label class="st-check"><span>' + label + '</span><input type="checkbox" id="' + id + '" ' + (on ? 'checked' : '') + '></label>';
-    const sel = (id, opts, cur) => '<select id="' + id + '" class="mo-input" style="width:auto">' + opts.map((o) => '<option value="' + o[0] + '"' + (String(o[0]) === String(cur) ? ' selected' : '') + '>' + o[1] + '</option>').join('') + '</select>';
+    const A = window.KestrelAndroidBridge;
+    const c = h('div', 'rn-card sync-card');
+    c.innerHTML =
+      '<h3>Band &amp; Health</h3>' +
+      '<p>Sync your band or import from Health Connect / Gadgetbridge.</p>' +
+      '<div class="sync-row">' +
+      '<button type="button" class="primary" id="bf-sync">Sync band</button>' +
+      '<button type="button" id="bf-zepp">Import HC</button>' +
+      '<button type="button" id="bf-pair">Pair</button>' +
+      '</div>' +
+      '<p class="mo-note keep st-status" id="bf-status" style="margin-top:12px">Ready</p>' +
+      '<div style="margin-top:16px">' +
+      '<button type="button" id="bf-plan" style="width:100%;padding:14px;border-radius:14px;border:1px solid rgba(0,0,0,0.08);background:#fff;font-weight:600">Edit workout plan</button>' +
+      '</div>';
+    stack.appendChild(c);
 
-    // Quick actions — compact, no wall of text
-    const feat = h('div', 'rn-card st-card');
-    feat.innerHTML =
-      '<h4>Actions</h4>' +
-      '<div class="st-actions">' +
-        '<button type="button" id="bf-find">Find</button>' +
-        '<button type="button" id="bf-stop">Stop</button>' +
-        '<button type="button" id="bf-time">Time</button>' +
-        '<button type="button" id="bf-hr">HR</button>' +
-        '<button type="button" id="bf-weather">Weather</button>' +
-        '<button type="button" id="bf-music">Music</button>' +
-        '<button type="button" id="bf-zepp">Import HC</button>' +
-        '<button type="button" id="bf-hc">HC settings</button>' +
-      '</div>' +
-      '<div class="st-row">' +
-        '<span class="st-label">Step goal</span>' +
-        '<input type="number" id="bf-goal" class="mo-input st-input" value="' + (st.stepGoal || 8000) + '" min="1000" max="100000" step="500">' +
-        '<button type="button" id="bf-goal-save">Set</button>' +
-      '</div>' +
-      '<p class="mo-note st-status" id="bf-zepp-status">Health Connect</p>';
-    stack.appendChild(feat);
-    const go = (fn, msg) => () => { try { toast(fn() || msg); } catch (e) { toast('Failed'); } };
-    if (feat.querySelector('#bf-find')) feat.querySelector('#bf-find').onclick = go(() => A.findBand && A.findBand(), 'Finding…');
-    if (feat.querySelector('#bf-stop')) feat.querySelector('#bf-stop').onclick = go(() => A.stopFindBand && A.stopFindBand(), 'Stopped');
-    if (feat.querySelector('#bf-time')) feat.querySelector('#bf-time').onclick = go(() => A.syncTimeToBand && A.syncTimeToBand(), 'Time synced');
-    if (feat.querySelector('#bf-hr')) feat.querySelector('#bf-hr').onclick = go(() => A.measureHeartRateNow && A.measureHeartRateNow(), 'Measuring…');
-    if (feat.querySelector('#bf-music')) feat.querySelector('#bf-music').onclick = go(() => A.pushNowPlayingToBand && A.pushNowPlayingToBand(), 'Sent');
-    if (feat.querySelector('#bf-goal-save')) feat.querySelector('#bf-goal-save').onclick = () => {
-      const n = Number(feat.querySelector('#bf-goal').value) || 8000;
-      toast(A.setStepGoal ? A.setStepGoal(n) : 'Unavailable');
-    };
-    if (feat.querySelector('#bf-weather')) feat.querySelector('#bf-weather').onclick = () => {
-      if (!A.sendWeather) { toast('Update app binary'); return; }
-      const city = (Intl.DateTimeFormat().resolvedOptions().timeZone || 'Local').split('/').pop().replace(/_/g, ' ');
-      toast(A.sendWeather(city, 25, 0));
-    };
-    const zeppStatus = feat.querySelector('#bf-zepp-status');
-    if (A.getHealthConnectStatus && zeppStatus) {
+    const status = c.querySelector('#bf-status');
+    c.querySelector('#bf-sync').onclick = () => {
+      if (!A || !A.syncBandNow) { toast('Open the app binary with band support'); return; }
+      status.textContent = 'Syncing…';
       try {
-        const st = JSON.parse(A.getHealthConnectStatus() || '{}');
-        zeppStatus.textContent = (st.message || 'Health Connect') +
-          (st.gadgetbridgeInstalled ? ' · Gadgetbridge detected' : '') +
-          (st.zeppInstalled ? ' · Zepp detected' : '') +
-          (!st.gadgetbridgeInstalled && !st.zeppInstalled ? ' · No Gadgetbridge/Zepp found' : '') +
-          (st.available ? '' : ' · Install/update Health Connect');
-      } catch (e) {}
-    }
-    if (feat.querySelector('#bf-zepp')) feat.querySelector('#bf-zepp').onclick = () => {
-      const bridge = window.KestrelAndroidBridge;
-      if (!bridge || typeof bridge.importFromZepp !== 'function') {
-        toast('This build is missing Health Connect import. Rebuild the APK with the latest MainActivity.kt.');
+        const r = A.syncBandNow();
+        status.textContent = typeof r === 'string' ? r : 'Sync started';
+        toast('Band sync started');
+      } catch (e) { status.textContent = 'Sync failed'; toast(String(e)); }
+    };
+    c.querySelector('#bf-zepp').onclick = async () => {
+      if (!A || !A.importFromZepp) {
+        toast('Rebuild APK for Health Connect import');
         return;
       }
-      toast('Importing from Health Connect…');
+      status.textContent = 'Importing…';
       try {
-        const msg = bridge.importFromZepp();
+        const msg = await Promise.resolve(A.importFromZepp());
+        status.textContent = msg || 'Import finished';
         toast(msg || 'Import finished');
-        if (zeppStatus) zeppStatus.textContent = msg || 'Import finished';
-        try { if (typeof window.kestrelReload === 'function') window.kestrelReload(); } catch (e) {}
       } catch (e) {
+        status.textContent = 'Import failed';
         toast('Import failed: ' + (e && e.message ? e.message : e));
       }
     };
-    if (feat.querySelector('#bf-hc')) feat.querySelector('#bf-hc').onclick = () => {
-      if (A && typeof A.openHealthConnectSettings === 'function') A.openHealthConnectSettings();
-      else toast('Open Health Connect in system settings and allow Sleep (and Steps/HR if available)');
+    c.querySelector('#bf-pair').onclick = () => {
+      if (A && A.openBandPairing) A.openBandPairing();
+      else if (A && A.startBandScan) A.startBandScan();
+      else toast('Pairing available in native band screen');
     };
-
-    const set = h('div', 'rn-card');
-    set.innerHTML = '<h4>Preferences</h4>' +
-      '<div style="display:flex;justify-content:space-between;align-items:center;font-weight:600;padding:6px 0"><span>Heart-rate check every</span>' + sel('bs-hr', [[0, 'Off'], [1, '1 min'], [5, '5 min'], [10, '10 min'], [30, '30 min']], st.hrInterval == null ? 5 : st.hrInterval) + '</div>' +
-      chk('bs-sleephr', 'Heart rate during sleep', st.sleepHr !== false) + chk('bs-lift', 'Raise wrist to wake screen', st.lift !== false) + chk('bs-goal', 'Notify when step goal is reached', st.goalNotify !== false) +
-      chk('bs-runbuzz', 'Buzz band when I start / finish a run and every km', st.runBuzz !== false) + chk('bs-mirror', 'Ask to track on phone (GPS map + band HR) when I start a workout on the band', st.mirrorWorkout !== false) + chk('bs-gpsband', 'Send phone GPS to band during workouts (speed & distance on band)', st.sendGpsToBand !== false) +
-      chk('bs-inact', 'Sedentary reminder', st.inactivity.enabled) +
-      '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px;font-weight:600"><span>after</span>' + sel('bs-ithr', [[30, '30 min'], [45, '45 min'], [60, '60 min'], [90, '90 min']], st.inactivity.threshold) +
-      '<span>between</span>' + sel('bs-ish', Array.from({ length: 24 }, (_, i) => [i, pad2(i) + ':00']), st.inactivity.startHour) + '<span>and</span>' + sel('bs-ieh', Array.from({ length: 24 }, (_, i) => [i, pad2(i) + ':00']), st.inactivity.endHour) + '</div>' +
-      '<h4 style="margin-top:16px">Display &amp; units</h4>' +
-      chk('bs-24h', '24-hour clock', st.time24h !== false) +
-      chk('bs-date', 'Show date on band', st.dateOnBand !== false) +
-      chk('bs-metric', 'Metric distance (km)', st.metric !== false) +
-      chk('bs-rotate', 'Rotate wrist to switch info', !!st.rotateWrist) +
-      chk('bs-caller', 'Show caller ID on band', st.showCaller !== false) +
-      chk('bs-discalert', 'Alert when phone disconnects', !!st.disconnectAlert) +
-      '<h4 style="margin-top:16px">Do not disturb</h4>' +
-      '<div style="display:flex;justify-content:space-between;align-items:center;font-weight:600;padding:6px 0"><span>Mode</span>' +
-      sel('bs-dnd', [['off', 'Off'], ['auto', 'Automatic'], ['scheduled', 'Scheduled']], st.dnd || 'off') + '</div>' +
-      '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px;font-weight:600"><span>from</span>' +
-      sel('bs-dndsh', Array.from({ length: 24 }, (_, i) => [i, pad2(i) + ':00']), st.dndStartH == null ? 22 : st.dndStartH) +
-      '<span>to</span>' +
-      sel('bs-dndeh', Array.from({ length: 24 }, (_, i) => [i, pad2(i) + ':00']), st.dndEndH == null ? 7 : st.dndEndH) + '</div>';
-    stack.appendChild(set);
-
-    // Reminders (up to 3 simple ones in UI)
-    st.reminders = Array.isArray(st.reminders) ? st.reminders : [];
-    while (st.reminders.length < 3) st.reminders.push({ enabled: false, text: '', atMs: 0, repeat: 'once' });
-    const rem = h('div', 'rn-card');
-    rem.innerHTML = '<h4>Reminders</h4>' + st.reminders.slice(0, 3).map((r, i) => {
-      const d = r.atMs ? new Date(r.atMs) : new Date(Date.now() + 3600000);
-      const local = d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + 'T' + pad2(d.getHours()) + ':' + pad2(d.getMinutes());
-      return '<div style="padding:10px 0;border-bottom:1px solid var(--line)">' +
-        '<div style="display:flex;gap:8px;align-items:center">' +
-        '<input type="checkbox" id="rm-e' + i + '" ' + (r.enabled ? 'checked' : '') + ' style="width:22px;height:22px;accent-color:var(--accent)">' +
-        '<input type="text" id="rm-t' + i + '" class="mo-input" style="flex:1" placeholder="Reminder text" value="' + (r.text || '').replace(/"/g, '&quot;') + '">' +
-        '</div>' +
-        '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">' +
-        '<input type="datetime-local" id="rm-d' + i + '" class="mo-input" style="width:auto" value="' + local + '">' +
-        sel('rm-r' + i, [['once', 'Once'], ['daily', 'Every day'], ['weekly', 'Every week']], r.repeat || 'once') +
-        '</div></div>';
-    }).join('') + '<p class="mo-note">Saved with “Save to band”. Up to 8 slots on most Mi Bands.</p>';
-    stack.appendChild(rem);
-
-    const al = h('div', 'rn-card');
-    al.innerHTML = '<h4>Alarms</h4>' +
-      '<div class="mo-btns" style="margin-bottom:12px"><button type="button" id="al-phone-sync" class="primary">Sync phone alarm → band</button></div>' +
-      '<p class="mo-note" style="margin-top:0">Pulls your next Clock-app alarm and writes it to band slot 1. Android only exposes the next alarm, not the full list.</p>' +
-      st.alarms.slice(0, 5).map((a, i) =>
-      '<div style="padding:10px 0;border-bottom:1px solid var(--line)"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px">' +
-      '<input type="time" id="al-t' + i + '" class="mo-input" style="width:auto;font-size:20px;font-weight:800" value="' + pad2(a.hour) + ':' + pad2(a.minute) + '">' +
-      '<input type="checkbox" id="al-e' + i + '" ' + (a.enabled ? 'checked' : '') + ' style="width:24px;height:24px;accent-color:var(--accent)"></div>' +
-      '<div class="mo-tags" style="margin:8px 0 0" id="al-d' + i + '">' + DAYS.map((d, j) => '<button type="button" data-b="' + (1 << j) + '" class="' + ((a.days & (1 << j)) ? 'active' : '') + '">' + d + '</button>').join('') + '</div></div>').join('') +
-      '<p class="mo-note">No day selected = rings once. Alarms run on the band itself, so they work without the phone nearby.</p>';
-    stack.appendChild(al);
-    al.querySelectorAll('.mo-tags button').forEach((b) => (b.onclick = () => b.classList.toggle('active')));
-    const phoneSync = al.querySelector('#al-phone-sync');
-    if (phoneSync) phoneSync.onclick = () => {
-      if (!A.syncPhoneAlarmsToBand) { toast('Update the app binary for this feature'); return; }
-      toast(A.syncPhoneAlarmsToBand());
-      setTimeout(() => renderAll('settings'), 600);
+    c.querySelector('#bf-plan').onclick = () => {
+      if (window.openPlanOnboarding) window.openPlanOnboarding();
     };
-
-    const save = h('div', 'rn-card');
-    save.innerHTML = '<div class="mo-btns"><button id="bs-save">Save to band</button></div><p class="mo-note">Settings are stored here and re-sent every time the band connects.</p>';
-    stack.appendChild(save);
-    save.querySelector('#bs-save').onclick = () => {
-      const g = (id) => stack.querySelector('#' + id);
-      const out = {
-        hrInterval: Number(g('bs-hr').value), sleepHr: g('bs-sleephr').checked, lift: g('bs-lift').checked, goalNotify: g('bs-goal').checked, runBuzz: g('bs-runbuzz').checked, mirrorWorkout: g('bs-mirror').checked, sendGpsToBand: g('bs-gpsband').checked,
-        inactivity: { enabled: g('bs-inact').checked, threshold: Number(g('bs-ithr').value), startHour: Number(g('bs-ish').value), endHour: Number(g('bs-ieh').value) },
-        time24h: g('bs-24h').checked, dateOnBand: g('bs-date').checked, metric: g('bs-metric').checked,
-        rotateWrist: g('bs-rotate').checked, showCaller: g('bs-caller').checked, disconnectAlert: g('bs-discalert').checked,
-        dnd: g('bs-dnd').value, dndStartH: Number(g('bs-dndsh').value), dndStartM: 0, dndEndH: Number(g('bs-dndeh').value), dndEndM: 0,
-        stepGoal: Number((stack.querySelector('#bf-goal') || {}).value) || st.stepGoal || 8000,
-        alarms: st.alarms.slice(0, 5).map((a, i) => {
-          const tv = (g('al-t' + i).value || '07:00').split(':'); let days = 0;
-          g('al-d' + i).querySelectorAll('button.active').forEach((b) => (days |= Number(b.dataset.b)));
-          return { slot: i, enabled: g('al-e' + i).checked, hour: Number(tv[0]), minute: Number(tv[1]), days: days };
-        }),
-        reminders: [0, 1, 2].map((i) => {
-          const el = stack.querySelector('#rm-e' + i);
-          if (!el) return { enabled: false, text: '', atMs: 0, repeat: 'once' };
-          const dt = stack.querySelector('#rm-d' + i).value;
-          return {
-            enabled: el.checked,
-            text: stack.querySelector('#rm-t' + i).value || '',
-            atMs: dt ? new Date(dt).getTime() : 0,
-            repeat: stack.querySelector('#rm-r' + i).value || 'once'
-          };
-        })
-      };
-      toast(A.saveBandSettings(JSON.stringify(out)));
-    };
-
-    // phone notifications
-    let nc = { enabled: false, all: false, packages: [], access: false };
-    try { nc = JSON.parse(A.getNotifyConfig()); } catch (e) {}
-    const nf = h('div', 'rn-card');
-    nf.innerHTML = '<h4>Notifications</h4>' + chk('nf-on', 'Show phone notifications on the band', nc.enabled) + chk('nf-all', 'All apps', nc.all) +
-      '<div id="nf-apps" style="' + (nc.all ? 'opacity:.4;pointer-events:none' : '') + '">' + NOTIFY_APPS.map((a) => chk('nf-' + a[0].replace(/\./g, '_'), a[1], nc.packages.indexOf(a[0]) >= 0)).join('') + '</div>' +
-      '<p class="mo-note st-status">' + (nc.access ? 'Access granted' : 'Allow notification access once') + '</p>' +
-      '<div class="mo-btns"><button id="nf-save">Save</button>' + (nc.access ? '' : '<button id="nf-grant">Allow access</button>') + '<button id="nf-test">Send test</button></div>';
-    stack.appendChild(nf);
-    nf.querySelector('#nf-all').onchange = (e) => { nf.querySelector('#nf-apps').style.cssText = e.target.checked ? 'opacity:.4;pointer-events:none' : ''; };
-    nf.querySelector('#nf-save').onclick = () => {
-      const pk = NOTIFY_APPS.filter((a) => nf.querySelector('#nf-' + a[0].replace(/\./g, '_')).checked).map((a) => a[0]);
-      // keep related default packages (Samsung / AOSP messaging) together with Messages
-      if (pk.indexOf('com.google.android.apps.messaging') >= 0) pk.push('com.samsung.android.messaging', 'com.android.mms');
-      if (pk.indexOf('com.google.android.dialer') >= 0) pk.push('com.android.server.telecom');
-      if (pk.indexOf('com.whatsapp') >= 0) pk.push('com.whatsapp.w4b');
-      A.setNotifyConfig(JSON.stringify({ enabled: nf.querySelector('#nf-on').checked, all: nf.querySelector('#nf-all').checked, packages: pk })); toast('Saved');
-    };
-    const gr = nf.querySelector('#nf-grant'); if (gr) gr.onclick = () => A.openNotificationAccess();
-    nf.querySelector('#nf-test').onclick = () => toast(A.sendTestNotification() ? 'Sent to band' : 'Connect the band first');
-    try { appendLocalCoach(stack); } catch (e) {}
   }
 
-  // ---------------- Backup ----------------
+
   function renderBackup(stack) {
     const c = h('div', 'rn-card');
     c.innerHTML = '<h4>Export</h4><div class="mo-btns"><button id="bk-csv">Daily CSV</button><button id="bk-json">Daily JSON</button>' + (A && A.exportSamplesCsv ? '<button id="bk-min">Band minutes CSV</button>' : '') + '</div>' +
