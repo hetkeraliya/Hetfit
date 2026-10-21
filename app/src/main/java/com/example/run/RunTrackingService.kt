@@ -38,51 +38,6 @@ import java.util.Locale
 class RunTrackingService : Service(), LocationListener {
 
   companion object {
-    fun startWorkoutIsland(ctx: android.content.Context, json: String) {
-      val name = try { org.json.JSONObject(json).optString("name", "Workout") } catch (_: Exception) { "Workout" }
-      val nm = ctx.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
-      if (android.os.Build.VERSION.SDK_INT >= 26) {
-        val ch = android.app.NotificationChannel("kestrel_workout_island", "Workout session", android.app.NotificationManager.IMPORTANCE_DEFAULT)
-        ch.setShowBadge(false)
-        ch.lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
-        nm.createNotificationChannel(ch)
-      }
-      fun pi(action: String, req: Int): android.app.PendingIntent {
-        val i = android.content.Intent(ctx, RunTrackingService::class.java).setAction(action)
-        return android.app.PendingIntent.getService(
-          ctx, req, i,
-          android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
-        )
-      }
-      val open = android.content.Intent(ctx, com.example.MainActivity::class.java).apply {
-        flags = android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP
-      }
-      val contentPi = android.app.PendingIntent.getActivity(
-        ctx, 77, open,
-        android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
-      )
-      val notif = androidx.core.app.NotificationCompat.Builder(ctx, "kestrel_workout_island")
-        .setSmallIcon(android.R.drawable.ic_media_play)
-        .setContentTitle(name)
-        .setContentText("Tap for controls · Pause / Stop")
-        .setContentIntent(contentPi)
-        .setOngoing(true)
-        .setOnlyAlertOnce(true)
-        .setCategory(androidx.core.app.NotificationCompat.CATEGORY_WORKOUT)
-        .setVisibility(androidx.core.app.NotificationCompat.VISIBILITY_PUBLIC)
-        .setPriority(androidx.core.app.NotificationCompat.PRIORITY_DEFAULT)
-        .setStyle(androidx.media.app.NotificationCompat.MediaStyle()
-          .setShowActionsInCompactView(0, 1))
-        .addAction(android.R.drawable.ic_media_pause, "Pause", pi(ACTION_PAUSE, 401))
-        .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop", pi(ACTION_FINISH, 402))
-        .build()
-      nm.notify(77441, notif)
-    }
-    fun endWorkoutIsland(ctx: android.content.Context) {
-      val nm = ctx.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
-      nm.cancel(77441)
-    }
-
     const val ACTION_START = "com.example.run.START"
     const val ACTION_PAUSE = "com.example.run.PAUSE"
     const val ACTION_RESUME = "com.example.run.RESUME"
@@ -93,6 +48,66 @@ class RunTrackingService : Service(), LocationListener {
     private const val CHANNEL_ID = "kestrel_run"
     private const val NOTIF_ID = 4712
 
+
+    fun startWorkoutIsland(ctx: android.content.Context, json: String) {
+      try {
+        val name = try {
+          org.json.JSONObject(json).optString("name", "Workout")
+        } catch (_: Exception) {
+          "Workout"
+        }
+        val nm = ctx.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+        if (android.os.Build.VERSION.SDK_INT >= 26) {
+          val ch = android.app.NotificationChannel(
+            "kestrel_workout_island",
+            "Workout session",
+            android.app.NotificationManager.IMPORTANCE_DEFAULT
+          )
+          ch.setShowBadge(false)
+          ch.lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+          nm.createNotificationChannel(ch)
+        }
+        fun pi(action: String, req: Int): android.app.PendingIntent {
+          val i = android.content.Intent(ctx, RunTrackingService::class.java).setAction(action)
+          return android.app.PendingIntent.getService(
+            ctx, req, i,
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+          )
+        }
+        val open = android.content.Intent(ctx, com.example.MainActivity::class.java).apply {
+          flags = android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val contentPi = android.app.PendingIntent.getActivity(
+          ctx, 77, open,
+          android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+        )
+        val notif = androidx.core.app.NotificationCompat.Builder(ctx, "kestrel_workout_island")
+          .setSmallIcon(android.R.drawable.ic_media_play)
+          .setContentTitle(name)
+          .setContentText("Workout in progress")
+          .setContentIntent(contentPi)
+          .setOngoing(true)
+          .setOnlyAlertOnce(true)
+          .setCategory(androidx.core.app.NotificationCompat.CATEGORY_SERVICE)
+          .setVisibility(androidx.core.app.NotificationCompat.VISIBILITY_PUBLIC)
+          .setPriority(androidx.core.app.NotificationCompat.PRIORITY_DEFAULT)
+          .addAction(android.R.drawable.ic_media_pause, "Pause", pi(ACTION_PAUSE, 401))
+          .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop", pi(ACTION_FINISH, 402))
+          .build()
+        nm.notify(77441, notif)
+      } catch (_: Exception) {
+        // Never crash the app for a notification failure
+      }
+    }
+
+    fun endWorkoutIsland(ctx: android.content.Context) {
+      try {
+        val nm = ctx.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+        nm.cancel(77441)
+      } catch (_: Exception) {}
+    }
+
+    
     /** Called every second on the main thread with the live state JSON. */
     @Volatile var listener: ((String) -> Unit)? = null
     /** Called on the main thread after a run was saved (start seconds) or discarded (-1). */
@@ -512,56 +527,66 @@ class RunTrackingService : Service(), LocationListener {
       this, code, Intent(this, RunTrackingService::class.java).setAction(action),
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
-    val open = PendingIntent.getActivity(
-      this, 0,
-      Intent(this, MainActivity::class.java)
-        .setAction("com.example.action.OPEN_LIVE")
-        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
-      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-    )
-    val distKm = distanceM / 1000.0
-    val km = String.format(Locale.getDefault(), "%.2f", distKm)
-    val time = String.format(Locale.getDefault(), "%d:%02d", elapsed / 60, elapsed % 60)
-    val paceStr = if (distKm >= 0.05 && elapsed > 0) {
-      val secPerKm = (elapsed / distKm).toInt().coerceAtLeast(0)
-      String.format(Locale.getDefault(), "%d:%02d /km", secPerKm / 60, secPerKm % 60)
-    } else "— /km"
-    val hrStr = if (hrCount > 0) {
-      val avg = (hrSum / hrCount).toInt()
-      "♥ $avg bpm"
-    } else ""
-    val status = if (paused) "PAUSED" else "RUN"
+    return try {
+      val open = PendingIntent.getActivity(
+        this, 0,
+        Intent(this, MainActivity::class.java)
+          .setAction("com.example.action.OPEN_LIVE")
+          .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+      )
+      val distKm = distanceM / 1000.0
+      val km = String.format(Locale.getDefault(), "%.2f", distKm)
+      val time = String.format(Locale.getDefault(), "%d:%02d", elapsed / 60, elapsed % 60)
+      val paceStr = if (distKm >= 0.05 && elapsed > 0) {
+        val secPerKm = (elapsed / distKm).toInt().coerceAtLeast(0)
+        String.format(Locale.getDefault(), "%d:%02d /km", secPerKm / 60, secPerKm % 60)
+      } else "— /km"
+      val hrStr = if (hrCount > 0) {
+        val avg = (hrSum / hrCount).toInt()
+        "♥ $avg bpm"
+      } else ""
+      val status = if (paused) "PAUSED" else "RUN"
 
-    // Compact (status bar / collapsed)
-    val compact = android.widget.RemoteViews(packageName, com.example.R.layout.notification_run_compact)
-    compact.setTextViewText(com.example.R.id.nr_c_title, if (paused) "Paused" else "Recording")
-    compact.setTextViewText(com.example.R.id.nr_c_stats, "$km km · $time")
+      val compact = android.widget.RemoteViews(packageName, com.example.R.layout.notification_run_compact)
+      compact.setTextViewText(com.example.R.id.nr_c_title, if (paused) "Paused" else "Recording")
+      compact.setTextViewText(com.example.R.id.nr_c_stats, "$km km · $time")
 
-    // Expanded / lock-screen card
-    val big = android.widget.RemoteViews(packageName, com.example.R.layout.notification_run_lock)
-    big.setTextViewText(com.example.R.id.nr_title, status)
-    big.setTextViewText(com.example.R.id.nr_distance, "$km km")
-    big.setTextViewText(com.example.R.id.nr_time, time)
-    big.setTextViewText(com.example.R.id.nr_pace, paceStr)
-    big.setTextViewText(com.example.R.id.nr_hr, hrStr)
+      val big = android.widget.RemoteViews(packageName, com.example.R.layout.notification_run_lock)
+      big.setTextViewText(com.example.R.id.nr_title, status)
+      big.setTextViewText(com.example.R.id.nr_distance, "$km km")
+      big.setTextViewText(com.example.R.id.nr_time, time)
+      big.setTextViewText(com.example.R.id.nr_pace, paceStr)
+      big.setTextViewText(com.example.R.id.nr_hr, hrStr)
 
-    val b = NotificationCompat.Builder(this, CHANNEL_ID)
-      .setSmallIcon(android.R.drawable.ic_menu_mylocation)
-      .setContentTitle(if (paused) "Paused · $km km" else "Recording · $km km")
-      .setContentText("$time · $paceStr" + if (hrStr.isNotEmpty()) " · $hrStr" else "")
-      .setCustomContentView(compact)
-      .setCustomBigContentView(big)
-      .setStyle(androidx.media.app.NotificationCompat.MediaStyle().setShowActionsInCompactView(0, 1))
-      .setContentIntent(open)
-      .setOngoing(true)
-      .setOnlyAlertOnce(true)
-      .setShowWhen(false)
-      .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-      .setCategory(NotificationCompat.CATEGORY_WORKOUT)
-      .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-    if (paused) b.addAction(0, "Resume", pi(ACTION_RESUME, 31)) else b.addAction(0, "Pause", pi(ACTION_PAUSE, 30))
-    b.addAction(0, "Finish", pi(ACTION_FINISH, 32))
-    return b.build()
+      val b = NotificationCompat.Builder(this, CHANNEL_ID)
+        .setSmallIcon(android.R.drawable.ic_menu_mylocation)
+        .setContentTitle(if (paused) "Paused · $km km" else "Recording · $km km")
+        .setContentText("$time · $paceStr" + if (hrStr.isNotEmpty()) " · $hrStr" else "")
+        .setCustomContentView(compact)
+        .setCustomBigContentView(big)
+        .setContentIntent(open)
+        .setOngoing(true)
+        .setOnlyAlertOnce(true)
+        .setShowWhen(false)
+        .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+        .setCategory(NotificationCompat.CATEGORY_SERVICE)
+        .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+      if (paused) b.addAction(0, "Resume", pi(ACTION_RESUME, 31)) else b.addAction(0, "Pause", pi(ACTION_PAUSE, 30))
+      b.addAction(0, "Finish", pi(ACTION_FINISH, 32))
+      b.build()
+    } catch (e: Exception) {
+      val b = NotificationCompat.Builder(this, CHANNEL_ID)
+        .setSmallIcon(android.R.drawable.ic_menu_mylocation)
+        .setContentTitle(if (paused) "Paused" else "Recording")
+        .setContentText("Activity in progress")
+        .setOngoing(true)
+        .setOnlyAlertOnce(true)
+        .setCategory(NotificationCompat.CATEGORY_SERVICE)
+      if (paused) b.addAction(0, "Resume", pi(ACTION_RESUME, 31)) else b.addAction(0, "Pause", pi(ACTION_PAUSE, 30))
+      b.addAction(0, "Finish", pi(ACTION_FINISH, 32))
+      b.build()
+    }
   }
 
   private fun finishRun(save: Boolean) {
