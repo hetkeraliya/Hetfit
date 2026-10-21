@@ -42,19 +42,39 @@ class RunTrackingService : Service(), LocationListener {
       val name = try { org.json.JSONObject(json).optString("name", "Workout") } catch (_: Exception) { "Workout" }
       val nm = ctx.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
       if (android.os.Build.VERSION.SDK_INT >= 26) {
-        val ch = android.app.NotificationChannel("kestrel_workout_island", "Workout session", android.app.NotificationManager.IMPORTANCE_LOW)
+        val ch = android.app.NotificationChannel("kestrel_workout_island", "Workout session", android.app.NotificationManager.IMPORTANCE_DEFAULT)
         ch.setShowBadge(false)
+        ch.lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
         nm.createNotificationChannel(ch)
       }
+      fun pi(action: String, req: Int): android.app.PendingIntent {
+        val i = android.content.Intent(ctx, RunTrackingService::class.java).setAction(action)
+        return android.app.PendingIntent.getService(
+          ctx, req, i,
+          android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+        )
+      }
+      val open = android.content.Intent(ctx, com.example.MainActivity::class.java).apply {
+        flags = android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP
+      }
+      val contentPi = android.app.PendingIntent.getActivity(
+        ctx, 77, open,
+        android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+      )
       val notif = androidx.core.app.NotificationCompat.Builder(ctx, "kestrel_workout_island")
         .setSmallIcon(android.R.drawable.ic_media_play)
         .setContentTitle(name)
-        .setContentText("Workout in progress")
+        .setContentText("Tap for controls · Pause / Stop")
+        .setContentIntent(contentPi)
         .setOngoing(true)
         .setOnlyAlertOnce(true)
         .setCategory(androidx.core.app.NotificationCompat.CATEGORY_WORKOUT)
         .setVisibility(androidx.core.app.NotificationCompat.VISIBILITY_PUBLIC)
-        .setPriority(androidx.core.app.NotificationCompat.PRIORITY_LOW)
+        .setPriority(androidx.core.app.NotificationCompat.PRIORITY_DEFAULT)
+        .setStyle(androidx.media.app.NotificationCompat.MediaStyle()
+          .setShowActionsInCompactView(0, 1))
+        .addAction(android.R.drawable.ic_media_pause, "Pause", pi(ACTION_PAUSE, 401))
+        .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop", pi(ACTION_FINISH, 402))
         .build()
       nm.notify(77441, notif)
     }
@@ -531,7 +551,7 @@ class RunTrackingService : Service(), LocationListener {
       .setContentText("$time · $paceStr" + if (hrStr.isNotEmpty()) " · $hrStr" else "")
       .setCustomContentView(compact)
       .setCustomBigContentView(big)
-      .setStyle(NotificationCompat.DecoratedCustomViewStyle())
+      .setStyle(androidx.media.app.NotificationCompat.MediaStyle().setShowActionsInCompactView(0, 1))
       .setContentIntent(open)
       .setOngoing(true)
       .setOnlyAlertOnce(true)
