@@ -976,6 +976,26 @@ class KestrelAndroidBridge(
   }
 
   @JavascriptInterface
+  fun startWorkoutSession(json: String): String {
+    return try {
+      com.example.run.RunTrackingService.startWorkoutIsland(context, json)
+      "ok"
+    } catch (e: Exception) {
+      e.message ?: "error"
+    }
+  }
+
+  @JavascriptInterface
+  fun endWorkoutSession(): String {
+    return try {
+      com.example.run.RunTrackingService.endWorkoutIsland(context)
+      "ok"
+    } catch (e: Exception) {
+      e.message ?: "error"
+    }
+  }
+
+  @JavascriptInterface
   fun askLocalCoach(question: String): String =
     com.example.ai.LocalKestrelBrain.answer(context, question)
 
