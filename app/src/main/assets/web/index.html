@@ -89,13 +89,13 @@
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10.5 12 3l9 7.5V21a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>
         <span>Home</span>
       </button>
-      <button class="tab-strip-btn" data-group="activity" data-page="run" type="button" aria-label="Train">
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/><path d="M4 8h16M4 16h16"/></svg>
+      <button class="tab-strip-btn" data-group="activity" data-page="workouts" type="button" aria-label="Train">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M6.5 6.5h11v11h-11z"/><path d="M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3"/></svg>
         <span>Train</span>
       </button>
-      <button class="tab-strip-btn" data-group="plan" data-page="plan" type="button" aria-label="Insights">
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19V5M10 19V9M16 19v-6M22 19V7"/></svg>
-        <span>Insights</span>
+      <button class="tab-strip-btn" data-group="run" data-page="run" type="button" aria-label="Run">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="13" cy="4" r="2"/><path d="M4 22l4-7 3 2 3-5-3-3-4 1M14 12l3 3 4 1"/></svg>
+        <span>Run</span>
       </button>
       <button class="tab-strip-btn" data-group="settings" data-page="settings" type="button" aria-label="You">
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 5-6 8-6s6.5 2 8 6"/></svg>
@@ -495,13 +495,13 @@
       </section>
 
       
-      <section class="tab-page" data-page="run" data-group="activity" data-label="Run"><div id="run-root"></div></section>
+      <section class="tab-page" data-page="run" data-group="run" data-label="Run"><div id="run-root"></div></section>
       <section class="tab-page" data-page="workouts" data-group="activity" data-label="Workouts">
         <div class="sheet-stack">
           <div class="glass-card sync-card">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
               <h3 style="margin:0">Workouts</h3>
-              <button type="button" class="start-pill" id="wx-start">▶ Start</button>
+              <div style="display:flex;gap:8px;align-items:center"><button type="button" class="wx-filter" id="wx-edit-plan">Edit plan</button><button type="button" class="start-pill" id="wx-start">▶ Start</button></div>
             </div>
             <p style="color:#8E8E93;margin:0 0 12px;font-size:14px" id="wx-plan-label">Your plan</p>
             <div class="wx-filters" id="wx-filters"></div>
