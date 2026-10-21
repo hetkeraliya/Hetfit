@@ -253,6 +253,8 @@
     renderList();
     var start = $('wx-start');
     if (start) start.onclick = startSession;
+    var ep = $('wx-edit-plan');
+    if (ep) ep.onclick = function () { if (window.openPlanOnboarding) window.openPlanOnboarding(); };
     var pause = $('sess-pause');
     if (pause) pause.onclick = function () {
       if (!session) return;
@@ -293,7 +295,29 @@
     } catch (e) {}
   }
 
-  window.KestrelWorkout = { applyPlan: applyPlan, startSession: startSession };
+  function applyUserPlan(plan) {
+    if (!plan || !plan.items) return;
+    var label = $('wx-plan-label');
+    if (label) label.textContent = plan.items.length + ' exercises in your plan';
+    selected = {};
+    plan.items.forEach(function (it) { selected[it.id] = true; });
+    // inject user exercises into list
+    plan.items.forEach(function (it) {
+      if (!EXERCISES.find(function (e) { return e.id === it.id; })) {
+        EXERCISES.unshift({ id: it.id, name: it.name, muscle: 'Custom', equip: 'Custom', diff: 'Custom', home: true });
+      }
+    });
+    renderFilters();
+    renderList();
+  }
+  function startUserPlan(plan) {
+    if (!plan || !plan.items) return;
+    selected = {};
+    plan.items.forEach(function (it) { selected[it.id] = true; });
+    applyUserPlan(plan);
+    startSession();
+  }
+  window.KestrelWorkout = { applyPlan: applyPlan, applyUserPlan: applyUserPlan, startSession: startSession, startUserPlan: startUserPlan };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire);
   else wire();
