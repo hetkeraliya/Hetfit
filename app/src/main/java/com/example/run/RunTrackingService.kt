@@ -23,6 +23,7 @@ import android.speech.tts.TextToSpeech
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.example.MainActivity
+import com.example.island.DynamicIslandSession
 import com.example.ble.BandSampleStore
 import com.example.ble.BandWorkoutRow
 import com.example.ble.MiBandManager
@@ -50,61 +51,19 @@ class RunTrackingService : Service(), LocationListener {
 
 
     fun startWorkoutIsland(ctx: android.content.Context, json: String) {
-      try {
-        val name = try {
-          org.json.JSONObject(json).optString("name", "Workout")
-        } catch (_: Exception) {
-          "Workout"
-        }
-        val nm = ctx.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
-        if (android.os.Build.VERSION.SDK_INT >= 26) {
-          val ch = android.app.NotificationChannel(
-            "kestrel_workout_island",
-            "Workout session",
-            android.app.NotificationManager.IMPORTANCE_DEFAULT
-          )
-          ch.setShowBadge(false)
-          ch.lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
-          nm.createNotificationChannel(ch)
-        }
-        fun pi(action: String, req: Int): android.app.PendingIntent {
-          val i = android.content.Intent(ctx, RunTrackingService::class.java).setAction(action)
-          return android.app.PendingIntent.getService(
-            ctx, req, i,
-            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
-          )
-        }
-        val open = android.content.Intent(ctx, com.example.MainActivity::class.java).apply {
-          flags = android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP
-        }
-        val contentPi = android.app.PendingIntent.getActivity(
-          ctx, 77, open,
-          android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
-        )
-        val notif = androidx.core.app.NotificationCompat.Builder(ctx, "kestrel_workout_island")
-          .setSmallIcon(android.R.drawable.ic_media_play)
-          .setContentTitle(name)
-          .setContentText("Workout in progress")
-          .setContentIntent(contentPi)
-          .setOngoing(true)
-          .setOnlyAlertOnce(true)
-          .setCategory(androidx.core.app.NotificationCompat.CATEGORY_SERVICE)
-          .setVisibility(androidx.core.app.NotificationCompat.VISIBILITY_PUBLIC)
-          .setPriority(androidx.core.app.NotificationCompat.PRIORITY_DEFAULT)
-          .addAction(android.R.drawable.ic_media_pause, "Pause", pi(ACTION_PAUSE, 401))
-          .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop", pi(ACTION_FINISH, 402))
-          .build()
-        nm.notify(77441, notif)
+      val name = try {
+        org.json.JSONObject(json).optString("name", "Workout")
       } catch (_: Exception) {
-        // Never crash the app for a notification failure
+        "Workout"
+      }
+      try {
+        DynamicIslandSession.start(ctx, name, "Workout in progress")
+      } catch (_: Exception) {
       }
     }
 
     fun endWorkoutIsland(ctx: android.content.Context) {
-      try {
-        val nm = ctx.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
-        nm.cancel(77441)
-      } catch (_: Exception) {}
+      try { DynamicIslandSession.end(ctx) } catch (_: Exception) {}
     }
 
     
@@ -283,6 +242,7 @@ class RunTrackingService : Service(), LocationListener {
     try {
       val n = buildNotification()
       if (Build.VERSION.SDK_INT >= 29) startForeground(NOTIF_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION) else startForeground(NOTIF_ID, n)
+      try { DynamicIslandSession.start(this, if (fromBandSession) "Band workout" else "Run", "Recording") } catch (_: Exception) {}
     } catch (e: Exception) {
       android.util.Log.w("RunTracking", "Foreground start refused: ${e.message}")
       stopSelf()
@@ -360,6 +320,7 @@ class RunTrackingService : Service(), LocationListener {
     paused = p
     if (p) pauseStartMs = System.currentTimeMillis()
     else { pausedAccumMs += System.currentTimeMillis() - pauseStartMs; lastLoc = null; lastMoveMs = System.currentTimeMillis() }
+    try { DynamicIslandSession.update(this, paused = p) } catch (_: Exception) {}
     speak(if (p) "Paused" else "Resumed")
     onTick()
   }
@@ -510,7 +471,12 @@ class RunTrackingService : Service(), LocationListener {
     listener?.invoke(stateJson)
     tickCount++
     if (tickCount % 2 == 0) {
-      try { getSystemService(NotificationManager::class.java).notify(NOTIF_ID, buildNotification(elapsed)) } catch (_: Exception) { }
+      try {
+        getSystemService(NotificationManager::class.java).notify(NOTIF_ID, buildNotification(elapsed))
+        val km = String.format(java.util.Locale.getDefault(), "%.2f km", distanceM / 1000.0)
+        val tm = String.format(java.util.Locale.getDefault(), "%d:%02d", elapsed / 60, elapsed % 60)
+        DynamicIslandSession.update(this, subtitle = "$km · $tm", paused = paused)
+      } catch (_: Exception) { }
     }
     if (!paused && tickCount % 75 == 0) {
       try { MiBandManager.get(this).bandRunKeepAlive() } catch (_: Exception) { }
@@ -590,6 +556,7 @@ class RunTrackingService : Service(), LocationListener {
   }
 
   private fun finishRun(save: Boolean) {
+    try { DynamicIslandSession.end(this) } catch (_: Exception) {}
     if (!running) { stopSelf(); return }
     val now = System.currentTimeMillis()
     val elapsed = elapsedSec(now)
