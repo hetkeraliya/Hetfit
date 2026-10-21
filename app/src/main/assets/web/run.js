@@ -659,7 +659,7 @@
   // ---------- story / post share cards ----------
   const SIZES = { story: [1080, 1920], post: [1080, 1350], square: [1080, 1080] };
   const FONT = '"Plus Jakarta Sans", -apple-system, "SF Pro Text", system-ui, sans-serif';
-  let shareSel = { tpl: 'glass', fmt: 'story' };
+  let shareSel = { tpl: 'gradient', fmt: 'story' };
 
   function openShare(a, an, track) {
     const o = overlay('rn-share');
@@ -827,14 +827,22 @@
     };
     sheet.querySelector('#rn-band-yes').onclick = () => {
       close();
+      const low = String(label || '').toLowerCase();
+      const isStrength = /free\s*style|freestyle|strength|gym|workout|training|other/.test(low) || type === 8 || type === 9;
+      if (isStrength && window.kestrelOnBandFreestyle) {
+        try { if (A && A.acceptBandWorkout) A.acceptBandWorkout(type); } catch (e) {}
+        window.kestrelOnBandFreestyle();
+        if (window.kestrelGoto) window.kestrelGoto('activity');
+        toast('Starting your plan');
+        return;
+      }
       if (!A || !A.acceptBandWorkout) { toast('Open the Android app to track.'); return; }
       try {
         const msg = A.acceptBandWorkout(type);
         toast(msg || 'Tracking on phone');
         finishing = false; livePts = [];
         openLive(true);
-        // Jump to Activity tab so the live screen is in context
-        if (window.kestrelGoto) window.kestrelGoto('activity');
+        if (window.kestrelGoto) window.kestrelGoto('run');
       } catch (e) { toast('Could not start tracking'); }
     };
   }
