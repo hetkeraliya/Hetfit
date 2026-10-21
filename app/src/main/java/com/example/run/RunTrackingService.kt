@@ -473,9 +473,11 @@ class RunTrackingService : Service(), LocationListener {
     if (tickCount % 2 == 0) {
       try {
         getSystemService(NotificationManager::class.java).notify(NOTIF_ID, buildNotification(elapsed))
-        val km = String.format(java.util.Locale.getDefault(), "%.2f km", distanceM / 1000.0)
-        val tm = String.format(java.util.Locale.getDefault(), "%d:%02d", elapsed / 60, elapsed % 60)
-        DynamicIslandSession.update(this, subtitle = "$km · $tm", paused = paused)
+        try {
+          val km = String.format(java.util.Locale.getDefault(), "%.2f km", distanceM / 1000.0)
+          val tm = String.format(java.util.Locale.getDefault(), "%d:%02d", elapsed / 60, elapsed % 60)
+          DynamicIslandSession.update(this, subtitle = "$km · $tm", paused = paused)
+        } catch (_: Exception) { }
       } catch (_: Exception) { }
     }
     if (!paused && tickCount % 75 == 0) {
