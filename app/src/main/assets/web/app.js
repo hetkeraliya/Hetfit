@@ -2267,8 +2267,8 @@
   // ---------------- Tab navigation: 5 grouped pages ----------------
   // Vitals (steps / heart / calories / sleep) · Wellness (scores, strain, PAI, mood, journal)
   // Activity (run + workouts) · Plan · Settings (band, alarms, notifications, backup)
-  const GROUP_TITLES = { vitals: 'Home', wellness: 'Wellness', activity: 'Train', run: 'Run', plan: 'Plan', settings: 'You', chat: 'Chat' };
-  const GROUP_ORDER = ['vitals', 'activity', 'run', 'settings'];
+  const GROUP_TITLES = { vitals: 'Vitals', wellness: 'Wellness', activity: 'Activity', settings: 'Settings', chat: 'Chat' };
+  const GROUP_ORDER = ['vitals', 'wellness', 'activity', 'settings'];
   let currentGroup = 'vitals';
   const tabStrip = $('tab-strip');
 
