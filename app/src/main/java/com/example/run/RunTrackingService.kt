@@ -38,6 +38,31 @@ import java.util.Locale
 class RunTrackingService : Service(), LocationListener {
 
   companion object {
+    fun startWorkoutIsland(ctx: android.content.Context, json: String) {
+      val name = try { org.json.JSONObject(json).optString("name", "Workout") } catch (_: Exception) { "Workout" }
+      val nm = ctx.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+      if (android.os.Build.VERSION.SDK_INT >= 26) {
+        val ch = android.app.NotificationChannel("kestrel_workout_island", "Workout session", android.app.NotificationManager.IMPORTANCE_LOW)
+        ch.setShowBadge(false)
+        nm.createNotificationChannel(ch)
+      }
+      val notif = androidx.core.app.NotificationCompat.Builder(ctx, "kestrel_workout_island")
+        .setSmallIcon(android.R.drawable.ic_media_play)
+        .setContentTitle(name)
+        .setContentText("Workout in progress")
+        .setOngoing(true)
+        .setOnlyAlertOnce(true)
+        .setCategory(androidx.core.app.NotificationCompat.CATEGORY_WORKOUT)
+        .setVisibility(androidx.core.app.NotificationCompat.VISIBILITY_PUBLIC)
+        .setPriority(androidx.core.app.NotificationCompat.PRIORITY_LOW)
+        .build()
+      nm.notify(77441, notif)
+    }
+    fun endWorkoutIsland(ctx: android.content.Context) {
+      val nm = ctx.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+      nm.cancel(77441)
+    }
+
     const val ACTION_START = "com.example.run.START"
     const val ACTION_PAUSE = "com.example.run.PAUSE"
     const val ACTION_RESUME = "com.example.run.RESUME"
