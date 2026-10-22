@@ -1379,8 +1379,7 @@ button:active, .rn-btn:active, .rn-chip:active, .rn-pill:active,
 
 
 /* --- Clean / no-clutter overlays --- */
-.ob-sheet { display: none !important; }
-.ob-sheet.open, .ob-sheet.show { display: flex !important; }
+.ob-sheet, .ob-sheet.open, .ob-sheet.show { display: none !important; visibility: hidden !important; pointer-events: none !important; }
 .ai-fab {
   width: 48px; height: 48px; border-radius: 24px;
   background: rgba(28,28,30,0.72); color: #F5F5F7;
@@ -1398,18 +1397,25 @@ button:active, .rn-btn:active, .rn-chip:active, .rn-pill:active,
 
 
 /* === CRITICAL: session / effort / onboarding hidden until activated === */
-.sess-screen {
+.sess-screen,
+.sess-screen[hidden],
+#sess-screen {
   position: fixed !important;
   inset: 0;
   z-index: 150;
   background: #000;
   color: #fff;
   display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
   flex-direction: column;
   padding: 24px 20px calc(20px + env(safe-area-inset-bottom));
 }
-.sess-screen.on {
+.sess-screen.on,
+#sess-screen.on {
   display: flex !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
 }
 .sess-timer { font-size: 48px; font-weight: 300; text-align: center; margin: 12px 0; }
 .sess-ex { font-size: 28px; font-weight: 700; text-align: center; }
