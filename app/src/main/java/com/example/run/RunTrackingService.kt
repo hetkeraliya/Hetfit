@@ -320,7 +320,6 @@ class RunTrackingService : Service(), LocationListener {
     paused = p
     if (p) pauseStartMs = System.currentTimeMillis()
     else { pausedAccumMs += System.currentTimeMillis() - pauseStartMs; lastLoc = null; lastMoveMs = System.currentTimeMillis() }
-    try { DynamicIslandSession.update(this, paused = p) } catch (_: Exception) {}
     speak(if (p) "Paused" else "Resumed")
     onTick()
   }
@@ -474,9 +473,19 @@ class RunTrackingService : Service(), LocationListener {
       try {
         getSystemService(NotificationManager::class.java).notify(NOTIF_ID, buildNotification(elapsed))
         try {
-          val km = String.format(java.util.Locale.getDefault(), "%.2f km", distanceM / 1000.0)
-          val tm = String.format(java.util.Locale.getDefault(), "%d:%02d", elapsed / 60, elapsed % 60)
-          DynamicIslandSession.update(this, subtitle = "$km · $tm", paused = paused)
+          val liveHr = if (st.liveHeartRate in 30..220) st.liveHeartRate else 0
+          val pace = if (curPace > 0) curPace else avgPace
+          DynamicIslandSession.updateStats(
+            this,
+            DynamicIslandSession.Stats(
+              title = if (fromBand) "Band" else when (type) { 3 -> "Walk"; 4 -> "Ride"; 15 -> "Hike"; else -> "Run" },
+              distanceKm = effectiveDist / 1000.0,
+              elapsedSec = elapsed,
+              paceSecPerKm = pace,
+              hrBpm = liveHr,
+              paused = paused
+            )
+          )
         } catch (_: Exception) { }
       } catch (_: Exception) { }
     }
@@ -526,6 +535,19 @@ class RunTrackingService : Service(), LocationListener {
       big.setTextViewText(com.example.R.id.nr_time, time)
       big.setTextViewText(com.example.R.id.nr_pace, paceStr)
       big.setTextViewText(com.example.R.id.nr_hr, hrStr)
+      val liveHrNotif = try {
+        val s = com.example.ble.MiBandManager.get(this).uiState.value.liveHeartRate
+        if (s in 30..220) s else 0
+      } catch (_: Exception) { 0 }
+      val hrCol = when {
+        liveHrNotif <= 0 -> android.graphics.Color.parseColor("#A7B0C4")
+        liveHrNotif < 110 -> android.graphics.Color.parseColor("#34C759")
+        liveHrNotif < 140 -> android.graphics.Color.parseColor("#A8E10C")
+        liveHrNotif < 160 -> android.graphics.Color.parseColor("#FFD60A")
+        liveHrNotif < 175 -> android.graphics.Color.parseColor("#FF9F0A")
+        else -> android.graphics.Color.parseColor("#FF3B30")
+      }
+      big.setTextColor(com.example.R.id.nr_hr, hrCol)
 
       val b = NotificationCompat.Builder(this, CHANNEL_ID)
         .setSmallIcon(android.R.drawable.ic_menu_mylocation)
