@@ -662,9 +662,10 @@
   let shareSel = { tpl: 'glass', fmt: 'story' };
 
 
+
   function openShare(a, an, track) {
     const o = overlay('rn-share');
-    const name = (an && an.name) || a.typeLabel || a.type?.label || 'Activity';
+    const name = (an && an.name) || a.typeLabel || (a.type && a.type.label) || 'Activity';
     const grads = [
       ['#1a1a2e,#16213e,#0f3460', 'Night'],
       ['#c31432,#240b36', 'Crimson'],
@@ -678,57 +679,66 @@
       ['#0b486b,#f56217', 'Ocean']
     ];
     const fonts = [
-      { id: 'rounded', label: 'Rounded', family: 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif' },
-      { id: 'serif', label: 'Serif', family: 'Georgia, "Times New Roman", serif' },
-      { id: 'mono', label: 'Mono', family: 'ui-monospace, SFMono-Regular, Menlo, monospace' }
+      { id: 'rounded', label: 'Rounded', family: 'system-ui,-apple-system,BlinkMacSystemFont,sans-serif' },
+      { id: 'serif', label: 'Serif', family: 'Georgia,"Times New Roman",serif' },
+      { id: 'mono', label: 'Mono', family: 'ui-monospace,SFMono-Regular,Menlo,monospace' }
     ];
     const weights = [
       { id: '300', label: 'Light' },
       { id: '500', label: 'Regular' },
       { id: '700', label: 'Bold' }
     ];
-    let gIdx = 0, fontId = 'rounded', weightId = '500', mode = 'gradient';
+    let gIdx = 2, fontId = 'rounded', weightId = '500', mode = 'gradient';
     const metrics = [
       { k: 'duration', label: 'Duration', on: true },
       { k: 'distance', label: 'Distance', on: true },
       { k: 'pace', label: 'Pace', on: true },
       { k: 'calories', label: 'Calories', on: true },
-      { k: 'hr', label: 'Heart Rate', on: true },
-      { k: 'effort', label: 'Effort', on: false },
+      { k: 'hr', label: 'Avg Heart Rate', on: true },
+      { k: 'hrmax', label: 'Max Heart Rate', on: false },
+      { k: 'effort', label: 'Workout Effort', on: false },
       { k: 'elev', label: 'Elevation', on: false }
     ];
+
     o.innerHTML =
-      '<div class="rn-sheet spec-share">' +
-        '<div class="rn-sheet-head">' +
-          '<button type="button" class="rn-icon-btn" id="rn-s-back">←</button>' +
-          '<b class="rn-share-title">Share</b>' +
-          '<button type="button" class="rn-share-done" id="rn-s-done">Share</button>' +
+      '<div class="spec-share-root">' +
+        '<div class="spec-topbar">' +
+          '<button type="button" class="spec-x" id="rn-s-back" aria-label="Close">✕</button>' +
+          '<button type="button" class="spec-share-btn" id="rn-s-done">Share</button>' +
         '</div>' +
-        '<div class="rn-share-prev"><canvas id="rn-s-canvas" width="360" height="640"></canvas></div>' +
-        '<div class="spec-toolbar">' +
-          '<button type="button" class="spec-tab on" data-panel="bg">Background</button>' +
-          '<button type="button" class="spec-tab" data-panel="metrics">Metrics</button>' +
-          '<button type="button" class="spec-tab" data-panel="font">Font</button>' +
-        '</div>' +
-        '<div class="spec-panel on" id="spec-bg">' +
-          '<div class="spec-mode-row">' +
-            '<button type="button" class="spec-mode" data-mode="map">Map</button>' +
-            '<button type="button" class="spec-mode on" data-mode="gradient">Gradient</button>' +
+        '<div class="spec-canvas-wrap"><canvas id="rn-s-canvas" width="360" height="640"></canvas></div>' +
+        '<div class="spec-dock">' +
+          '<div class="spec-dock-tools">' +
+            '<button type="button" class="spec-icon-btn" id="rn-s-rand" title="Shuffle">↻</button>' +
+            '<button type="button" class="spec-icon-btn" id="rn-s-undo" title="Reset">↩</button>' +
           '</div>' +
-          '<div class="rn-share-grads" id="rn-s-grads"></div>' +
-        '</div>' +
-        '<div class="spec-panel" id="spec-metrics">' +
-          '<div class="rn-share-metrics" id="rn-s-metrics"></div>' +
-        '</div>' +
-        '<div class="spec-panel" id="spec-font">' +
-          '<div class="spec-fonts" id="rn-s-fonts"></div>' +
-          '<div class="spec-weights" id="rn-s-weights"></div>' +
-        '</div>' +
-        '<div class="rn-share-actions">' +
-          '<button type="button" class="rn-share-cta primary" id="rn-s-ig">Instagram Story</button>' +
-          '<button type="button" class="rn-share-cta" id="rn-s-wa">WhatsApp</button>' +
-          '<button type="button" class="rn-share-cta" id="rn-s-more">More</button>' +
-          '<button type="button" class="rn-share-cta ghost" id="rn-s-save">Save</button>' +
+          '<div class="spec-dock-card">' +
+            '<div class="spec-seg" id="spec-seg">' +
+              '<button type="button" class="spec-seg-btn on" data-panel="bg">Background</button>' +
+              '<button type="button" class="spec-seg-btn" data-panel="metrics">Metrics</button>' +
+              '<button type="button" class="spec-seg-btn" data-panel="font">Font</button>' +
+            '</div>' +
+            '<div class="spec-pane on" id="spec-bg">' +
+              '<div class="spec-mode-row">' +
+                '<button type="button" class="spec-mode" data-mode="map">Map</button>' +
+                '<button type="button" class="spec-mode on" data-mode="gradient">Gradient</button>' +
+              '</div>' +
+              '<div class="spec-grads" id="rn-s-grads"></div>' +
+            '</div>' +
+            '<div class="spec-pane" id="spec-metrics">' +
+              '<div class="spec-metrics" id="rn-s-metrics"></div>' +
+            '</div>' +
+            '<div class="spec-pane" id="spec-font">' +
+              '<div class="spec-fonts" id="rn-s-fonts"></div>' +
+              '<div class="spec-weights" id="rn-s-weights"></div>' +
+            '</div>' +
+          '</div>' +
+          '<div class="spec-export-row">' +
+            '<button type="button" class="spec-export primary" id="rn-s-ig">Story</button>' +
+            '<button type="button" class="spec-export" id="rn-s-wa">WhatsApp</button>' +
+            '<button type="button" class="spec-export" id="rn-s-more">More</button>' +
+            '<button type="button" class="spec-export ghost" id="rn-s-save">Save</button>' +
+          '</div>' +
         '</div>' +
       '</div>';
 
@@ -736,13 +746,12 @@
     grads.forEach((g, i) => {
       const b = document.createElement('button');
       b.type = 'button';
-      b.className = 'rn-share-grad' + (i === 0 ? ' on' : '');
-      b.style.background = 'linear-gradient(160deg,' + g[0] + ')';
+      b.className = 'spec-grad' + (i === gIdx ? ' on' : '');
+      b.style.background = 'linear-gradient(145deg,' + g[0] + ')';
       b.title = g[1];
       b.onclick = () => {
-        gIdx = i;
-        mode = 'gradient';
-        gRoot.querySelectorAll('.rn-share-grad').forEach((x, j) => x.classList.toggle('on', j === i));
+        gIdx = i; mode = 'gradient';
+        gRoot.querySelectorAll('.spec-grad').forEach((x, j) => x.classList.toggle('on', j === i));
         o.querySelectorAll('.spec-mode').forEach((x) => x.classList.toggle('on', x.dataset.mode === 'gradient'));
         paint();
       };
@@ -750,17 +759,17 @@
     });
 
     const mRoot = o.querySelector('#rn-s-metrics');
-    const paintMetrics = () => {
+    function paintMetrics() {
       mRoot.innerHTML = '';
       metrics.forEach((m) => {
         const b = document.createElement('button');
         b.type = 'button';
-        b.className = 'rn-share-metric' + (m.on ? ' on' : '');
+        b.className = 'spec-metric' + (m.on ? ' on' : '');
         b.textContent = m.label;
         b.onclick = () => { m.on = !m.on; paintMetrics(); paint(); };
         mRoot.appendChild(b);
       });
-    };
+    }
     paintMetrics();
 
     const fRoot = o.querySelector('#rn-s-fonts');
@@ -792,10 +801,10 @@
       wRoot.appendChild(b);
     });
 
-    o.querySelectorAll('.spec-tab').forEach((tab) => {
+    o.querySelectorAll('.spec-seg-btn').forEach((tab) => {
       tab.onclick = () => {
-        o.querySelectorAll('.spec-tab').forEach((t) => t.classList.remove('on'));
-        o.querySelectorAll('.spec-panel').forEach((p) => p.classList.remove('on'));
+        o.querySelectorAll('.spec-seg-btn').forEach((t) => t.classList.remove('on'));
+        o.querySelectorAll('.spec-pane').forEach((p) => p.classList.remove('on'));
         tab.classList.add('on');
         const p = o.querySelector('#spec-' + tab.dataset.panel);
         if (p) p.classList.add('on');
@@ -808,6 +817,24 @@
         paint();
       };
     });
+    const randBtn = o.querySelector('#rn-s-rand');
+    if (randBtn) randBtn.onclick = () => {
+      gIdx = Math.floor(Math.random() * grads.length);
+      mode = 'gradient';
+      gRoot.querySelectorAll('.spec-grad').forEach((x, j) => x.classList.toggle('on', j === gIdx));
+      o.querySelectorAll('.spec-mode').forEach((x) => x.classList.toggle('on', x.dataset.mode === 'gradient'));
+      paint();
+    };
+    const undoBtn = o.querySelector('#rn-s-undo');
+    if (undoBtn) undoBtn.onclick = () => {
+      gIdx = 2; fontId = 'rounded'; weightId = '500'; mode = 'gradient';
+      metrics.forEach((m) => { m.on = ['duration','distance','pace','calories','hr'].indexOf(m.k) >= 0; });
+      gRoot.querySelectorAll('.spec-grad').forEach((x, j) => x.classList.toggle('on', j === gIdx));
+      fRoot.querySelectorAll('.spec-font').forEach((x, i) => x.classList.toggle('on', fonts[i].id === fontId));
+      wRoot.querySelectorAll('.spec-weight').forEach((x, i) => x.classList.toggle('on', weights[i].id === weightId));
+      o.querySelectorAll('.spec-mode').forEach((x) => x.classList.toggle('on', x.dataset.mode === 'gradient'));
+      paintMetrics(); paint();
+    };
 
     function fmtDur(s) {
       s = Math.max(0, Math.round(s || 0));
@@ -827,51 +854,50 @@
 
     function paint() {
       const c = o.querySelector('#rn-s-canvas');
+      if (!c) return;
       const ctx = c.getContext('2d');
       const W = c.width, H = c.height;
       ctx.clearRect(0, 0, W, H);
       const g = grads[gIdx][0].split(',');
       if (mode === 'map') {
-        ctx.fillStyle = '#0c1220';
+        ctx.fillStyle = '#0a0e18';
         ctx.fillRect(0, 0, W, H);
-        // simple route polyline if track exists
         const pts = (track && track.length) ? track : [];
         if (pts.length > 1) {
-          let minLat=90,maxLat=-90,minLng=180,maxLng=-180;
+          let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
           pts.forEach((p) => {
-            const lat = p.lat ?? p[0], lng = p.lng ?? p[1];
+            const lat = p.lat != null ? p.lat : p[0], lng = p.lng != null ? p.lng : p[1];
             if (lat < minLat) minLat = lat; if (lat > maxLat) maxLat = lat;
             if (lng < minLng) minLng = lng; if (lng > maxLng) maxLng = lng;
           });
-          const pad = 40;
+          const pad = 36;
           const sx = (W - pad * 2) / Math.max(0.0001, maxLng - minLng);
-          const sy = (H - pad * 2 - 120) / Math.max(0.0001, maxLat - minLat);
+          const sy = (H - pad * 2 - 100) / Math.max(0.0001, maxLat - minLat);
           const sc = Math.min(sx, sy);
           ctx.strokeStyle = '#5AC8FA';
-          ctx.lineWidth = 4;
-          ctx.lineJoin = 'round';
+          ctx.lineWidth = 4; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
           ctx.beginPath();
           pts.forEach((p, i) => {
-            const lat = p.lat ?? p[0], lng = p.lng ?? p[1];
+            const lat = p.lat != null ? p.lat : p[0], lng = p.lng != null ? p.lng : p[1];
             const x = pad + (lng - minLng) * sc + (W - pad * 2 - (maxLng - minLng) * sc) / 2;
-            const y = pad + 80 + (maxLat - lat) * sc;
+            const y = pad + 72 + (maxLat - lat) * sc;
             if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
           });
           ctx.stroke();
         } else {
-          ctx.fillStyle = 'rgba(255,255,255,0.15)';
+          ctx.fillStyle = 'rgba(255,255,255,0.2)';
           ctx.font = '500 14px system-ui';
-          ctx.fillText('No route map', 28, H / 2);
+          ctx.fillText('No GPS route', 28, H / 2);
         }
       } else {
-        const lg = ctx.createLinearGradient(0, 0, W * 0.3, H);
+        const lg = ctx.createLinearGradient(0, 0, W * 0.25, H);
         g.forEach((col, i) => lg.addColorStop(i / Math.max(1, g.length - 1), col.trim()));
         ctx.fillStyle = lg;
         ctx.fillRect(0, 0, W, H);
       }
 
       const font = fonts.find((f) => f.id === fontId) || fonts[0];
-      const dist = a.dist || an?.dist || 0;
+      const dist = a.dist || (an && an.dist) || 0;
       const moving = a.moving || a.elapsed || 0;
       const pace = dist > 50 ? moving / (dist / 1000) : 0;
       const rows = [];
@@ -879,33 +905,34 @@
         if (!m.on) return;
         if (m.k === 'duration') rows.push(['Duration', fmtDur(moving)]);
         if (m.k === 'distance') rows.push(['Distance', fmtKm(dist)]);
-        if (m.k === 'pace') rows.push(['Pace', fmtPace(pace)]);
+        if (m.k === 'pace') rows.push(['Avg Pace', fmtPace(pace)]);
         if (m.k === 'calories') rows.push(['Energy', (a.kcal || a.calories || '—') + (a.kcal ? ' kcal' : '')]);
-        if (m.k === 'hr') rows.push(['Heart rate', (a.avgHr || a.heartRateAvg || a.hr || '—') + ((a.avgHr || a.heartRateAvg) ? ' bpm' : '')]);
+        if (m.k === 'hr') rows.push(['Avg HR', (a.avgHr || a.heartRateAvg || a.hr || '—') + ((a.avgHr || a.heartRateAvg) ? ' bpm' : '')]);
+        if (m.k === 'hrmax') rows.push(['Max HR', (a.heartRateMax || a.maxHr || '—') + (a.heartRateMax ? ' bpm' : '')]);
         if (m.k === 'effort') rows.push(['Effort', a.effort || '—']);
-        if (m.k === 'elev') rows.push(['Elevation', an?.ascent ? Math.round(an.ascent) + ' m' : '—']);
+        if (m.k === 'elev') rows.push(['Elevation', an && an.ascent ? Math.round(an.ascent) + ' m' : '—']);
       });
 
-      ctx.fillStyle = 'rgba(255,255,255,0.55)';
-      ctx.font = '600 12px ' + font.family;
-      ctx.fillText('KESTREL', 28, 40);
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.font = '600 11px ' + font.family;
+      ctx.fillText('KESTREL', 28, 36);
       ctx.fillStyle = '#fff';
-      ctx.font = weightId + ' 28px ' + font.family;
-      ctx.fillText(String(name).slice(0, 28), 28, 80);
+      ctx.font = weightId + ' 26px ' + font.family;
+      ctx.fillText(String(name).slice(0, 26), 28, 72);
 
-      let y = 140;
+      let y = 130;
       rows.forEach((r) => {
-        ctx.fillStyle = 'rgba(255,255,255,0.5)';
-        ctx.font = '500 13px ' + font.family;
+        ctx.fillStyle = 'rgba(255,255,255,0.48)';
+        ctx.font = '500 12px ' + font.family;
         ctx.fillText(r[0], 28, y);
         ctx.fillStyle = '#fff';
-        ctx.font = weightId + ' 26px ' + font.family;
-        ctx.fillText(String(r[1]), 28, y + 30);
-        y += 64;
+        ctx.font = weightId + ' 24px ' + font.family;
+        ctx.fillText(String(r[1]), 28, y + 28);
+        y += 58;
       });
     }
-    try { paint(); } catch (err) { console.warn('[share paint]', err); }
 
+    try { paint(); } catch (err) { console.warn('[share paint]', err); }
     o.classList.add('open');
     o.scrollTop = 0;
     document.body.classList.add('modal-open');
@@ -914,8 +941,8 @@
       closeOverlay('rn-share');
       document.body.classList.remove('modal-open');
     };
-    const backBtn = o.querySelector('#rn-s-back');
-    if (backBtn) backBtn.onclick = close;
+    o.querySelector('#rn-s-back').onclick = close;
+
     const blobShare = async (title) => {
       try {
         const c = o.querySelector('#rn-s-canvas');
