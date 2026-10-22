@@ -1238,7 +1238,7 @@ body.modal-open { overflow: hidden; }
   -webkit-tap-highlight-color: transparent;
 }
 .tab-strip-btn svg { transition: transform .4s cubic-bezier(.34,1.56,.64,1); }
-.tab-strip-btn.active { color: #1C1C1E !important; }
+.tab-strip-btn.active { color: #FFFFFF !important; }
 .tab-strip-btn.active svg { transform: translateY(-1px) scale(1.14); }
 .tab-indicator {
   position: absolute; z-index: 0; top: 6px; bottom: 6px; left: 0; width: 0;
