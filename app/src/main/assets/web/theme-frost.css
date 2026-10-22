@@ -1543,3 +1543,169 @@ body.dark .tab-indicator {
 .rn-share.open {
   display: block !important;
 }
+
+
+/* === Specular share UI (final) === */
+.rn-share {
+  position: fixed !important; inset: 0 !important; z-index: 400 !important;
+  background: #000 !important; display: none; overflow: hidden;
+}
+.rn-share.open { display: flex !important; flex-direction: column; }
+.spec-share-root {
+  display: flex; flex-direction: column; height: 100%;
+  max-width: 480px; margin: 0 auto; width: 100%;
+  padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+}
+.spec-topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 16px; flex-shrink: 0;
+}
+.spec-x {
+  width: 36px; height: 36px; border-radius: 18px; border: 0;
+  background: rgba(255,255,255,0.12); color: #fff; font-size: 16px;
+}
+.spec-share-btn {
+  border: 0; background: #0A84FF; color: #fff;
+  font-weight: 700; font-size: 15px; padding: 10px 18px; border-radius: 18px;
+}
+.spec-canvas-wrap {
+  flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center;
+  padding: 8px 28px 12px;
+}
+.spec-canvas-wrap canvas {
+  max-width: 100%; max-height: 100%;
+  border-radius: 22px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.55);
+}
+.spec-dock {
+  flex-shrink: 0;
+  padding: 0 12px 12px;
+}
+.spec-dock-tools {
+  display: flex; gap: 8px; justify-content: center; margin-bottom: 8px;
+}
+.spec-icon-btn {
+  width: 40px; height: 40px; border-radius: 20px; border: 0;
+  background: rgba(255,255,255,0.12); color: #fff; font-size: 16px;
+}
+.spec-dock-card {
+  background: rgba(44,44,46,0.94);
+  border-radius: 22px;
+  padding: 12px;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+.spec-seg {
+  display: flex; gap: 4px; background: rgba(0,0,0,0.35);
+  border-radius: 14px; padding: 3px; margin-bottom: 12px;
+}
+.spec-seg-btn {
+  flex: 1; border: 0; background: transparent;
+  color: rgba(255,255,255,0.5); font-weight: 650; font-size: 13px;
+  padding: 10px 6px; border-radius: 12px;
+}
+.spec-seg-btn.on {
+  background: rgba(255,255,255,0.16); color: #fff;
+}
+.spec-pane { display: none; }
+.spec-pane.on { display: block; }
+.spec-mode-row { display: flex; gap: 8px; margin-bottom: 10px; }
+.spec-mode {
+  border: 0; background: rgba(255,255,255,0.1);
+  color: rgba(255,255,255,0.65); font-weight: 650; font-size: 13px;
+  padding: 8px 16px; border-radius: 12px;
+}
+.spec-mode.on { background: #fff; color: #111; }
+.spec-grads {
+  display: flex; gap: 10px; overflow-x: auto;
+  padding: 2px 0 4px; -webkit-overflow-scrolling: touch;
+}
+.spec-grad {
+  flex: 0 0 48px; width: 48px; height: 48px; border-radius: 14px;
+  border: 2.5px solid transparent; padding: 0;
+}
+.spec-grad.on {
+  border-color: #fff;
+  box-shadow: 0 0 0 2px rgba(10,132,255,0.45);
+}
+.spec-metrics {
+  display: flex; flex-wrap: wrap; gap: 8px; max-height: 140px; overflow-y: auto;
+}
+.spec-metric {
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.06);
+  color: rgba(255,255,255,0.75);
+  padding: 10px 13px; border-radius: 18px;
+  font-size: 12.5px; font-weight: 650;
+}
+.spec-metric.on {
+  background: #fff; color: #111; border-color: transparent;
+}
+.spec-fonts { display: flex; gap: 8px; margin-bottom: 10px; }
+.spec-font {
+  flex: 1; border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.06); color: #fff;
+  border-radius: 16px; padding: 12px 6px; text-align: center;
+}
+.spec-font span { display: block; font-size: 26px; line-height: 1.15; }
+.spec-font small { display: block; margin-top: 4px; font-size: 11px; opacity: 0.65; }
+.spec-font.on { background: #fff; color: #111; border-color: transparent; }
+.spec-weights { display: flex; gap: 8px; }
+.spec-weight {
+  flex: 1; border: 0; background: rgba(255,255,255,0.1);
+  color: rgba(255,255,255,0.7); padding: 10px; border-radius: 12px;
+  font-weight: 650; font-size: 13px;
+}
+.spec-weight.on { background: #fff; color: #111; }
+.spec-export-row {
+  display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 8px;
+  margin-top: 10px;
+}
+.spec-export {
+  border: 0; border-radius: 14px; padding: 12px 6px;
+  font-weight: 700; font-size: 12.5px;
+  background: rgba(255,255,255,0.12); color: #fff;
+}
+.spec-export.primary { background: #0A84FF; }
+.spec-export.ghost {
+  background: transparent; border: 1px solid rgba(255,255,255,0.2);
+}
+
+/* === Navbar pill — soft blue === */
+.tab-strip {
+  background: rgba(242,242,247,0.92) !important;
+  border: 1px solid rgba(0,0,0,0.06) !important;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.08) !important;
+}
+.tab-strip-btn {
+  color: #8E8E93 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.tab-strip-btn.active {
+  color: #fff !important;
+  background: #0A84FF !important;
+  box-shadow: 0 4px 14px rgba(10,132,255,0.35) !important;
+  border-radius: 16px !important;
+}
+.tab-strip-btn.active svg {
+  color: #fff !important;
+  stroke: #fff !important;
+}
+.tab-indicator {
+  background: #0A84FF !important;
+  box-shadow: 0 4px 14px rgba(10,132,255,0.35) !important;
+  border-radius: 16px !important;
+  opacity: 1 !important;
+}
+body.dark .tab-strip {
+  background: rgba(28,28,30,0.92) !important;
+  border-color: rgba(255,255,255,0.08) !important;
+}
+body.dark .tab-strip-btn.active {
+  background: #0A84FF !important;
+  color: #fff !important;
+}
+body.dark .tab-indicator {
+  background: #0A84FF !important;
+}
