@@ -344,12 +344,31 @@
   function parseGpx(text) {
     const doc = new DOMParser().parseFromString(text, 'application/xml');
     if (doc.getElementsByTagName('parsererror').length) throw new Error('That file is not a valid GPX');
-    const nodes = Array.from(doc.getElementsByTagName('trkpt'));
-    if (!nodes.length) throw new Error('No track points found (route-only GPX files have no times)');
+
+    // Prefer track points; fall back to route points
+    let nodes = Array.from(doc.getElementsByTagName('trkpt'));
+    if (!nodes.length) nodes = Array.from(doc.getElementsByTagName('rtept'));
+    if (!nodes.length) throw new Error('No track points found in this GPX');
+
+    // Optional official distance from extensions (Garmin / Strava / etc.)
+    let extDistM = 0;
+    Array.from(doc.getElementsByTagName('*')).forEach((e) => {
+      const nm = (e.localName || '').toLowerCase();
+      if (nm === 'distance' || nm === 'totaldistance' || nm === 'distance_meters') {
+        const v = parseFloat(e.textContent);
+        if (isFinite(v) && v > extDistM) {
+          // meters if large, km if small
+          extDistM = v > 200 ? v : v * 1000;
+        }
+      }
+    });
+
     let pts = [];
     nodes.forEach((n) => {
-      const lat = parseFloat(n.getAttribute('lat')), lon = parseFloat(n.getAttribute('lon'));
+      const lat = parseFloat(n.getAttribute('lat'));
+      const lon = parseFloat(n.getAttribute('lon'));
       if (!isFinite(lat) || !isFinite(lon)) return;
+      if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return;
       let t = NaN, ele = 0, hr = 0;
       Array.from(n.children).forEach((c) => {
         const nm = c.localName;
@@ -357,55 +376,137 @@
         else if (nm === 'ele') ele = parseFloat(c.textContent) || 0;
         else if (nm === 'extensions') {
           Array.from(c.getElementsByTagName('*')).forEach((e) => {
-            if (e.localName === 'hr' || e.localName === 'heartrate') hr = parseInt(e.textContent, 10) || hr;
+            const en = (e.localName || '').toLowerCase();
+            if (en === 'hr' || en === 'heartrate' || en === 'heart_rate') {
+              hr = parseInt(e.textContent, 10) || hr;
+            }
           });
         }
       });
-      pts.push([isFinite(t) ? Math.round(t / 1000) : 0, lat, lon, Math.round(ele * 10) / 10, hr]);
+      pts.push([
+        isFinite(t) ? Math.round(t / 1000) : 0,
+        lat,
+        lon,
+        Math.round(ele * 10) / 10,
+        hr
+      ]);
     });
+
     if (pts.length < 2) throw new Error('The GPX has fewer than 2 points');
-    if (pts.some((p) => !p[0])) throw new Error('The GPX has no timestamps, so pace and duration cannot be worked out');
-    pts.sort((a, b) => a[0] - b[0]);
-    pts = pts.filter((p, i) => i === 0 || p[0] > pts[i - 1][0]);
-    const typeTxt = ((doc.getElementsByTagName('type')[0] || {}).textContent || '').toLowerCase();
-    let dist = 0, moving = 0;
-    const maxV = /cycl|bik|ride/.test(typeTxt) ? 25 : 12;   // ignore GPS glitches
+
+    // Keep order by time; allow same-second points if position changed
+    pts.sort((a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2]);
+    const cleaned = [pts[0]];
     for (let i = 1; i < pts.length; i++) {
-      const d = hav(pts[i - 1], pts[i]), dt = pts[i][0] - pts[i - 1][0];
-      if (dt <= 0 || d / dt > maxV) continue;
-      dist += d;
-      if (dt <= 60 && d / dt >= 0.5) moving += dt;
+      const p = pts[i], prev = cleaned[cleaned.length - 1];
+      // drop exact duplicates only
+      if (p[0] === prev[0] && Math.abs(p[1] - prev[1]) < 1e-7 && Math.abs(p[2] - prev[2]) < 1e-7) continue;
+      cleaned.push(p);
     }
-    const elapsed = pts[pts.length - 1][0] - pts[0][0];
+    pts = cleaned;
+
+    const hasTime = pts.every((p) => p[0] > 0);
+    if (!hasTime) {
+      // assign synthetic 1 Hz timestamps so duration/pace still work
+      const base = Math.floor(Date.now() / 1000) - pts.length;
+      pts = pts.map((p, i) => [base + i, p[1], p[2], p[3], p[4]]);
+    }
+
+    const typeTxt = (
+      ((doc.getElementsByTagName('type')[0] || {}).textContent || '') + ' ' +
+      ((doc.getElementsByTagName('name')[0] || {}).textContent || '')
+    ).toLowerCase();
+    const isCycle = /cycl|bik|ride/.test(typeTxt);
+
+    // Soft filter: only drop true teleports. Cap contribution on mild spikes.
+    // Run ~12 m/s = 43 km/h; walk ~4; cycle ~25. Use generous thresholds.
+    const hardMax = isCycle ? 40 : 18; // m/s absolute reject
+    const softMax = isCycle ? 25 : 10; // m/s — still count distance, ignore for moving
+
+    let dist = 0, moving = 0;
+    let lastGood = pts[0];
+    for (let i = 1; i < pts.length; i++) {
+      const cur = pts[i];
+      let dt = cur[0] - lastGood[0];
+      if (dt < 0) { lastGood = cur; continue; }
+      if (dt === 0) dt = 0.5; // same-second but different position
+      const d = hav(lastGood, cur);
+      if (!isFinite(d) || d < 0) { lastGood = cur; continue; }
+      const v = d / dt;
+      if (v > hardMax) {
+        // GPS teleport — skip this segment, re-anchor
+        lastGood = cur;
+        continue;
+      }
+      dist += d;
+      // moving time: pause if almost stationary or long gap
+      if (dt <= 90 && v >= 0.3) moving += Math.min(dt, 90);
+      lastGood = cur;
+    }
+
+    // Prefer extension distance when close (within 25%) — otherwise trust our path sum
+    if (extDistM > 50) {
+      const ratio = dist > 0 ? extDistM / dist : 1;
+      if (ratio > 0.75 && ratio < 1.35) dist = extDistM;
+      else if (dist < 50 && extDistM > dist) dist = extDistM;
+    }
+
+    const elapsed = Math.max(1, pts[pts.length - 1][0] - pts[0][0]);
+    if (moving < 1) moving = elapsed;
     if (dist < 50) throw new Error('That GPX covers less than 50 m');
+
     let type = 1;
-    if (/walk/.test(typeTxt)) type = 3; else if (/cycl|bik|ride/.test(typeTxt)) type = 4; else if (/hik/.test(typeTxt)) type = 15;
-    else if (!typeTxt) { const sp = dist / Math.max(1, moving || elapsed); type = sp > 7 ? 4 : sp < 2.2 ? 3 : 1; }
+    if (/walk/.test(typeTxt)) type = 3;
+    else if (isCycle) type = 4;
+    else if (/hik/.test(typeTxt)) type = 15;
+    else {
+      const sp = dist / Math.max(1, moving); // m/s
+      type = sp > 6.5 ? 4 : sp < 1.8 ? 3 : 1;
+    }
+
     const hrs = pts.map((p) => p[4]).filter((x) => x > 30);
-    if (pts.length > 6000) { const step = Math.ceil(pts.length / 6000); const k = pts.filter((p, i) => i % step === 0); if (k[k.length - 1] !== pts[pts.length - 1]) k.push(pts[pts.length - 1]); pts = k; }
+    // Downsample very long tracks for storage, keep distance already computed
+    if (pts.length > 8000) {
+      const step = Math.ceil(pts.length / 8000);
+      const kept = [];
+      for (let i = 0; i < pts.length; i += step) kept.push(pts[i]);
+      if (kept[kept.length - 1] !== pts[pts.length - 1]) kept.push(pts[pts.length - 1]);
+      pts = kept;
+    }
+
     return {
-      startSec: pts[0][0], endSec: pts[pts.length - 1][0], type: type, distanceM: Math.round(dist),
-      movingSec: Math.round(moving || elapsed), avgHr: hrs.length ? Math.round(hrs.reduce((s, x) => s + x, 0) / hrs.length) : 0,
-      maxHr: hrs.length ? Math.max.apply(null, hrs) : 0, points: pts
+      startSec: pts[0][0],
+      endSec: pts[pts.length - 1][0],
+      type: type,
+      distanceM: Math.round(dist),
+      movingSec: Math.round(moving),
+      elapsedSec: elapsed,
+      avgHr: hrs.length ? Math.round(hrs.reduce((a, b) => a + b, 0) / hrs.length) : 0,
+      maxHr: hrs.length ? Math.max.apply(null, hrs) : 0,
+      points: pts
     };
   }
 
   function importRow() {
     const row = h('div', 'rn-import');
-    row.style.cssText = 'display:flex;justify-content:flex-end;margin:0 0 12px';
     row.innerHTML = '<button class="rn-btn" type="button">Import GPX</button>';
     const inp = document.createElement('input');
-    inp.type = 'file'; inp.accept = '.gpx,application/gpx+xml,text/xml,application/xml,application/octet-stream'; inp.style.display = 'none';
+    inp.type = 'file';
+    inp.accept = '.gpx,application/gpx+xml,text/xml,application/xml,application/octet-stream';
+    inp.style.display = 'none';
     row.appendChild(inp);
     row.firstChild.onclick = () => inp.click();
     inp.onchange = async () => {
-      const f = inp.files && inp.files[0]; if (!f) return;
+      const f = inp.files && inp.files[0];
+      if (!f) return;
       try {
         if (!A || !A.importGpxRun) throw new Error('GPX import needs the Android app');
         const payload = parseGpx(await f.text());
         const res = String(A.importGpxRun(JSON.stringify(payload)));
-        if (res.indexOf('ok:') === 0) { delete trackCache[payload.startSec]; toast('Imported ' + (payload.distanceM / 1000).toFixed(2) + ' km'); }
-        else toast(res);
+        if (res.indexOf('ok:') === 0) {
+          delete trackCache[payload.startSec];
+          toast('Imported ' + (payload.distanceM / 1000).toFixed(2) + ' km');
+        } else toast(res);
       } catch (e) { toast(e.message || 'Could not import that file'); }
       inp.value = '';
     };
