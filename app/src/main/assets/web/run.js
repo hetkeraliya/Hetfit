@@ -643,7 +643,7 @@
     o.classList.add('open'); o.scrollTop = 0;
 
     $('rn-d-back').onclick = () => closeOverlay('rn-detail');
-    $('rn-d-share').onclick = () => openShare(a, an, track);
+    $('rn-d-share').onclick = () => { try { openShare(a, an, track); } catch (e) { console.error(e); alert('Share failed: ' + e.message); } };
     const g1 = $('rn-d-gpx'); if (g1) g1.onclick = () => toast(A.exportGpx(a.startSec, titleOf(a), 'share'));
     const g2 = $('rn-d-gpxs'); if (g2) g2.onclick = () => toast(A.exportGpx(a.startSec, titleOf(a), 'save'));
     $('rn-d-del').onclick = () => {
@@ -904,10 +904,18 @@
         y += 64;
       });
     }
-    paint();
+    try { paint(); } catch (err) { console.warn('[share paint]', err); }
 
-    const close = () => closeOverlay('rn-share');
-    o.querySelector('#rn-s-back').onclick = close;
+    o.classList.add('open');
+    o.scrollTop = 0;
+    document.body.classList.add('modal-open');
+
+    const close = () => {
+      closeOverlay('rn-share');
+      document.body.classList.remove('modal-open');
+    };
+    const backBtn = o.querySelector('#rn-s-back');
+    if (backBtn) backBtn.onclick = close;
     const blobShare = async (title) => {
       try {
         const c = o.querySelector('#rn-s-canvas');
