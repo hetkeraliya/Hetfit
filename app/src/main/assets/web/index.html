@@ -108,7 +108,7 @@
     <button type="button" class="ai-fab" id="ai-fab" aria-label="AI coach" title="AI" data-open-chat="1">✦</button>
 
     <!-- First-run workout plan onboarding -->
-    <div class="ob-sheet" id="ob-sheet" style="display:none" hidden>
+    <div class="ob-sheet" id="ob-sheet" style="display:none !important;visibility:hidden" hidden aria-hidden="true">
       <div class="ob-panel">
         <h2 id="ob-title">Build your plan</h2>
         <p class="ob-sub" id="ob-sub">What kind of training do you want?</p>
@@ -118,7 +118,7 @@
     </div>
 
     <!-- Active workout session -->
-    <div class="sess-screen" id="sess-screen" style="display:none" hidden>
+    <div class="sess-screen" id="sess-screen" style="display:none !important;visibility:hidden" hidden aria-hidden="true">
       <div class="sess-timer" id="sess-timer">00:00:00</div>
       <div class="sess-ex" id="sess-ex">Exercise</div>
       <div class="sess-meta" id="sess-meta">Set 1 of 3 · 10 reps · 30 lb</div>
@@ -1062,5 +1062,21 @@
 
 <script src="workout-core.js"></script>
 <script src="onboarding.js"></script>
+
+<script>
+(function(){
+  function forceHide(){
+    ['sess-screen','effort-sheet','ob-sheet'].forEach(function(id){
+      var el = document.getElementById(id);
+      if(el){ el.classList.remove('on','open','show'); el.style.display='none'; el.style.visibility='hidden'; el.hidden=true; el.setAttribute('aria-hidden','true'); }
+    });
+  }
+  forceHide();
+  document.addEventListener('DOMContentLoaded', forceHide);
+  setTimeout(forceHide, 50);
+  setTimeout(forceHide, 300);
+})();
+</script>
+
 </body>
 </html>
