@@ -2267,7 +2267,7 @@
   // ---------------- Tab navigation: 5 grouped pages ----------------
   // Vitals (steps / heart / calories / sleep) · Wellness (scores, strain, PAI, mood, journal)
   // Activity (run + workouts) · Plan · Settings (band, alarms, notifications, backup)
-  const GROUP_TITLES = { vitals: 'Vitals', wellness: 'Wellness', activity: 'Activity', settings: 'Settings', chat: 'Chat' };
+  const GROUP_TITLES = { vitals: 'Vitals', wellness: 'Wellness', activity: 'Activity', settings: 'Settings' };
   const GROUP_ORDER = ['vitals', 'wellness', 'activity', 'settings'];
   let currentGroup = 'vitals';
   const tabStrip = $('tab-strip');
@@ -2541,24 +2541,4 @@
       console.warn('Auto-import check failed (non-fatal):', err.message);
     }
   })();
-})();
-
-(function(){
-  function wireAiFab(){
-    var fab = document.getElementById('ai-fab');
-    if (!fab || fab._wired) return;
-    fab._wired = true;
-    fab.addEventListener('click', function(){
-      try {
-        if (window.kestrelApp && window.kestrelApp.showPage) window.kestrelApp.showPage('chat');
-        else {
-          document.querySelectorAll('.tab-page').forEach(function(p){ p.classList.remove('active'); });
-          var ch = document.querySelector('.tab-page[data-page="chat"]');
-          if (ch) { ch.classList.add('active'); ch.style.display = 'block'; }
-        }
-      } catch(e){}
-    });
-  }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wireAiFab);
-  else wireAiFab();
 })();
