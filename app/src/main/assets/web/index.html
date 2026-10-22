@@ -105,10 +105,10 @@
     </nav>
 
     <!-- Floating AI (not in navbar) -->
-    <button type="button" class="ai-fab" id="ai-fab" aria-label="AI coach" title="AI">✦</button>
+    <button type="button" class="ai-fab" id="ai-fab" aria-label="AI coach" title="AI" data-open-chat="1">✦</button>
 
     <!-- First-run workout plan onboarding -->
-    <div class="ob-sheet" id="ob-sheet">
+    <div class="ob-sheet" id="ob-sheet" style="display:none" hidden>
       <div class="ob-panel">
         <h2 id="ob-title">Build your plan</h2>
         <p class="ob-sub" id="ob-sub">What kind of training do you want?</p>
@@ -118,7 +118,7 @@
     </div>
 
     <!-- Active workout session -->
-    <div class="sess-screen" id="sess-screen">
+    <div class="sess-screen" id="sess-screen" style="display:none" hidden>
       <div class="sess-timer" id="sess-timer">00:00:00</div>
       <div class="sess-ex" id="sess-ex">Exercise</div>
       <div class="sess-meta" id="sess-meta">Set 1 of 3 · 10 reps · 30 lb</div>
@@ -133,7 +133,7 @@
     </div>
 
     <!-- Effort picker -->
-    <div class="effort-sheet" id="effort-sheet">
+    <div class="effort-sheet" id="effort-sheet" style="display:none" hidden>
       <div class="effort-panel" id="effort-panel">
         <div style="font-weight:600;opacity:.9">Workout Effort</div>
         <div class="effort-num" id="effort-num">5</div>
