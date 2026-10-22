@@ -1484,3 +1484,62 @@ body.dark .group-chips .chip.active { background: #fff; color: #111; }
 /* Hide leftover plan/chat if any CSS targets */
 [data-group="plan"], [data-group="chat"], [data-page="plan"], [data-page="chat"],
 [data-page="life"] { display: none !important; }
+
+
+/* === Clean navbar highlight === */
+.tab-strip {
+  background: rgba(255,255,255,0.72) !important;
+  border: 1px solid rgba(42,48,64,0.08);
+  box-shadow: 0 8px 28px rgba(42,48,64,0.08);
+}
+.tab-strip-btn {
+  color: #8E8E93 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.tab-strip-btn.active {
+  color: #1C1C1E !important;
+  background: #FFFFFF !important;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.08) !important;
+  border-radius: 16px !important;
+}
+.tab-strip-btn.active svg {
+  color: #0A84FF;
+  stroke: #0A84FF;
+}
+.tab-indicator {
+  background: #FFFFFF !important;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.1) !important;
+  border-radius: 16px !important;
+  opacity: 1 !important;
+}
+body.dark .tab-strip {
+  background: rgba(28,28,30,0.88) !important;
+  border-color: rgba(255,255,255,0.08);
+}
+body.dark .tab-strip-btn { color: #8E8E93 !important; }
+body.dark .tab-strip-btn.active {
+  color: #F5F5F7 !important;
+  background: rgba(255,255,255,0.12) !important;
+}
+body.dark .tab-strip-btn.active svg {
+  color: #5AC8FA;
+  stroke: #5AC8FA;
+}
+body.dark .tab-indicator {
+  background: rgba(255,255,255,0.12) !important;
+}
+
+/* Share overlay must be visible when open */
+.rn-share {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 300 !important;
+  background: #000 !important;
+  display: none;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.rn-share.open {
+  display: block !important;
+}
