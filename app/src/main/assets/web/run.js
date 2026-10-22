@@ -659,47 +659,80 @@
   // ---------- story / post share cards ----------
   const SIZES = { story: [1080, 1920], post: [1080, 1350], square: [1080, 1080] };
   const FONT = '"Plus Jakarta Sans", -apple-system, "SF Pro Text", system-ui, sans-serif';
-  let shareSel = { tpl: 'gradient', fmt: 'story' };
+  let shareSel = { tpl: 'glass', fmt: 'story' };
+
 
   function openShare(a, an, track) {
     const o = overlay('rn-share');
-    const name = (an && an.name) || a.typeLabel || 'Activity';
+    const name = (an && an.name) || a.typeLabel || a.type?.label || 'Activity';
     const grads = [
-      ['#0f0c29,#302b63,#24243e', 'Night'],
-      ['#141E30,#243B55', 'Steel'],
-      ['#134E5E,#71B280', 'Forest'],
-      ['#4A00E0,#8E2DE2', 'Violet'],
+      ['#1a1a2e,#16213e,#0f3460', 'Night'],
       ['#c31432,#240b36', 'Crimson'],
-      ['#000000,#434343', 'Mono']
+      ['#f12711,#f5af19', 'Ember'],
+      ['#4A00E0,#8E2DE2', 'Violet'],
+      ['#0f0c29,#302b63,#24243e', 'Indigo'],
+      ['#134E5E,#71B280', 'Forest'],
+      ['#000000,#434343', 'Mono'],
+      ['#141E30,#243B55', 'Steel'],
+      ['#3a1c71,#d76d77,#ffaf7b', 'Sunset'],
+      ['#0b486b,#f56217', 'Ocean']
     ];
-    let gIdx = 0;
+    const fonts = [
+      { id: 'rounded', label: 'Rounded', family: 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif' },
+      { id: 'serif', label: 'Serif', family: 'Georgia, "Times New Roman", serif' },
+      { id: 'mono', label: 'Mono', family: 'ui-monospace, SFMono-Regular, Menlo, monospace' }
+    ];
+    const weights = [
+      { id: '300', label: 'Light' },
+      { id: '500', label: 'Regular' },
+      { id: '700', label: 'Bold' }
+    ];
+    let gIdx = 0, fontId = 'rounded', weightId = '500', mode = 'gradient';
     const metrics = [
       { k: 'duration', label: 'Duration', on: true },
       { k: 'distance', label: 'Distance', on: true },
       { k: 'pace', label: 'Pace', on: true },
       { k: 'calories', label: 'Calories', on: true },
       { k: 'hr', label: 'Heart Rate', on: true },
-      { k: 'effort', label: 'Effort', on: false }
+      { k: 'effort', label: 'Effort', on: false },
+      { k: 'elev', label: 'Elevation', on: false }
     ];
     o.innerHTML =
-      '<div class="rn-sheet">' +
-        '<div class="rn-sheet-head"><button type="button" class="rn-icon-btn" id="rn-s-back">←</button>' +
-        '<b class="rn-share-title">Share</b><span></span></div>' +
+      '<div class="rn-sheet spec-share">' +
+        '<div class="rn-sheet-head">' +
+          '<button type="button" class="rn-icon-btn" id="rn-s-back">←</button>' +
+          '<b class="rn-share-title">Share</b>' +
+          '<button type="button" class="rn-share-done" id="rn-s-done">Share</button>' +
+        '</div>' +
         '<div class="rn-share-prev"><canvas id="rn-s-canvas" width="360" height="640"></canvas></div>' +
-        '<div class="rn-share-section"><span class="rn-share-label">Background</span>' +
-          '<div class="rn-share-grads" id="rn-s-grads"></div></div>' +
-        '<div class="rn-share-section"><span class="rn-share-label">Metrics</span>' +
-          '<div class="rn-share-metrics" id="rn-s-metrics"></div></div>' +
-        '<div class="rn-share-section"><span class="rn-share-label">Format</span><div class="rn-pills" id="rn-s-fmt"></div></div>' +
+        '<div class="spec-toolbar">' +
+          '<button type="button" class="spec-tab on" data-panel="bg">Background</button>' +
+          '<button type="button" class="spec-tab" data-panel="metrics">Metrics</button>' +
+          '<button type="button" class="spec-tab" data-panel="font">Font</button>' +
+        '</div>' +
+        '<div class="spec-panel on" id="spec-bg">' +
+          '<div class="spec-mode-row">' +
+            '<button type="button" class="spec-mode" data-mode="map">Map</button>' +
+            '<button type="button" class="spec-mode on" data-mode="gradient">Gradient</button>' +
+          '</div>' +
+          '<div class="rn-share-grads" id="rn-s-grads"></div>' +
+        '</div>' +
+        '<div class="spec-panel" id="spec-metrics">' +
+          '<div class="rn-share-metrics" id="rn-s-metrics"></div>' +
+        '</div>' +
+        '<div class="spec-panel" id="spec-font">' +
+          '<div class="spec-fonts" id="rn-s-fonts"></div>' +
+          '<div class="spec-weights" id="rn-s-weights"></div>' +
+        '</div>' +
         '<div class="rn-share-actions">' +
           '<button type="button" class="rn-share-cta primary" id="rn-s-ig">Instagram Story</button>' +
           '<button type="button" class="rn-share-cta" id="rn-s-wa">WhatsApp</button>' +
           '<button type="button" class="rn-share-cta" id="rn-s-more">More</button>' +
-          '<button type="button" class="rn-share-cta ghost" id="rn-s-save">Save image</button>' +
+          '<button type="button" class="rn-share-cta ghost" id="rn-s-save">Save</button>' +
         '</div>' +
-        '<p class="mo-note rn-share-tip">Pick a gradient and metrics — same idea as Specular stories.</p>' +
       '</div>';
-    const gRoot = $('rn-s-grads');
+
+    const gRoot = o.querySelector('#rn-s-grads');
     grads.forEach((g, i) => {
       const b = document.createElement('button');
       b.type = 'button';
@@ -708,94 +741,191 @@
       b.title = g[1];
       b.onclick = () => {
         gIdx = i;
+        mode = 'gradient';
         gRoot.querySelectorAll('.rn-share-grad').forEach((x, j) => x.classList.toggle('on', j === i));
+        o.querySelectorAll('.spec-mode').forEach((x) => x.classList.toggle('on', x.dataset.mode === 'gradient'));
         paint();
       };
       gRoot.appendChild(b);
     });
-    const mRoot = $('rn-s-metrics');
-    metrics.forEach((m) => {
+
+    const mRoot = o.querySelector('#rn-s-metrics');
+    const paintMetrics = () => {
+      mRoot.innerHTML = '';
+      metrics.forEach((m) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'rn-share-metric' + (m.on ? ' on' : '');
+        b.textContent = m.label;
+        b.onclick = () => { m.on = !m.on; paintMetrics(); paint(); };
+        mRoot.appendChild(b);
+      });
+    };
+    paintMetrics();
+
+    const fRoot = o.querySelector('#rn-s-fonts');
+    fonts.forEach((f) => {
       const b = document.createElement('button');
       b.type = 'button';
-      b.className = 'rn-share-metric' + (m.on ? ' on' : '');
-      b.textContent = m.label;
-      b.onclick = () => { m.on = !m.on; b.classList.toggle('on', m.on); paint(); };
-      mRoot.appendChild(b);
-    });
-    const fmt = $('rn-s-fmt');
-    [['story', 'Story 9:16'], ['square', 'Square']].forEach((f, i) => {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'rn-pill' + (i === 0 ? ' on' : '');
-      b.textContent = f[1];
+      b.className = 'spec-font' + (f.id === fontId ? ' on' : '');
+      b.innerHTML = '<span style="font-family:' + f.family + '">Aa</span><small>' + f.label + '</small>';
       b.onclick = () => {
-        fmt.querySelectorAll('.rn-pill').forEach((x) => x.classList.remove('on'));
+        fontId = f.id;
+        fRoot.querySelectorAll('.spec-font').forEach((x) => x.classList.remove('on'));
         b.classList.add('on');
-        paint(f[0]);
+        paint();
       };
-      fmt.appendChild(b);
+      fRoot.appendChild(b);
     });
-    function paint(format) {
-      const c = $('rn-s-canvas');
-      if (!c) return;
-      const story = !format || format === 'story';
-      c.width = story ? 360 : 360;
-      c.height = story ? 640 : 360;
+    const wRoot = o.querySelector('#rn-s-weights');
+    weights.forEach((w) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'spec-weight' + (w.id === weightId ? ' on' : '');
+      b.textContent = w.label;
+      b.onclick = () => {
+        weightId = w.id;
+        wRoot.querySelectorAll('.spec-weight').forEach((x) => x.classList.remove('on'));
+        b.classList.add('on');
+        paint();
+      };
+      wRoot.appendChild(b);
+    });
+
+    o.querySelectorAll('.spec-tab').forEach((tab) => {
+      tab.onclick = () => {
+        o.querySelectorAll('.spec-tab').forEach((t) => t.classList.remove('on'));
+        o.querySelectorAll('.spec-panel').forEach((p) => p.classList.remove('on'));
+        tab.classList.add('on');
+        const p = o.querySelector('#spec-' + tab.dataset.panel);
+        if (p) p.classList.add('on');
+      };
+    });
+    o.querySelectorAll('.spec-mode').forEach((btn) => {
+      btn.onclick = () => {
+        mode = btn.dataset.mode;
+        o.querySelectorAll('.spec-mode').forEach((x) => x.classList.toggle('on', x === btn));
+        paint();
+      };
+    });
+
+    function fmtDur(s) {
+      s = Math.max(0, Math.round(s || 0));
+      const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+      if (h) return h + 'h ' + String(m).padStart(2, '0') + 'm';
+      return m + 'm ' + String(sec).padStart(2, '0') + 's';
+    }
+    function fmtKm(m) {
+      const km = (m || 0) / 1000;
+      return km >= 10 ? km.toFixed(1) + ' km' : km.toFixed(2) + ' km';
+    }
+    function fmtPace(secPerKm) {
+      if (!secPerKm || !isFinite(secPerKm) || secPerKm <= 0) return '—';
+      const m = Math.floor(secPerKm / 60), s = Math.round(secPerKm % 60);
+      return m + ':' + String(s).padStart(2, '0') + ' /km';
+    }
+
+    function paint() {
+      const c = o.querySelector('#rn-s-canvas');
       const ctx = c.getContext('2d');
-      const [c0, c1, c2] = (grads[gIdx][0] + ',#111').split(',');
-      const gr = ctx.createLinearGradient(0, 0, c.width, c.height);
-      gr.addColorStop(0, c0.trim());
-      gr.addColorStop(0.55, (c1 || c0).trim());
-      gr.addColorStop(1, (c2 || c1 || c0).trim());
-      ctx.fillStyle = gr;
-      ctx.fillRect(0, 0, c.width, c.height);
-      ctx.fillStyle = 'rgba(255,255,255,0.92)';
-      ctx.font = '600 18px system-ui,sans-serif';
-      ctx.fillText(name, 28, 56);
-      let y = 120;
-      const dist = a.distanceM != null ? (a.distanceM / 1000).toFixed(2) + ' km' : '—';
-      const dur = a.elapsedSec != null ? Math.floor(a.elapsedSec / 60) + ':' + String(a.elapsedSec % 60).padStart(2, '0') : '—';
-      const pace = a.avgPace ? Math.floor(a.avgPace / 60) + ':' + String(a.avgPace % 60).padStart(2, '0') + ' /km' : '—';
+      const W = c.width, H = c.height;
+      ctx.clearRect(0, 0, W, H);
+      const g = grads[gIdx][0].split(',');
+      if (mode === 'map') {
+        ctx.fillStyle = '#0c1220';
+        ctx.fillRect(0, 0, W, H);
+        // simple route polyline if track exists
+        const pts = (track && track.length) ? track : [];
+        if (pts.length > 1) {
+          let minLat=90,maxLat=-90,minLng=180,maxLng=-180;
+          pts.forEach((p) => {
+            const lat = p.lat ?? p[0], lng = p.lng ?? p[1];
+            if (lat < minLat) minLat = lat; if (lat > maxLat) maxLat = lat;
+            if (lng < minLng) minLng = lng; if (lng > maxLng) maxLng = lng;
+          });
+          const pad = 40;
+          const sx = (W - pad * 2) / Math.max(0.0001, maxLng - minLng);
+          const sy = (H - pad * 2 - 120) / Math.max(0.0001, maxLat - minLat);
+          const sc = Math.min(sx, sy);
+          ctx.strokeStyle = '#5AC8FA';
+          ctx.lineWidth = 4;
+          ctx.lineJoin = 'round';
+          ctx.beginPath();
+          pts.forEach((p, i) => {
+            const lat = p.lat ?? p[0], lng = p.lng ?? p[1];
+            const x = pad + (lng - minLng) * sc + (W - pad * 2 - (maxLng - minLng) * sc) / 2;
+            const y = pad + 80 + (maxLat - lat) * sc;
+            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+          });
+          ctx.stroke();
+        } else {
+          ctx.fillStyle = 'rgba(255,255,255,0.15)';
+          ctx.font = '500 14px system-ui';
+          ctx.fillText('No route map', 28, H / 2);
+        }
+      } else {
+        const lg = ctx.createLinearGradient(0, 0, W * 0.3, H);
+        g.forEach((col, i) => lg.addColorStop(i / Math.max(1, g.length - 1), col.trim()));
+        ctx.fillStyle = lg;
+        ctx.fillRect(0, 0, W, H);
+      }
+
+      const font = fonts.find((f) => f.id === fontId) || fonts[0];
+      const dist = a.dist || an?.dist || 0;
+      const moving = a.moving || a.elapsed || 0;
+      const pace = dist > 50 ? moving / (dist / 1000) : 0;
       const rows = [];
       metrics.forEach((m) => {
         if (!m.on) return;
-        if (m.k === 'duration') rows.push(['Duration', dur]);
-        if (m.k === 'distance') rows.push(['Distance', dist]);
-        if (m.k === 'pace') rows.push(['Pace', pace]);
+        if (m.k === 'duration') rows.push(['Duration', fmtDur(moving)]);
+        if (m.k === 'distance') rows.push(['Distance', fmtKm(dist)]);
+        if (m.k === 'pace') rows.push(['Pace', fmtPace(pace)]);
         if (m.k === 'calories') rows.push(['Energy', (a.kcal || a.calories || '—') + (a.kcal ? ' kcal' : '')]);
-        if (m.k === 'hr') rows.push(['Heart rate', (a.avgHr || a.hr || '—') + (a.avgHr ? ' bpm' : '')]);
+        if (m.k === 'hr') rows.push(['Heart rate', (a.avgHr || a.heartRateAvg || a.hr || '—') + ((a.avgHr || a.heartRateAvg) ? ' bpm' : '')]);
         if (m.k === 'effort') rows.push(['Effort', a.effort || '—']);
+        if (m.k === 'elev') rows.push(['Elevation', an?.ascent ? Math.round(an.ascent) + ' m' : '—']);
       });
+
+      ctx.fillStyle = 'rgba(255,255,255,0.55)';
+      ctx.font = '600 12px ' + font.family;
+      ctx.fillText('KESTREL', 28, 40);
+      ctx.fillStyle = '#fff';
+      ctx.font = weightId + ' 28px ' + font.family;
+      ctx.fillText(String(name).slice(0, 28), 28, 80);
+
+      let y = 140;
       rows.forEach((r) => {
-        ctx.fillStyle = 'rgba(255,255,255,0.55)';
-        ctx.font = '500 13px system-ui,sans-serif';
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.font = '500 13px ' + font.family;
         ctx.fillText(r[0], 28, y);
         ctx.fillStyle = '#fff';
-        ctx.font = '700 28px system-ui,sans-serif';
-        ctx.fillText(String(r[1]), 28, y + 32);
-        y += 72;
+        ctx.font = weightId + ' 26px ' + font.family;
+        ctx.fillText(String(r[1]), 28, y + 30);
+        y += 64;
       });
-      ctx.fillStyle = 'rgba(255,255,255,0.35)';
-      ctx.font = '600 12px system-ui,sans-serif';
-      ctx.fillText('Kestrel', 28, c.height - 28);
     }
-    paint('story');
-    $('rn-s-back').onclick = () => closeOverlay('rn-share');
+    paint();
+
+    const close = () => closeOverlay('rn-share');
+    o.querySelector('#rn-s-back').onclick = close;
     const blobShare = async (title) => {
       try {
-        const c = $('rn-s-canvas');
+        const c = o.querySelector('#rn-s-canvas');
         const blob = await new Promise((res) => c.toBlob(res, 'image/png'));
         if (navigator.share && blob) {
           const file = new File([blob], 'kestrel-activity.png', { type: 'image/png' });
           await navigator.share({ files: [file], title: title || name });
+        } else if (window.KestrelAndroidBridge && window.KestrelAndroidBridge.shareImage) {
+          window.KestrelAndroidBridge.shareImage(c.toDataURL('image/png'), 'kestrel.png', name, 'system');
         }
       } catch (e) { console.log(e); }
     };
-    $('rn-s-ig').onclick = () => blobShare('Story');
-    $('rn-s-wa').onclick = () => blobShare('WhatsApp');
-    $('rn-s-more').onclick = () => blobShare(name);
-    $('rn-s-save').onclick = () => {
-      const c = $('rn-s-canvas');
+    o.querySelector('#rn-s-done').onclick = () => blobShare(name);
+    o.querySelector('#rn-s-ig').onclick = () => blobShare('Story');
+    o.querySelector('#rn-s-wa').onclick = () => blobShare('WhatsApp');
+    o.querySelector('#rn-s-more').onclick = () => blobShare(name);
+    o.querySelector('#rn-s-save').onclick = () => {
+      const c = o.querySelector('#rn-s-canvas');
       const ael = document.createElement('a');
       ael.download = 'kestrel-activity.png';
       ael.href = c.toDataURL('image/png');
@@ -917,22 +1047,14 @@
     };
     sheet.querySelector('#rn-band-yes').onclick = () => {
       close();
-      const low = String(label || '').toLowerCase();
-      const isStrength = /free\s*style|freestyle|strength|gym|workout|training|other/.test(low) || type === 8 || type === 9;
-      if (isStrength && window.kestrelOnBandFreestyle) {
-        try { if (A && A.acceptBandWorkout) A.acceptBandWorkout(type); } catch (e) {}
-        window.kestrelOnBandFreestyle();
-        if (window.kestrelGoto) window.kestrelGoto('activity');
-        toast('Starting your plan');
-        return;
-      }
       if (!A || !A.acceptBandWorkout) { toast('Open the Android app to track.'); return; }
       try {
         const msg = A.acceptBandWorkout(type);
         toast(msg || 'Tracking on phone');
         finishing = false; livePts = [];
         openLive(true);
-        if (window.kestrelGoto) window.kestrelGoto('run');
+        // Jump to Activity tab so the live screen is in context
+        if (window.kestrelGoto) window.kestrelGoto('activity');
       } catch (e) { toast('Could not start tracking'); }
     };
   }
