@@ -663,54 +663,144 @@
 
   function openShare(a, an, track) {
     const o = overlay('rn-share');
+    const name = (an && an.name) || a.typeLabel || 'Activity';
+    const grads = [
+      ['#0f0c29,#302b63,#24243e', 'Night'],
+      ['#141E30,#243B55', 'Steel'],
+      ['#134E5E,#71B280', 'Forest'],
+      ['#4A00E0,#8E2DE2', 'Violet'],
+      ['#c31432,#240b36', 'Crimson'],
+      ['#000000,#434343', 'Mono']
+    ];
+    let gIdx = 0;
+    const metrics = [
+      { k: 'duration', label: 'Duration', on: true },
+      { k: 'distance', label: 'Distance', on: true },
+      { k: 'pace', label: 'Pace', on: true },
+      { k: 'calories', label: 'Calories', on: true },
+      { k: 'hr', label: 'Heart Rate', on: true },
+      { k: 'effort', label: 'Effort', on: false }
+    ];
     o.innerHTML =
-      '<div class="rn-bar">' +
-        '<button type="button" id="rn-s-back" class="rn-chip-btn">‹ Back</button>' +
-        '<b class="rn-share-title">Share activity</b>' +
-        '<span style="width:64px"></span>' +
-      '</div>' +
-      '<div class="rn-share-prev"><canvas id="rn-s-canvas"></canvas></div>' +
-      '<div class="rn-share-section"><span class="rn-share-label">Style</span><div class="rn-pills" id="rn-s-tpl"></div></div>' +
-      '<div class="rn-share-section"><span class="rn-share-label">Format</span><div class="rn-pills" id="rn-s-fmt"></div></div>' +
-      '<div class="rn-share-actions">' +
-        '<button type="button" class="rn-share-cta primary" id="rn-s-ig">Instagram Story</button>' +
-        '<button type="button" class="rn-share-cta" id="rn-s-wa">WhatsApp</button>' +
-        '<button type="button" class="rn-share-cta" id="rn-s-more">More</button>' +
-        '<button type="button" class="rn-share-cta ghost" id="rn-s-save">Save image</button>' +
-      '</div>' +
-      '<p class="mo-note rn-share-tip">Route only uses a transparent background — drop it over any photo in your story.</p>';
-    o.classList.add('open'); o.scrollTop = 0;
-    const data = shareData(a, an, track);
-    const redraw = () => {
-      const c = $('rn-s-canvas'); const sz = SIZES[shareSel.fmt];
-      c.width = sz[0]; c.height = sz[1];
-      drawCard(c.getContext('2d'), sz[0], sz[1], shareSel.tpl, data);
-      [
-        ['rn-s-tpl', [['glass', 'Moonlight'], ['cream', 'Silver'], ['route', 'Route only'], ['splits', 'Splits']], 'tpl'],
-        ['rn-s-fmt', [['story', 'Story 9:16'], ['post', 'Post 4:5'], ['square', 'Square']], 'fmt']
-      ].forEach(([id, items, key]) => {
-        const box = $(id); box.innerHTML = '';
-        items.forEach(([v, label]) => {
-          const b = h('button', 'rn-pill' + (shareSel[key] === v ? ' active' : ''), label);
-          b.type = 'button';
-          b.onclick = () => { shareSel[key] = v; redraw(); };
-          box.appendChild(b);
-        });
+      '<div class="rn-sheet">' +
+        '<div class="rn-sheet-head"><button type="button" class="rn-icon-btn" id="rn-s-back">←</button>' +
+        '<b class="rn-share-title">Share</b><span></span></div>' +
+        '<div class="rn-share-prev"><canvas id="rn-s-canvas" width="360" height="640"></canvas></div>' +
+        '<div class="rn-share-section"><span class="rn-share-label">Background</span>' +
+          '<div class="rn-share-grads" id="rn-s-grads"></div></div>' +
+        '<div class="rn-share-section"><span class="rn-share-label">Metrics</span>' +
+          '<div class="rn-share-metrics" id="rn-s-metrics"></div></div>' +
+        '<div class="rn-share-section"><span class="rn-share-label">Format</span><div class="rn-pills" id="rn-s-fmt"></div></div>' +
+        '<div class="rn-share-actions">' +
+          '<button type="button" class="rn-share-cta primary" id="rn-s-ig">Instagram Story</button>' +
+          '<button type="button" class="rn-share-cta" id="rn-s-wa">WhatsApp</button>' +
+          '<button type="button" class="rn-share-cta" id="rn-s-more">More</button>' +
+          '<button type="button" class="rn-share-cta ghost" id="rn-s-save">Save image</button>' +
+        '</div>' +
+        '<p class="mo-note rn-share-tip">Pick a gradient and metrics — same idea as Specular stories.</p>' +
+      '</div>';
+    const gRoot = $('rn-s-grads');
+    grads.forEach((g, i) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'rn-share-grad' + (i === 0 ? ' on' : '');
+      b.style.background = 'linear-gradient(160deg,' + g[0] + ')';
+      b.title = g[1];
+      b.onclick = () => {
+        gIdx = i;
+        gRoot.querySelectorAll('.rn-share-grad').forEach((x, j) => x.classList.toggle('on', j === i));
+        paint();
+      };
+      gRoot.appendChild(b);
+    });
+    const mRoot = $('rn-s-metrics');
+    metrics.forEach((m) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'rn-share-metric' + (m.on ? ' on' : '');
+      b.textContent = m.label;
+      b.onclick = () => { m.on = !m.on; b.classList.toggle('on', m.on); paint(); };
+      mRoot.appendChild(b);
+    });
+    const fmt = $('rn-s-fmt');
+    [['story', 'Story 9:16'], ['square', 'Square']].forEach((f, i) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'rn-pill' + (i === 0 ? ' on' : '');
+      b.textContent = f[1];
+      b.onclick = () => {
+        fmt.querySelectorAll('.rn-pill').forEach((x) => x.classList.remove('on'));
+        b.classList.add('on');
+        paint(f[0]);
+      };
+      fmt.appendChild(b);
+    });
+    function paint(format) {
+      const c = $('rn-s-canvas');
+      if (!c) return;
+      const story = !format || format === 'story';
+      c.width = story ? 360 : 360;
+      c.height = story ? 640 : 360;
+      const ctx = c.getContext('2d');
+      const [c0, c1, c2] = (grads[gIdx][0] + ',#111').split(',');
+      const gr = ctx.createLinearGradient(0, 0, c.width, c.height);
+      gr.addColorStop(0, c0.trim());
+      gr.addColorStop(0.55, (c1 || c0).trim());
+      gr.addColorStop(1, (c2 || c1 || c0).trim());
+      ctx.fillStyle = gr;
+      ctx.fillRect(0, 0, c.width, c.height);
+      ctx.fillStyle = 'rgba(255,255,255,0.92)';
+      ctx.font = '600 18px system-ui,sans-serif';
+      ctx.fillText(name, 28, 56);
+      let y = 120;
+      const dist = a.distanceM != null ? (a.distanceM / 1000).toFixed(2) + ' km' : '—';
+      const dur = a.elapsedSec != null ? Math.floor(a.elapsedSec / 60) + ':' + String(a.elapsedSec % 60).padStart(2, '0') : '—';
+      const pace = a.avgPace ? Math.floor(a.avgPace / 60) + ':' + String(a.avgPace % 60).padStart(2, '0') + ' /km' : '—';
+      const rows = [];
+      metrics.forEach((m) => {
+        if (!m.on) return;
+        if (m.k === 'duration') rows.push(['Duration', dur]);
+        if (m.k === 'distance') rows.push(['Distance', dist]);
+        if (m.k === 'pace') rows.push(['Pace', pace]);
+        if (m.k === 'calories') rows.push(['Energy', (a.kcal || a.calories || '—') + (a.kcal ? ' kcal' : '')]);
+        if (m.k === 'hr') rows.push(['Heart rate', (a.avgHr || a.hr || '—') + (a.avgHr ? ' bpm' : '')]);
+        if (m.k === 'effort') rows.push(['Effort', a.effort || '—']);
       });
-    };
-    redraw();
-    const png = () => $('rn-s-canvas').toDataURL('image/png');
-    const name = 'kestrel_' + a.startSec + '.png';
-    const text = data.title + ' · ' + data.distance + ' km in ' + data.time + ' · recorded with Kestrel';
-    const send = (target) => {
-      if (A && A.shareImage) { const r = A.shareImage(png(), name, text, target); if (r && r !== 'ok') toast(r); }
-      else { const l = document.createElement('a'); l.href = png(); l.download = name; l.click(); }
-    };
+      rows.forEach((r) => {
+        ctx.fillStyle = 'rgba(255,255,255,0.55)';
+        ctx.font = '500 13px system-ui,sans-serif';
+        ctx.fillText(r[0], 28, y);
+        ctx.fillStyle = '#fff';
+        ctx.font = '700 28px system-ui,sans-serif';
+        ctx.fillText(String(r[1]), 28, y + 32);
+        y += 72;
+      });
+      ctx.fillStyle = 'rgba(255,255,255,0.35)';
+      ctx.font = '600 12px system-ui,sans-serif';
+      ctx.fillText('Kestrel', 28, c.height - 28);
+    }
+    paint('story');
     $('rn-s-back').onclick = () => closeOverlay('rn-share');
-    $('rn-s-ig').onclick = () => send('story');
-    $('rn-s-wa').onclick = () => send('whatsapp');
-    $('rn-s-more').onclick = () => send('system');
-    $('rn-s-save').onclick = () => { if (A && A.saveImageToGallery) toast(A.saveImageToGallery(png(), name)); else send('system'); };
+    const blobShare = async (title) => {
+      try {
+        const c = $('rn-s-canvas');
+        const blob = await new Promise((res) => c.toBlob(res, 'image/png'));
+        if (navigator.share && blob) {
+          const file = new File([blob], 'kestrel-activity.png', { type: 'image/png' });
+          await navigator.share({ files: [file], title: title || name });
+        }
+      } catch (e) { console.log(e); }
+    };
+    $('rn-s-ig').onclick = () => blobShare('Story');
+    $('rn-s-wa').onclick = () => blobShare('WhatsApp');
+    $('rn-s-more').onclick = () => blobShare(name);
+    $('rn-s-save').onclick = () => {
+      const c = $('rn-s-canvas');
+      const ael = document.createElement('a');
+      ael.download = 'kestrel-activity.png';
+      ael.href = c.toDataURL('image/png');
+      ael.click();
+    };
   }
 
   function shareData(a, an, track) {
