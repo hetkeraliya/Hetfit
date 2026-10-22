@@ -154,7 +154,11 @@
       kcal: 0
     };
     var scr = $('sess-screen');
-    if (scr) scr.classList.add('on');
+    if (scr) {
+      scr.hidden = false;
+      scr.style.display = 'flex';
+      scr.classList.add('on');
+    }
     tickSession();
     if (sessTimer) clearInterval(sessTimer);
     sessTimer = setInterval(tickSession, 1000);
@@ -203,7 +207,11 @@
     if (sessTimer) clearInterval(sessTimer);
     sessTimer = null;
     var scr = $('sess-screen');
-    if (scr) scr.classList.remove('on');
+    if (scr) {
+      scr.classList.remove('on');
+      scr.style.display = 'none';
+      scr.hidden = true;
+    }
     openEffort();
     try {
       var A = window.KestrelAndroidBridge;
@@ -226,6 +234,8 @@
   function openEffort() {
     var sh = $('effort-sheet');
     if (!sh) return;
+    sh.hidden = false;
+    sh.style.display = 'flex';
     sh.classList.add('on');
     var sl = $('effort-slider');
     if (sl) sl.value = 5;
@@ -266,9 +276,15 @@
     var sl = $('effort-slider');
     if (sl) sl.oninput = function () { updateEffortUI(sl.value); };
     var ex = $('effort-x');
-    if (ex) ex.onclick = function () { $('effort-sheet').classList.remove('on'); };
+    if (ex) ex.onclick = function () {
+      var e = $('effort-sheet');
+      if (e) { e.classList.remove('on'); e.style.display = 'none'; e.hidden = true; }
+    };
     var ok = $('effort-ok');
-    if (ok) ok.onclick = function () { $('effort-sheet').classList.remove('on'); };
+    if (ok) ok.onclick = function () {
+      var e = $('effort-sheet');
+      if (e) { e.classList.remove('on'); e.style.display = 'none'; e.hidden = true; }
+    };
 
     // AI fab opens chat group via page or sheet
     var fab = $('ai-fab');
@@ -319,6 +335,16 @@
   }
   window.KestrelWorkout = { applyPlan: applyPlan, applyUserPlan: applyUserPlan, startSession: startSession, startUserPlan: startUserPlan };
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire);
-  else wire();
+  function forceHideOverlays() {
+    ['sess-screen', 'effort-sheet', 'ob-sheet'].forEach(function (id) {
+      var el = $(id);
+      if (!el) return;
+      el.classList.remove('on', 'show');
+      el.style.display = 'none';
+      el.hidden = true;
+    });
+  }
+  // FORCE_HIDE_SESSION
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { forceHideOverlays(); wire(); });
+  else { forceHideOverlays(); wire(); }
 })();
