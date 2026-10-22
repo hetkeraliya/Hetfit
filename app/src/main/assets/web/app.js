@@ -2542,3 +2542,23 @@
     }
   })();
 })();
+
+(function(){
+  function wireAiFab(){
+    var fab = document.getElementById('ai-fab');
+    if (!fab || fab._wired) return;
+    fab._wired = true;
+    fab.addEventListener('click', function(){
+      try {
+        if (window.kestrelApp && window.kestrelApp.showPage) window.kestrelApp.showPage('chat');
+        else {
+          document.querySelectorAll('.tab-page').forEach(function(p){ p.classList.remove('active'); });
+          var ch = document.querySelector('.tab-page[data-page="chat"]');
+          if (ch) { ch.classList.add('active'); ch.style.display = 'block'; }
+        }
+      } catch(e){}
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wireAiFab);
+  else wireAiFab();
+})();
